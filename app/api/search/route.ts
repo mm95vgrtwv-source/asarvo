@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE122 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE123 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE123: transient OLX and Allegro Lokalnie discovery failures now
+ *   receive one short direct-transport retry raced in parallel with the
+ *   existing reader fallback. OLX public JSON uses two bounded attempts inside
+ *   the same 3.3 s lane. The 20 s route budget and every identity, HARD,
+ *   condition, price, availability and originality gate remain unchanged.
  * - V34.CORE122: a free-standing plus sign in structured listing relations
  *   such as `SIM + eSIM` no longer invents a product-line `Plus` variant.
  *   Numeric model suffixes such as `S24+` / `iPhone 8 +`, literal `Plus`, and
@@ -43,7 +48,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE122 CORE
+ * V34.CORE123 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -73,7 +78,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE122 – Universal Shopping Engine
+ * AIShopping V34.CORE123 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -11416,7 +11421,13 @@ function shouldUseAllegroLokalnieReaderOnEmptyDirectPage(
 ): boolean {
   if (!isDesignatedFallbackUrl || parsedResultCount > 0) return false;
 
-  if (directStatus === null || directStatus === 403 || directStatus === 429) {
+  if (
+    directStatus === null ||
+    directStatus === 403 ||
+    directStatus === 408 ||
+    directStatus === 429 ||
+    directStatus >= 500
+  ) {
     return true;
   }
 
@@ -26344,53 +26355,107 @@ async function searchOlxPublicJsonApi(
     `https://www.olx.pl/api/v1/offers/?offset=0&limit=40&query=${encodeURIComponent(query)}` +
     `&filter_refiners=spell_checker&suggest_filters=true`;
 
-  try {
-    const response = await fetch(apiUrl, {
-      cache: "no-store",
-      signal,
-      headers: {
-        Accept: "application/json, text/plain, */*",
-        "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.7",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
-        Referer: "https://www.olx.pl/",
-      },
-    });
+  type OlxPublicApiAttempt = {
+    status: number | null;
+    payload: unknown | null;
+    errorName: string | null;
+  };
 
-    if (!response.ok) {
-      console.log(
-        "[AIShopping] V34.CORE120 OLX public JSON unavailable:",
-        response.status,
-        "query=",
-        query
-      );
-      return [];
+  const runAttempt = async (timeoutMs: number): Promise<OlxPublicApiAttempt> => {
+    if (signal?.aborted) {
+      return { status: null, payload: null, errorName: "AbortError" };
     }
 
-    const payload: unknown = await response.json();
-    const results = parseOlxPublicApiResponse(payload, parsed);
+    const attemptSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
+      : AbortSignal.timeout(timeoutMs);
 
-    console.log(
-      "[AIShopping] V34.CORE120 OLX public JSON results:",
-      results.length,
-      "query=",
-      query,
-      "priced=",
-      results.filter((result) => getSilentDiscoveryPrice(result, parsed).price !== null).length
+    try {
+      const response = await fetch(apiUrl, {
+        cache: "no-store",
+        signal: attemptSignal,
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Accept-Language": "pl-PL,pl;q=0.9,en;q=0.7",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+          Referer: "https://www.olx.pl/",
+        },
+      });
+
+      if (!response.ok) {
+        return {
+          status: response.status,
+          payload: null,
+          errorName: null,
+        };
+      }
+
+      return {
+        status: response.status,
+        payload: await response.json(),
+        errorName: null,
+      };
+    } catch (error) {
+      return {
+        status: null,
+        payload: null,
+        errorName: error instanceof Error ? error.name : "unknown",
+      };
+    }
+  };
+
+  // V34.CORE123: the old single 3.3 s attempt could spend the whole lane on
+  // one transient socket stall. Split the unchanged lane into two attempts.
+  // Retry network/408/5xx only; 403/429 remain policy/rate-limit signals and a
+  // healthy 200 with zero matching cards is a real parsed result, not a retry.
+  let attempt = await runAttempt(1_850);
+  const shouldRetry =
+    !signal?.aborted &&
+    attempt.payload === null &&
+    (
+      attempt.status === null ||
+      attempt.status === 408 ||
+      (attempt.status !== null && attempt.status >= 500)
     );
 
-    return results;
-  } catch (error) {
+  if (shouldRetry) {
+    console.log(
+      "[AIShopping] V34.CORE123 OLX public JSON transient retry:",
+      attempt.status ?? attempt.errorName ?? "network",
+      "query=",
+      query
+    );
+    await sleep(80, signal);
     if (!signal?.aborted) {
-      console.log(
-        "[AIShopping] V34.CORE120 OLX public JSON error:",
-        error instanceof Error ? error.name : "unknown",
-        "query=",
-        query
-      );
+      attempt = await runAttempt(1_200);
     }
+  }
+
+  if (signal?.aborted) return [];
+
+  if (attempt.payload === null) {
+    console.log(
+      "[AIShopping] V34.CORE123 OLX public JSON unavailable:",
+      attempt.status ?? attempt.errorName ?? "network",
+      "query=",
+      query
+    );
     return [];
   }
+
+  const results = parseOlxPublicApiResponse(attempt.payload, parsed);
+
+  console.log(
+    "[AIShopping] V34.CORE123 OLX public JSON results:",
+    results.length,
+    "query=",
+    query,
+    "priced=",
+    results.filter((result) => getSilentDiscoveryPrice(result, parsed).price !== null).length
+  );
+
+  return results;
 }
 
 const OLX_CATEGORY_SEARCH_BASES: Readonly<Record<string, string>> = {
@@ -27020,6 +27085,11 @@ async function searchDirectMarketplacePages(
   }
 
   const olxDirectUrl = urls.find((entry) => entry.source === "OLXDirect")?.url ?? null;
+  // V34.CORE123: redundant OLX landings keep independent direct+retry lanes,
+  // but only the primary landing may occupy the globally throttled Jina queue.
+  // OLX public JSON is already a third independent lane. This prevents two
+  // failing OLX landings from starving Allegro Lokalnie's single reader slot.
+  const olxReaderFallbackUrl = olxDirectUrl;
   const olxCategoryScoped = Boolean(
     olxDirectUrl &&
     parsed.category &&
@@ -27055,6 +27125,87 @@ async function searchDirectMarketplacePages(
     try {
       let parsedResults: SearchResult[] = [];
       let directStatus: number | null = null;
+      type DirectHtmlResponse = {
+        status: number;
+        html: string;
+        finalUrl: string;
+      };
+      let transientDirectRetryPromise: Promise<DirectHtmlResponse | null> | null = null;
+
+      const parseDirectResponse = (
+        direct: DirectHtmlResponse,
+        lane: "primary" | "transient-retry"
+      ): SearchResult[] => {
+        if (direct.status >= 400 || !direct.html) return [];
+
+        const htmlResults =
+          source === "OLXDirect"
+            ? parseOlxDirectHtml(
+                direct.html,
+                direct.finalUrl || url
+              )
+            : parseDirectMarketplaceHtml(
+                direct.html,
+                direct.finalUrl || url,
+                source
+              );
+
+        const embeddedResults =
+          source === "AllegroLokalnieDirect"
+            ? parseAllegroLokalnieEmbeddedHtml(
+                direct.html,
+                direct.finalUrl || url
+              )
+            : [];
+
+        let combined = [
+          ...htmlResults,
+          ...embeddedResults,
+        ];
+
+        if (source === "CeneoDirect") {
+          combined = filterCeneoDirectCandidates(combined, parsed);
+        }
+
+        console.log(
+          lane === "primary"
+            ? "[AIShopping] V34.CORE123 direct HTML results:"
+            : "[AIShopping] V34.CORE123 direct HTML transient retry results:",
+          source,
+          htmlResults.length,
+          "embedded=",
+          embeddedResults.length,
+          "status=",
+          direct.status
+        );
+
+        return combined;
+      };
+
+      const collectTransientDirectRetry = async (): Promise<number> => {
+        const retryPromise = transientDirectRetryPromise;
+        transientDirectRetryPromise = null;
+        if (!retryPromise) return 0;
+
+        const retry = await retryPromise;
+        if (sourceSignal?.aborted) return 0;
+
+        if (retry && retry.status < 400 && retry.html) {
+          const retryResults = parseDirectResponse(retry, "transient-retry");
+          parsedResults = [
+            ...parsedResults,
+            ...retryResults,
+          ];
+          return retryResults.length;
+        }
+
+        console.log(
+          "[AIShopping] V34.CORE123 direct HTML transient retry unavailable:",
+          source,
+          retry?.status ?? "network"
+        );
+        return 0;
+      };
 
       const canUseDirectHtml =
         source === "AllegroDirect" ||
@@ -27066,9 +27217,9 @@ async function searchDirectMarketplacePages(
         const direct = await fetchHtml(
           url,
           source === "OLXDirect"
-            ? 1_800
+            ? 1_450
             : source === "AllegroLokalnieDirect"
-              ? 2_400
+              ? 1_550
               : source === "CeneoDirect"
                 ? 3_500
                 : 3_800,
@@ -27080,55 +27231,46 @@ async function searchDirectMarketplacePages(
         // synchronous card extraction from a response that arrived too late.
         if (sourceSignal?.aborted) return [];
 
-        if (
-          direct &&
-          direct.status < 400 &&
-          direct.html
-        ) {
-          const htmlResults =
-            source === "OLXDirect"
-              ? parseOlxDirectHtml(
-                  direct.html,
-                  direct.finalUrl || url
-                )
-              : parseDirectMarketplaceHtml(
-                  direct.html,
-                  direct.finalUrl || url,
-                  source
-                );
-
-          const embeddedResults =
-            source === "AllegroLokalnieDirect"
-              ? parseAllegroLokalnieEmbeddedHtml(
-                  direct.html,
-                  direct.finalUrl || url
-                )
-              : [];
-
-          parsedResults = [
-            ...htmlResults,
-            ...embeddedResults,
-          ];
-
-          if (source === "CeneoDirect") {
-            parsedResults = filterCeneoDirectCandidates(parsedResults, parsed);
-          }
-
-          console.log(
-            "[AIShopping] V34.CORE120 direct HTML results:",
-            source,
-            htmlResults.length,
-            "embedded=",
-            embeddedResults.length,
-            "status=",
-            direct.status
-          );
+        if (direct && direct.status < 400 && direct.html) {
+          parsedResults = parseDirectResponse(direct, "primary");
         } else {
           console.log(
-            "[AIShopping] V34.CORE120 direct HTML unavailable:",
+            "[AIShopping] V34.CORE123 direct HTML unavailable:",
             source,
             direct?.status ?? "network"
           );
+        }
+
+        const directFailureIsTransient =
+          !direct ||
+          direct.status === 408 ||
+          direct.status >= 500;
+        const sourceHasBoundedRetryLane =
+          source === "OLXDirect" ||
+          (
+            source === "AllegroLokalnieDirect" &&
+            url === allegroLokalnieReaderFallbackUrl
+          );
+
+        // V34.CORE123: start one shorter direct retry now, but do not await it
+        // serially. The source's existing reader fallback below races it, so a
+        // dead socket cannot consume the reader window and neither attempt can
+        // extend the 6.15 s outer marketplace phase.
+        if (
+          parsedResults.length === 0 &&
+          directFailureIsTransient &&
+          sourceHasBoundedRetryLane &&
+          !sourceSignal?.aborted
+        ) {
+          transientDirectRetryPromise = (async () => {
+            await sleep(120, sourceSignal);
+            if (sourceSignal?.aborted) return null;
+            return fetchHtml(
+              url,
+              source === "OLXDirect" ? 1_250 : 1_350,
+              sourceSignal
+            );
+          })();
         }
       }
 
@@ -27146,17 +27288,20 @@ async function searchDirectMarketplacePages(
         );
 
       if (shouldUseAllegroLokalnieReader) {
-        const markdown = await withDeadline(
-          fetchViaJina(
-            url,
-            4_000,
-            false,
-            sourceSignal
+        const [markdown] = await Promise.all([
+          withDeadline(
+            fetchViaJina(
+              url,
+              4_000,
+              false,
+              sourceSignal
+            ),
+            4_300,
+            "",
+            `direct Jina ${source}`
           ),
-          4_300,
-          "",
-          `direct Jina ${source}`
-        );
+          collectTransientDirectRetry(),
+        ]);
 
         if (sourceSignal?.aborted) return parsedResults;
 
@@ -27279,21 +27424,34 @@ async function searchDirectMarketplacePages(
             "[AIShopping] V34.CORE120 skipped OLX Jina landing; direct HTML cards available:",
             parsedResults.length
           );
+        } else if (url !== olxReaderFallbackUrl) {
+          await collectTransientDirectRetry();
+          console.log(
+            parsedResults.length > 0
+              ? "[AIShopping] V34.CORE123 secondary OLX direct retry recovered:"
+              : "[AIShopping] V34.CORE123 skipped duplicate OLX Jina landing:",
+            url,
+            "results=",
+            parsedResults.length
+          );
         } else {
           const jinaTimeout = 4_250;
           const jinaDeadline = 4_500;
 
-          const markdown = await withDeadline(
-            fetchViaJina(
-              url,
-              jinaTimeout,
-              true,
-              sourceSignal
+          const [markdown] = await Promise.all([
+            withDeadline(
+              fetchViaJina(
+                url,
+                jinaTimeout,
+                true,
+                sourceSignal
+              ),
+              jinaDeadline,
+              "",
+              `direct Jina ${source}`
             ),
-            jinaDeadline,
-            "",
-            `direct Jina ${source}`
-          );
+            collectTransientDirectRetry(),
+          ]);
 
           if (sourceSignal?.aborted) return parsedResults;
 
@@ -41736,7 +41894,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE122 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE123 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -41813,7 +41971,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE122");
+    console.log("[AIShopping] NEW SEARCH V34.CORE123");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
