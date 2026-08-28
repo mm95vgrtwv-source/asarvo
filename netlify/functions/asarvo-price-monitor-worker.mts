@@ -7,7 +7,11 @@ import { createAdminClient } from "../../lib/supabase/admin";
 import {
   runPriceWatchCheck,
   type RunPriceWatchResult,
-} from "../../lib/price-watch-runner";
+} from "../../lib/price-watch-runner-core";
+
+declare const process: {
+  env: Record<string, string | undefined>;
+};
 
 const STALE_AFTER_MS =
   25 * 60 * 1000;

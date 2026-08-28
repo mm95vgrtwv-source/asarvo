@@ -1,5 +1,9 @@
 import type { Config } from "@netlify/functions";
 
+declare const process: {
+  env: Record<string, string | undefined>;
+};
+
 export default async function handler(): Promise<Response> {
   const siteUrl =
     (process.env.URL ?? "")
