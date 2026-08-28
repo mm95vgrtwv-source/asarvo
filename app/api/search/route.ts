@@ -1,7 +1,19 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE123 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE125 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE125: Allegro Lokalnie result names now stop before flattened
+ *   structured listing attributes such as `Opcje SIM:` / `Model telefonu:`.
+ *   Those fields remain in the card snippet for HARD-proof verification, but
+ *   they can no longer leak metadata or a card amount into the displayed
+ *   product title. Explicit same-card `Kup teraz` still remains the trusted
+ *   payable price and card boundaries remain unchanged.
+ * - V34.CORE124: a completely empty direct-marketplace portfolio may trigger
+ *   the existing bounded public-index rescue even when one retailer candidate
+ *   is already verification-ready. A single MediaMarkt/other-store result can
+ *   no longer suppress OLX/Allegro/Allegro Lokalnie recovery after all direct
+ *   marketplace transports failed. The rescue stays sparse-coverage-only and
+ *   every recovered URL still passes the unchanged concrete-offer verifier.
  * - V34.CORE123: transient OLX and Allegro Lokalnie discovery failures now
  *   receive one short direct-transport retry raced in parallel with the
  *   existing reader fallback. OLX public JSON uses two bounded attempts inside
@@ -48,7 +60,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE123 CORE
+ * V34.CORE125 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -78,7 +90,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE123 – Universal Shopping Engine
+ * AIShopping V34.CORE125 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -22909,6 +22921,22 @@ function cleanDirectMarketplaceResultName(
     }
   }
 
+  // V34.CORE125: Allegro Lokalnie occasionally flattens the entire structured
+  // attribute block into one <a> label. Keep those facts in the bounded card
+  // snippet, where HARD verification can use them, but stop the user-facing
+  // result name at the first unambiguous marketplace field label. Without this
+  // boundary a name could end with a certification field and an unrelated
+  // display amount even though the same card separately exposes the payable `Kup teraz`
+  // amount. This is presentation/identity cleanup only; price selection still
+  // runs against the original URL-bounded card.
+  const structuredFieldBoundary = name.search(
+    /\s(?:opcje\s+sim|model\s+telefonu|waga\s+produktu(?:\s+z\s+opakowaniem\s+jednostkowym)?|certyfikaty\s+zgodno(?:ś|s)ci|kod\s+producenta|numer\s+katalogowy|marka|typ)\s*:/iu
+  );
+
+  if (structuredFieldBoundary >= 0 && structuredFieldBoundary < cutAt) {
+    cutAt = structuredFieldBoundary;
+  }
+
   name = cleanTitle(name.slice(0, cutAt));
 
   if (name.length >= 5) {
@@ -27685,6 +27713,23 @@ function shouldScanRetailerRescueSeeds(
   return !primaryVerificationReady && !(primaryIdentityReady && primaryHardCoverageReady);
 }
 
+function shouldRunPrimaryMarketplaceIndexRescue(
+  primaryVerificationReady: boolean,
+  directMarketplaceResultCount: number,
+  likelyConcreteCoverageHosts: number,
+  coverageDiscoveryCoreRaw: string | null
+): boolean {
+  if (!normalizeText(coverageDiscoveryCoreRaw ?? "")) return false;
+  if (likelyConcreteCoverageHosts >= 3) return false;
+
+  // V34.CORE124: verification readiness answers "can we show at least one
+  // offer?"; it does not answer "did the marketplace portfolio work?". When
+  // every direct marketplace lane returned zero, one verified retailer must
+  // not suppress the already-bounded public-index rescue. If direct
+  // marketplaces produced anything, preserve CORE123's fast path.
+  return !primaryVerificationReady || directMarketplaceResultCount === 0;
+}
+
 function getTargetedRetailerQueryLimit(parsed: ParsedQuery): number {
   // Keep enough site diversity to include the matched vertical plus universal
   // marketplaces, but do not fan out dozens of duplicate lexical variants in
@@ -28422,21 +28467,43 @@ async function runSearch(
   }
 
 
-  // V34.CORE120 MARKETPLACE INDEX RESCUE.
+  // V34.CORE124 MARKETPLACE INDEX RESCUE.
   // Direct marketplace HTML is frequently 403 while public indexes still know
   // concrete offer/product URLs. Recover only exact concrete Allegro/Ceneo URLs
   // and run them through the normal verifier; snippets are never trusted as
-  // final price/condition/originality proof.
-  if (
-    !primaryVerificationReady &&
-    countLikelyConcreteCoverageHosts(all, parsed, 3) < 3 &&
+  // final price/condition/originality proof. CORE124 also runs this bounded
+  // lane when every direct marketplace transport returned zero, even if one
+  // retailer card is already ready. It remains disabled once three concrete
+  // commerce hosts are visible or any direct marketplace lane succeeded.
+  const primaryMarketplaceCoverageHosts = countLikelyConcreteCoverageHosts(
+    all,
+    parsed,
+    3
+  );
+  const shouldRunMarketplaceIndexRescue = shouldRunPrimaryMarketplaceIndexRescue(
+    primaryVerificationReady,
+    directMarketplace.length,
+    primaryMarketplaceCoverageHosts,
     coverageDiscoveryCore
-  ) {
+  );
+
+  if (shouldRunMarketplaceIndexRescue) {
     const marketplaceIndexRemainingMs = Math.max(
       0,
       effectiveDiscoveryBudgetMs - (Date.now() - discoveryStartedAt) - 500
     );
     if (marketplaceIndexRemainingMs >= 900) {
+      if (primaryVerificationReady && directMarketplace.length === 0) {
+        console.log(
+          "[AIShopping] V34.CORE124 marketplace outage index rescue activated:",
+          {
+            concreteHosts: primaryMarketplaceCoverageHosts,
+            remainingMs: marketplaceIndexRemainingMs,
+            directMarketplaceResults: directMarketplace.length,
+          }
+        );
+      }
+
       const marketplaceIndexed = await withAbortableDeadline(
         (signal) => searchIndexedMarketplaceProductRescue(
           parsed,
@@ -41894,7 +41961,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE123 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE125 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -41971,7 +42038,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE123");
+    console.log("[AIShopping] NEW SEARCH V34.CORE125");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
