@@ -3,52 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
-type SpeechRecognitionAlternativeLike = {
-  transcript: string;
-  confidence?: number;
-};
-
-type SpeechRecognitionResultLike = {
-  readonly isFinal: boolean;
-  readonly length: number;
-  [index: number]: SpeechRecognitionAlternativeLike;
-};
-
-type SpeechRecognitionResultListLike = {
-  readonly length: number;
-  [index: number]: SpeechRecognitionResultLike;
-};
-
-type SpeechRecognitionEventLike = Event & {
-  readonly results: SpeechRecognitionResultListLike;
-};
-
-type SpeechRecognitionErrorEventLike = Event & {
-  readonly error: string;
-  readonly message?: string;
-};
-
-type SpeechRecognitionLike = {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  maxAlternatives: number;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-  stop: () => void;
-  abort: () => void;
-};
-
-type SpeechRecognitionConstructorLike = new () => SpeechRecognitionLike;
-
-type WindowWithSpeechRecognition = Window & {
-  SpeechRecognition?: SpeechRecognitionConstructorLike;
-  webkitSpeechRecognition?: SpeechRecognitionConstructorLike;
-};
-
 const examples = [
   "🎮 Pad do PS4 do 200 zł",
   "💻 Laptop gamingowy do 4000 zł",
@@ -241,10 +195,7 @@ function loadPriceWatches(): PriceWatch[] {
 
 export default function Home() {
   const [query, setQuery] = useState("");
-  const speechRecognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
-  const [voiceListening, setVoiceListening] = useState(false);
-  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
   const [imageAnalyzing, setImageAnalyzing] = useState(false);
   const [imageMessage, setImageMessage] = useState<string | null>(null);
   const [searchHistory, setSearchHistory] = useState<SearchHistoryEntry[]>([]);
@@ -466,138 +417,6 @@ export default function Home() {
       );
     }
   }, []);
-
-  useEffect(() => {
-    return () => {
-      speechRecognitionRef.current?.abort();
-      speechRecognitionRef.current = null;
-    };
-  }, []);
-
-  const startVoiceSearch = () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    if (voiceListening) {
-      speechRecognitionRef.current?.stop();
-      return;
-    }
-
-    const speechWindow = window as WindowWithSpeechRecognition;
-    const SpeechRecognitionApi =
-      speechWindow.SpeechRecognition ??
-      speechWindow.webkitSpeechRecognition;
-
-    if (!SpeechRecognitionApi) {
-      setVoiceMessage(
-        "Ta przeglądarka nie udostępnia rozpoznawania mowy. Spróbuj Chrome, Edge lub Opera."
-      );
-      return;
-    }
-
-    const recognition = new SpeechRecognitionApi();
-    speechRecognitionRef.current = recognition;
-
-    let finalQuery = "";
-
-    recognition.lang = "pl-PL";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => {
-      setVoiceListening(true);
-      setVoiceMessage("Słucham… Powiedz, czego szukasz.");
-    };
-
-    recognition.onresult = (event) => {
-      let interimQuery = "";
-
-      for (let index = event.results.length - 1; index >= 0; index -= 1) {
-        const result = event.results[index];
-        const transcript = result[0]?.transcript?.trim();
-
-        if (!transcript) {
-          continue;
-        }
-
-        if (result.isFinal) {
-          finalQuery = transcript;
-          break;
-        }
-
-        if (!interimQuery) {
-          interimQuery = transcript;
-        }
-      }
-
-      const spokenQuery = finalQuery || interimQuery;
-
-      if (spokenQuery) {
-        setQuery(spokenQuery);
-        setVoiceMessage(
-          finalQuery
-            ? `Rozpoznano: „${finalQuery}”`
-            : `Słyszę: „${interimQuery}”`
-        );
-      }
-    };
-
-    recognition.onerror = (event) => {
-      setVoiceListening(false);
-
-      if (event.error === "aborted") {
-        setVoiceMessage(null);
-        return;
-      }
-
-      if (
-        event.error === "not-allowed" ||
-        event.error === "service-not-allowed"
-      ) {
-        setVoiceMessage(
-          "Brak dostępu do mikrofonu. Zezwól przeglądarce na używanie mikrofonu i spróbuj ponownie."
-        );
-        return;
-      }
-
-      if (event.error === "no-speech") {
-        setVoiceMessage(
-          "Nie usłyszałem wypowiedzi. Kliknij mikrofon i spróbuj jeszcze raz."
-        );
-        return;
-      }
-
-      setVoiceMessage("Nie udało się rozpoznać mowy. Spróbuj ponownie.");
-    };
-
-    recognition.onend = () => {
-      setVoiceListening(false);
-      speechRecognitionRef.current = null;
-
-      const trimmedVoiceQuery = finalQuery.trim();
-
-      if (!trimmedVoiceQuery) {
-        return;
-      }
-
-      setQuery(trimmedVoiceQuery);
-      setVoiceMessage("Rozpoznano zapytanie — uruchamiam ASARVO Search…");
-
-      window.location.href = `/search?q=${encodeURIComponent(trimmedVoiceQuery)}`;
-    };
-
-    try {
-      recognition.start();
-    } catch {
-      setVoiceListening(false);
-      speechRecognitionRef.current = null;
-      setVoiceMessage(
-        "Mikrofon jest już aktywny. Spróbuj ponownie za chwilę."
-      );
-    }
-  };
 
   const handleImageSearch = async (file: File) => {
     if (!file.type.startsWith("image/")) {
@@ -1719,9 +1538,6 @@ export default function Home() {
                     value={query}
                     onChange={(event) => {
                       setQuery(event.target.value);
-                      if (voiceMessage) {
-                        setVoiceMessage(null);
-                      }
                       if (imageMessage) {
                         setImageMessage(null);
                       }
@@ -1735,50 +1551,6 @@ export default function Home() {
                     placeholder="Czego szukasz? np. oryginalny pad do PS4 do 200 zł"
                     className="w-full bg-transparent pr-3 text-base text-white outline-none placeholder:text-gray-600"
                   />
-
-                  <button
-                    type="button"
-                    onClick={startVoiceSearch}
-                    aria-label={
-                      voiceListening
-                        ? "Zatrzymaj wyszukiwanie głosowe"
-                        : "Wyszukaj głosem"
-                    }
-                    title={
-                      voiceListening
-                        ? "Zatrzymaj słuchanie"
-                        : "Powiedz, czego szukasz"
-                    }
-                    className={`relative mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition ${
-                      voiceListening
-                        ? "border-cyan-300/50 bg-cyan-400/[0.12] text-cyan-200 shadow-[0_0_28px_rgba(34,211,238,0.18)]"
-                        : "border-white/10 bg-white/[0.025] text-gray-500 hover:border-blue-400/30 hover:bg-blue-500/[0.07] hover:text-blue-300"
-                    }`}
-                  >
-                    {voiceListening && (
-                      <span className="absolute inset-0 animate-ping rounded-xl border border-cyan-300/30" />
-                    )}
-
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden="true"
-                      className="relative h-5 w-5"
-                    >
-                      <path
-                        d="M12 14.5a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 1 0-7 0v5a3.5 3.5 0 0 0 3.5 3.5Z"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                      />
-                      <path
-                        d="M5.5 10.5v.5a6.5 6.5 0 0 0 13 0v-.5M12 17.5V21M9 21h6"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
 
                   <input
                     ref={imageInputRef}
@@ -1848,18 +1620,6 @@ export default function Home() {
                   Szukaj
                 </button>
               </div>
-
-              {voiceMessage && (
-                <div
-                  className={`px-4 pb-2 pt-1 text-left text-xs ${
-                    voiceListening ? "text-cyan-300" : "text-gray-500"
-                  }`}
-                  aria-live="polite"
-                >
-                  {voiceListening ? "🎙️ " : ""}
-                  {voiceMessage}
-                </div>
-              )}
 
               {imageMessage && (
                 <div
