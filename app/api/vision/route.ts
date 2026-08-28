@@ -3,7 +3,9 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite";
+const DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite";
+const GEMINI_INTERACTIONS_URL =
+  "https://generativelanguage.googleapis.com/v1beta/interactions";
 
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const GEMINI_TIMEOUT_MS = 45_000;
@@ -18,18 +20,20 @@ type VisionAnalysis = {
   confidence: number;
 };
 
-type GeminiResponse = {
-  candidates?: Array<{
-    content?: {
-      parts?: Array<{
-        text?: string;
-      }>;
-    };
-    finishReason?: string;
+type GeminiInteractionResponse = {
+  id?: string;
+  model?: string;
+  status?: string;
+
+  steps?: Array<{
+    type?: string;
+
+    content?: Array<{
+      type?: string;
+      text?: string;
+    }>;
   }>;
-  promptFeedback?: {
-    blockReason?: string;
-  };
+
   error?: {
     code?: number;
     message?: string;
@@ -46,7 +50,9 @@ function cleanNullableString(
 
   const trimmed = value.trim();
 
-  return trimmed ? trimmed : null;
+  return trimmed
+    ? trimmed
+    : null;
 }
 
 function cleanStringArray(
@@ -190,27 +196,37 @@ function normalizeVisionAnalysis(
   };
 }
 
-function getGeminiText(
-  payload: GeminiResponse
+function getInteractionText(
+  payload: GeminiInteractionResponse
 ): string | null {
-  const candidates =
-    Array.isArray(payload.candidates)
-      ? payload.candidates
+  const steps =
+    Array.isArray(payload.steps)
+      ? payload.steps
       : [];
 
-  for (const candidate of candidates) {
-    const parts =
-      candidate.content?.parts;
+  for (
+    let i = steps.length - 1;
+    i >= 0;
+    i -= 1
+  ) {
+    const step = steps[i];
 
-    if (!Array.isArray(parts)) {
+    if (
+      step?.type !== "model_output" ||
+      !Array.isArray(step.content)
+    ) {
       continue;
     }
 
-    const text = parts
-      .map((part) =>
-        typeof part.text === "string"
-          ? part.text
-          : ""
+    const text = step.content
+      .filter(
+        (part) =>
+          part?.type === "text" &&
+          typeof part.text === "string"
+      )
+      .map(
+        (part) =>
+          part.text ?? ""
       )
       .join("")
       .trim();
@@ -223,12 +239,46 @@ function getGeminiText(
   return null;
 }
 
+const VISION_PROMPT = [
+  "Jesteś modułem rozpoznawania produktów ze zdjęć w polskiej wyszukiwarce zakupowej ASARVO.",
+
+  "Analizuj WYŁĄCZNIE to, co faktycznie widać na zdjęciu.",
+
+  "Twoim zadaniem jest zbudowanie możliwie najlepszego zapytania zakupowego, które zostanie przekazane do silnika wyszukiwania ASARVO.",
+
+  "Rozpoznaj kategorię produktu oraz tylko wtedy, gdy istnieją wystarczające dowody wizualne: markę, model, kolor oraz istotne cechy zakupowe.",
+
+  "Nigdy nie zgaduj marki, modelu, wariantu, generacji, pojemności, rozmiaru ani innych parametrów, których nie można wiarygodnie ustalić ze zdjęcia.",
+
+  "Jeżeli dokładny model jest niepewny, użyj szerszej kategorii produktu i cech widocznych na zdjęciu.",
+
+  "Jeżeli na produkcie lub opakowaniu widoczne są logo, nazwa marki, model, oznaczenie produktu lub napis, możesz wykorzystać je do identyfikacji.",
+
+  "Wszystkie opisy mają być po polsku. Nazwy własne marek i modeli pozostaw w oryginalnej formie.",
+
+  'searchQuery ma być krótkim i naturalnym zapytaniem zakupowym po polsku, np. "portfel Valentino czarny skórzany", "buty Nike Air Max czarne", "słuchawki bezprzewodowe nauszne czarne".',
+
+  "Nie dodawaj ceny, chyba że cena jest istotną częścią identyfikacji widoczną bezpośrednio na produkcie lub opakowaniu.",
+
+  "productCategory ma zawierać krótką nazwę kategorii po polsku.",
+
+  "Jeśli marka, model lub kolor są nieznane, zwróć dla danego pola pusty string.",
+
+  "visibleDetails ma zawierać maksymalnie 8 krótkich cech rzeczywiście widocznych na zdjęciu.",
+
+  "confidence oznacza pewność poprawności searchQuery od 0 do 1.",
+
+  "Nie twórz ogólnego opisu zdjęcia. Odpowiedź służy wyłącznie do znalezienia produktu do kupienia.",
+].join("\n");
+
 export async function POST(
   request: Request
 ) {
   try {
     const apiKey =
-      process.env.GEMINI_API_KEY?.trim();
+      process.env
+        .GEMINI_API_KEY
+        ?.trim();
 
     if (!apiKey) {
       console.error(
@@ -239,7 +289,7 @@ export async function POST(
         {
           ok: false,
           error:
-            "Moduł rozpoznawania zdjęć nie jest jeszcze skonfigurowany.",
+            "Moduł rozpoznawania zdjęć nie jest skonfigurowany.",
         },
         {
           status: 503,
@@ -331,9 +381,7 @@ export async function POST(
     try {
       geminiResponse =
         await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-            model
-          )}:generateContent`,
+          GEMINI_INTERACTIONS_URL,
           {
             method: "POST",
 
@@ -345,115 +393,98 @@ export async function POST(
                 apiKey,
             },
 
-            signal:
-              controller.signal,
-
             cache:
               "no-store",
 
+            signal:
+              controller.signal,
+
             body:
               JSON.stringify({
-                contents: [
+                model,
+
+                input: [
                   {
-                    role: "user",
+                    type: "image",
 
-                    parts: [
-                      {
-                        inlineData: {
-                          mimeType:
-                            image.type,
+                    mime_type:
+                      image.type,
 
-                          data:
-                            imageBase64,
-                        },
-                      },
+                    data:
+                      imageBase64,
+                  },
 
-                      {
-                        text:
-                          [
-                            "Jesteś modułem rozpoznawania produktów ze zdjęć w polskiej wyszukiwarce zakupowej ASARVO.",
+                  {
+                    type: "text",
 
-                            "Analizuj WYŁĄCZNIE to, co faktycznie widać na zdjęciu.",
-
-                            "Twoim zadaniem jest utworzenie możliwie najlepszego zapytania zakupowego, które następnie zostanie przekazane do silnika wyszukiwania ASARVO.",
-
-                            "Rozpoznaj kategorię produktu oraz, tylko jeśli zdjęcie daje wystarczające dowody, markę, model, kolor i przydatne cechy zakupowe.",
-
-                            "Nigdy nie zgaduj dokładnego modelu, wariantu, pojemności, rozmiaru, generacji ani marki, jeżeli nie ma wystarczających dowodów wizualnych.",
-
-                            "Jeżeli dokładna identyfikacja jest niepewna, użyj szerszej kategorii i widocznych cech zamiast wymyślonego modelu.",
-
-                            "Jeżeli na produkcie widać logo, nazwę producenta, nazwę modelu albo inne oznaczenia, możesz wykorzystać je do identyfikacji.",
-
-                            "Wszystkie opisy mają być po polsku. Nazwy własne marek i modeli pozostaw w ich oryginalnej formie.",
-
-                            'searchQuery ma być krótkim, naturalnym zapytaniem zakupowym po polsku, np. "portfel Valentino czarny skórzany", "buty Nike Air Max czarne", "bezprzewodowe słuchawki nauszne czarne".',
-
-                            "Nie dodawaj ceny, chyba że cena jest częścią identyfikacji widoczną bezpośrednio na produkcie lub opakowaniu.",
-
-                            "productCategory ma zawierać krótką nazwę kategorii produktu po polsku.",
-
-                            'Jeśli marka, model lub kolor są nieznane, zwróć dla danego pola pusty string "".',
-
-                            "visibleDetails ma zawierać wyłącznie cechy naprawdę widoczne na zdjęciu.",
-
-                            "confidence oznacza pewność poprawności searchQuery w skali od 0 do 1.",
-
-                            "Nie opisuj zdjęcia ogólnie. Wynik ma służyć wyszukiwaniu produktu do kupienia.",
-                          ].join(
-                            "\n"
-                          ),
-                      },
-                    ],
+                    text:
+                      VISION_PROMPT,
                   },
                 ],
 
-                generationConfig: {
-                  temperature: 0.1,
+                response_format: {
+                  type: "text",
 
-                  maxOutputTokens:
-                    512,
-
-                  responseMimeType:
+                  mime_type:
                     "application/json",
 
-                  responseSchema: {
-                    type: "OBJECT",
+                  schema: {
+                    type: "object",
+
+                    additionalProperties:
+                      false,
 
                     properties: {
                       searchQuery: {
-                        type: "STRING",
+                        type: "string",
+
+                        description:
+                          "Krótkie naturalne zapytanie zakupowe po polsku.",
                       },
 
                       productCategory:
                         {
-                          type: "STRING",
+                          type: "string",
+
+                          description:
+                            "Kategoria produktu po polsku.",
                         },
 
                       brand: {
-                        type: "STRING",
+                        type: "string",
+
+                        description:
+                          "Marka tylko jeśli jest wiarygodnie rozpoznana, inaczej pusty string.",
                       },
 
                       model: {
-                        type: "STRING",
+                        type: "string",
+
+                        description:
+                          "Model tylko jeśli jest wiarygodnie rozpoznany, inaczej pusty string.",
                       },
 
                       color: {
-                        type: "STRING",
+                        type: "string",
+
+                        description:
+                          "Widoczny kolor produktu po polsku lub pusty string.",
                       },
 
                       visibleDetails:
                         {
-                          type: "ARRAY",
+                          type: "array",
 
                           items: {
-                            type: "STRING",
+                            type: "string",
                           },
                         },
 
                       confidence: {
-                        type: "NUMBER",
+                        type: "number",
+
                         minimum: 0,
+
                         maximum: 1,
                       },
                     },
@@ -469,6 +500,16 @@ export async function POST(
                     ],
                   },
                 },
+
+                generation_config: {
+                  max_output_tokens:
+                    512,
+
+                  thinking_level:
+                    "minimal",
+                },
+
+                store: false,
               }),
           }
         );
@@ -506,7 +547,9 @@ export async function POST(
         }
       );
     } finally {
-      clearTimeout(timeout);
+      clearTimeout(
+        timeout
+      );
     }
 
     const payload =
@@ -515,7 +558,7 @@ export async function POST(
         .catch(
           () => null
         )) as
-        | GeminiResponse
+        | GeminiInteractionResponse
         | null;
 
     if (
@@ -526,10 +569,14 @@ export async function POST(
           ?.message;
 
       console.error(
-        "[ASARVO VISION] Gemini API error:",
+        "[ASARVO VISION] Gemini Interactions API error:",
         {
           status:
             geminiResponse.status,
+
+          providerStatus:
+            payload?.error
+              ?.status,
 
           message:
             providerError ||
@@ -571,6 +618,22 @@ export async function POST(
         );
       }
 
+      if (
+        geminiResponse.status ===
+        404
+      ) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "Model AI rozpoznawania zdjęć jest niedostępny.",
+          },
+          {
+            status: 503,
+          }
+        );
+      }
+
       return NextResponse.json(
         {
           ok: false,
@@ -597,27 +660,40 @@ export async function POST(
     }
 
     if (
-      payload.promptFeedback
-        ?.blockReason
+      payload.status &&
+      payload.status !==
+        "completed"
     ) {
+      console.error(
+        "[ASARVO VISION] Interaction not completed:",
+        {
+          id:
+            payload.id,
+          status:
+            payload.status,
+        }
+      );
+
       return NextResponse.json(
         {
           ok: false,
           error:
-            "To zdjęcie nie mogło zostać przeanalizowane. Spróbuj innego zdjęcia produktu.",
+            "AI nie zakończyło analizy zdjęcia. Spróbuj ponownie.",
         },
         {
-          status: 422,
+          status: 502,
         }
       );
     }
 
     const rawContent =
-      getGeminiText(payload);
+      getInteractionText(
+        payload
+      );
 
     if (!rawContent) {
       console.error(
-        "[ASARVO VISION] Gemini returned no text:",
+        "[ASARVO VISION] Interaction returned no model text:",
         payload
       );
 
@@ -690,7 +766,7 @@ export async function POST(
       },
 
       visionProvider:
-        "gemini",
+        "gemini-interactions",
 
       visionModel:
         model,
