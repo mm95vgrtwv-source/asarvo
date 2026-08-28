@@ -605,8 +605,8 @@ export default function Home() {
       return;
     }
 
-    if (file.size > 12 * 1024 * 1024) {
-      setImageMessage("Zdjęcie jest za duże. Maksymalny rozmiar to 12 MB.");
+    if (file.size > 4 * 1024 * 1024) {
+      setImageMessage("Zdjęcie jest za duże. Maksymalny rozmiar to 4 MB.");
       return;
     }
 
