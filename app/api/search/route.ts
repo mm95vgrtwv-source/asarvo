@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE121 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE122 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE122: a free-standing plus sign in structured listing relations
+ *   such as `SIM + eSIM` no longer invents a product-line `Plus` variant.
+ *   Numeric model suffixes such as `S24+` / `iPhone 8 +`, literal `Plus`, and
+ *   all existing Pro/Pro Max/Ultra/Mini/Ti/Super guards remain strict.
  * - V34.CORE121: OLX public JSON parameters that belong to one concrete
  *   listing now preserve their proven HARD requirement keys through final
  *   verification. Only the API's structured `params` are eligible; the seller
@@ -39,7 +43,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE121 CORE
+ * V34.CORE122 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -69,7 +73,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE121 – Universal Shopping Engine
+ * AIShopping V34.CORE122 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -9327,14 +9331,20 @@ const UNIVERSAL_VARIANT_TOKENS = [
 ];
 
 function extractUniversalVariantSignature(valueRaw: string): string[] {
-  // V32.12: a plus sign joining two capacities (for example 512GB + 1TB) is
-  // storage composition, not a product-line `Plus` variant. Preserve literal
-  // Plus/model suffix semantics everywhere else.
+  // V34.CORE122: a free-standing relation sign is not a product-line variant.
+  // Structured marketplace fields commonly contain `SIM + eSIM`; treating
+  // every `+` as `Plus` made a valid iPhone 13 Pro look like a Pro Plus.
+  // Preserve symbolic Plus only when it is attached to a numeric model suffix
+  // (`S24+`, `iPhone 8 +`). Literal word `Plus` remains unchanged. Capacity
+  // composition (`512GB + 1TB`) is removed first as before.
   const withoutCapacityJoinPlus = normalizeMatchText(valueRaw).replace(
     /(\d+(?:[.,]\d+)?\s*(?:gb|tb))\s*\+\s*(?=\d+(?:[.,]\d+)?\s*(?:gb|tb))/giu,
     "$1 "
   );
-  const padded = ` ${withoutCapacityJoinPlus.replace(/[+]/g, " plus ")} `;
+  const padded = ` ${withoutCapacityJoinPlus.replace(
+    /(\d)\s*\+(?=$|[^a-z0-9])/giu,
+    "$1 plus "
+  )} `;
   const found: string[] = [];
 
   if (/\bpro\s+max\b/.test(padded)) found.push("pro max");
@@ -41726,7 +41736,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE121 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE122 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -41803,7 +41813,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE121");
+    console.log("[AIShopping] NEW SEARCH V34.CORE122");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
