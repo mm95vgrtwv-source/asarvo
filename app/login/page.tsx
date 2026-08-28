@@ -3,6 +3,7 @@ import { login, signup } from "./actions";
 
 type Params = {
   error?: string | string[];
+  success?: string | string[];
   mode?: string | string[];
 };
 
@@ -16,7 +17,9 @@ export default async function LoginPage({
   searchParams: Promise<Params>;
 }) {
   const params = await searchParams;
+
   const error = first(params.error);
+  const success = first(params.success);
   const signupMode = first(params.mode) === "signup";
 
   return (
@@ -50,6 +53,18 @@ export default async function LoginPage({
               </p>
             </div>
 
+            {success && (
+              <div className="mt-6 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.08] px-4 py-3 text-sm leading-6 text-emerald-200">
+                <div className="font-semibold text-emerald-300">
+                  ✓ Rejestracja zakończona
+                </div>
+
+                <div className="mt-1">
+                  {success}
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className="mt-6 rounded-xl border border-red-500/20 bg-red-500/[0.07] px-4 py-3 text-sm text-red-200">
                 {error}
@@ -62,6 +77,7 @@ export default async function LoginPage({
                   <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-600">
                     Nazwa
                   </span>
+
                   <input
                     name="displayName"
                     type="text"
@@ -77,6 +93,7 @@ export default async function LoginPage({
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-600">
                   E-mail
                 </span>
+
                 <input
                   name="email"
                   type="email"
@@ -91,12 +108,15 @@ export default async function LoginPage({
                 <span className="mb-2 block text-xs font-semibold uppercase tracking-wider text-gray-600">
                   Hasło
                 </span>
+
                 <input
                   name="password"
                   type="password"
                   required
                   minLength={6}
-                  autoComplete={signupMode ? "new-password" : "current-password"}
+                  autoComplete={
+                    signupMode ? "new-password" : "current-password"
+                  }
                   placeholder="Minimum 6 znaków"
                   className="min-h-14 w-full rounded-xl border border-white/10 bg-black/25 px-4 outline-none transition placeholder:text-gray-700 focus:border-blue-500/40"
                 />

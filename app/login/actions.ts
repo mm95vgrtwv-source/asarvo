@@ -24,6 +24,16 @@ function errorRedirect(
   redirect(`/login?${params.toString()}`);
 }
 
+function successRedirect(message: string, mode?: "signup"): never {
+  const params = new URLSearchParams({ success: message });
+
+  if (mode) {
+    params.set("mode", mode);
+  }
+
+  redirect(`/login?${params.toString()}`);
+}
+
 export async function login(formData: FormData) {
   const email = getText(formData, "email").toLowerCase();
   const password = getText(formData, "password");
@@ -88,18 +98,22 @@ export async function signup(formData: FormData) {
     errorRedirect(error.message, "signup", error.code);
   }
 
+  /*
+   * Gdy potwierdzanie adresu e-mail jest włączone w Supabase,
+   * brak sesji bezpośrednio po signUp jest prawidłowym zachowaniem.
+   * Użytkownik musi najpierw kliknąć link potwierdzający w wiadomości.
+   */
   if (!data.session) {
-    console.error("[ASARVO AUTH][SIGNUP] Brak sesji po rejestracji", {
-      userId: data.user?.id ?? null,
-      email: data.user?.email ?? null,
-    });
-
-    errorRedirect(
-      "Konto zostało utworzone, ale Supabase nie zwrócił sesji. Sprawdź, czy Confirm Email jest naprawdę wyłączone.",
+    successRedirect(
+      "Konto zostało utworzone. Sprawdź skrzynkę e-mail i kliknij link potwierdzający.",
       "signup"
     );
   }
 
+  /*
+   * Ten wariant zostawiamy również na wypadek,
+   * gdyby w przyszłości potwierdzanie e-maila zostało wyłączone.
+   */
   revalidatePath("/", "layout");
   redirect("/account");
 }
