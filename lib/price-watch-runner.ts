@@ -1,3 +1,5 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 import { createClient } from "@/lib/supabase/server";
 import { checkProductPrice } from "@/lib/price-monitor";
 import { sendPriceAlertEmail } from "@/lib/email";
@@ -15,7 +17,7 @@ type WatchRow = {
   email_alert_armed: boolean;
 };
 
-type RunPriceWatchResult = {
+export type RunPriceWatchResult = {
   id: string;
   ok: boolean;
   skipped: boolean;
@@ -27,7 +29,9 @@ type RunPriceWatchResult = {
 };
 
 function asObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
+  return value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
 }
@@ -38,6 +42,7 @@ function readString(
   fallback = ""
 ): string {
   const value = object[key];
+
   return typeof value === "string"
     ? value.trim()
     : fallback;
@@ -52,8 +57,13 @@ function toNumber(value: unknown): number | null {
   }
 
   if (typeof value === "string") {
-    const parsed = Number(value.replace(",", "."));
-    return Number.isFinite(parsed) ? parsed : null;
+    const parsed = Number(
+      value.replace(",", ".")
+    );
+
+    return Number.isFinite(parsed)
+      ? parsed
+      : null;
   }
 
   return null;
@@ -71,13 +81,25 @@ function ageMs(value: string | null): number {
     : Number.POSITIVE_INFINITY;
 }
 
+async function resolveSupabaseClient(
+  suppliedClient?: SupabaseClient
+): Promise<SupabaseClient> {
+  if (suppliedClient) {
+    return suppliedClient;
+  }
+
+  return await createClient();
+}
+
 async function claimCheckSlot(
   watch: WatchRow,
-  checkedAt: string
+  checkedAt: string,
+  supabase: SupabaseClient
 ): Promise<boolean> {
-  const supabase = await createClient();
-
-  if (ageMs(watch.last_checked_at) < MIN_CHECK_GAP_MS) {
+  if (
+    ageMs(watch.last_checked_at) <
+    MIN_CHECK_GAP_MS
+  ) {
     return false;
   }
 
@@ -91,7 +113,10 @@ async function claimCheckSlot(
 
   query =
     watch.last_checked_at === null
-      ? query.is("last_checked_at", null)
+      ? query.is(
+          "last_checked_at",
+          null
+        )
       : query.eq(
           "last_checked_at",
           watch.last_checked_at
@@ -102,7 +127,11 @@ async function claimCheckSlot(
     .maybeSingle();
 
   if (error) {
-    console.error("[ASARVO MONITOR][CLAIM]", error);
+    console.error(
+      "[ASARVO MONITOR][CLAIM]",
+      error
+    );
+
     return false;
   }
 
@@ -116,20 +145,22 @@ async function maybeSendEmailAlert(params: {
   productUrl: string;
   price: number;
   targetPrice: number;
+  supabase: SupabaseClient;
 }): Promise<boolean> {
   if (!params.watch.email_alert_armed) {
     return false;
   }
 
-  const supabase = await createClient();
-
   const { data: profile, error: profileError } =
-    await supabase
+    await params.supabase
       .from("profiles")
       .select(
         "email,display_name,email_price_alerts_enabled"
       )
-      .eq("id", params.watch.user_id)
+      .eq(
+        "id",
+        params.watch.user_id
+      )
       .maybeSingle();
 
   if (profileError) {
@@ -137,6 +168,7 @@ async function maybeSendEmailAlert(params: {
       "[ASARVO EMAIL][PROFILE]",
       profileError
     );
+
     return false;
   }
 
@@ -150,10 +182,13 @@ async function maybeSendEmailAlert(params: {
 
   const result = await sendPriceAlertEmail({
     to: profile.email.trim(),
+
     displayName:
-      typeof profile.display_name === "string"
+      typeof profile.display_name ===
+      "string"
         ? profile.display_name
         : null,
+
     productName: params.productName,
     store: params.store,
     currentPrice: params.price,
@@ -166,12 +201,16 @@ async function maybeSendEmailAlert(params: {
       "[ASARVO EMAIL][SEND]",
       result.error
     );
+
     return false;
   }
 
-  const notifiedAt = new Date().toISOString();
+  const notifiedAt =
+    new Date().toISOString();
 
-  await supabase
+  const {
+    error: watchUpdateError,
+  } = await params.supabase
     .from("price_watches")
     .update({
       email_alert_armed: false,
@@ -180,21 +219,55 @@ async function maybeSendEmailAlert(params: {
       last_email_notified_target_price:
         params.targetPrice,
     })
-    .eq("id", params.watch.id)
-    .eq("user_id", params.watch.user_id);
+    .eq(
+      "id",
+      params.watch.id
+    )
+    .eq(
+      "user_id",
+      params.watch.user_id
+    );
 
-  const { error: logError } = await supabase
-    .from("price_email_notifications")
+  if (watchUpdateError) {
+    console.error(
+      "[ASARVO EMAIL][WATCH UPDATE]",
+      watchUpdateError
+    );
+  }
+
+  const {
+    error: logError,
+  } = await params.supabase
+    .from(
+      "price_email_notifications"
+    )
     .insert({
-      price_watch_id: params.watch.id,
-      user_id: params.watch.user_id,
-      recipient: profile.email.trim(),
-      price: params.price,
-      target_price: params.targetPrice,
-      provider: "brevo",
-      provider_message_id: result.messageId,
-      status: "sent",
-      created_at: notifiedAt,
+      price_watch_id:
+        params.watch.id,
+
+      user_id:
+        params.watch.user_id,
+
+      recipient:
+        profile.email.trim(),
+
+      price:
+        params.price,
+
+      target_price:
+        params.targetPrice,
+
+      provider:
+        "brevo",
+
+      provider_message_id:
+        result.messageId,
+
+      status:
+        "sent",
+
+      created_at:
+        notifiedAt,
     });
 
   if (logError) {
@@ -209,20 +282,43 @@ async function maybeSendEmailAlert(params: {
 
 export async function runPriceWatchCheck(
   watchId: string,
-  userId: string
+  userId: string,
+  suppliedClient?: SupabaseClient
 ): Promise<RunPriceWatchResult> {
-  const supabase = await createClient();
+  const supabase =
+    await resolveSupabaseClient(
+      suppliedClient
+    );
 
-  const { data: watchData, error } = await supabase
+  const {
+    data: watchData,
+    error,
+  } = await supabase
     .from("price_watches")
     .select(
       "id,user_id,product,target_price,current_price,last_checked_at,active,email_alert_armed"
     )
-    .eq("id", watchId)
-    .eq("user_id", userId)
+    .eq(
+      "id",
+      watchId
+    )
+    .eq(
+      "user_id",
+      userId
+    )
     .maybeSingle();
 
-  if (error || !watchData) {
+  if (
+    error ||
+    !watchData
+  ) {
+    if (error) {
+      console.error(
+        "[ASARVO MONITOR][WATCH LOAD]",
+        error
+      );
+    }
+
     return {
       id: watchId,
       ok: false,
@@ -231,11 +327,13 @@ export async function runPriceWatchCheck(
       available: null,
       targetReached: false,
       emailSent: false,
-      reason: "Nie znaleziono obserwacji.",
+      reason:
+        "Nie znaleziono obserwacji.",
     };
   }
 
-  const watch = watchData as WatchRow;
+  const watch =
+    watchData as unknown as WatchRow;
 
   if (!watch.active) {
     return {
@@ -246,15 +344,20 @@ export async function runPriceWatchCheck(
       available: null,
       targetReached: false,
       emailSent: false,
-      reason: "Obserwacja jest wyłączona.",
+      reason:
+        "Obserwacja jest wyłączona.",
     };
   }
 
-  const checkedAt = new Date().toISOString();
-  const claimed = await claimCheckSlot(
-    watch,
-    checkedAt
-  );
+  const checkedAt =
+    new Date().toISOString();
+
+  const claimed =
+    await claimCheckSlot(
+      watch,
+      checkedAt,
+      supabase
+    );
 
   if (!claimed) {
     return {
@@ -270,34 +373,70 @@ export async function runPriceWatchCheck(
     };
   }
 
-  const product = asObject(watch.product);
-  const url = readString(product, "url");
-  const name = readString(
-    product,
-    "name",
-    "Obserwowany produkt"
-  );
-  const store = readString(
-    product,
-    "store",
-    "Nieznany sklep"
-  );
-  const targetPrice = toNumber(
-    watch.target_price
-  );
-  const previousPrice = toNumber(
-    watch.current_price
-  );
+  const product =
+    asObject(watch.product);
 
-  if (!url || targetPrice === null) {
-    await supabase.from("price_watch_checks").insert({
-      price_watch_id: watch.id,
-      user_id: userId,
-      price: null,
-      available: null,
-      source_url: url || null,
-      checked_at: checkedAt,
-    });
+  const url =
+    readString(
+      product,
+      "url"
+    );
+
+  const name =
+    readString(
+      product,
+      "name",
+      "Obserwowany produkt"
+    );
+
+  const store =
+    readString(
+      product,
+      "store",
+      "Nieznany sklep"
+    );
+
+  const targetPrice =
+    toNumber(
+      watch.target_price
+    );
+
+  if (
+    !url ||
+    targetPrice === null
+  ) {
+    const {
+      error: invalidCheckError,
+    } = await supabase
+      .from(
+        "price_watch_checks"
+      )
+      .insert({
+        price_watch_id:
+          watch.id,
+
+        user_id:
+          userId,
+
+        price:
+          null,
+
+        available:
+          null,
+
+        source_url:
+          url || null,
+
+        checked_at:
+          checkedAt,
+      });
+
+    if (invalidCheckError) {
+      console.error(
+        "[ASARVO MONITOR][INVALID CHECK LOG]",
+        invalidCheckError
+      );
+    }
 
     return {
       id: watch.id,
@@ -307,6 +446,7 @@ export async function runPriceWatchCheck(
       available: null,
       targetReached: false,
       emailSent: false,
+
       reason:
         !url
           ? "Brak adresu oferty."
@@ -314,75 +454,195 @@ export async function runPriceWatchCheck(
     };
   }
 
-  const result = await checkProductPrice(
-    url,
-    name
-  );
+  let result: Awaited<
+    ReturnType<
+      typeof checkProductPrice
+    >
+  >;
 
-  const updatePayload: Record<string, unknown> = {
-    last_checked_at: checkedAt,
-    last_checked_price: result.price,
-  };
+  try {
+    result =
+      await checkProductPrice(
+        url,
+        name
+      );
+  } catch (error) {
+    console.error(
+      "[ASARVO MONITOR][PRICE CHECK]",
+      error
+    );
 
-  if (result.price !== null) {
-    updatePayload.current_price = result.price;
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Nieznany błąd sprawdzania ceny.";
+
+    await supabase
+      .from(
+        "price_watch_checks"
+      )
+      .insert({
+        price_watch_id:
+          watch.id,
+
+        user_id:
+          userId,
+
+        price:
+          null,
+
+        available:
+          null,
+
+        source_url:
+          url,
+
+        checked_at:
+          checkedAt,
+      });
+
+    return {
+      id: watch.id,
+      ok: false,
+      skipped: false,
+      price: null,
+      available: null,
+      targetReached: false,
+      emailSent: false,
+      reason: message,
+    };
+  }
+
+  const updatePayload:
+    Record<string, unknown> = {
+      last_checked_at:
+        checkedAt,
+
+      last_checked_price:
+        result.price,
+    };
+
+  if (
+    result.price !== null
+  ) {
+    updatePayload.current_price =
+      result.price;
   }
 
   const targetReached =
     result.price !== null &&
-    result.price <= targetPrice;
+    result.price <=
+      targetPrice;
 
-  // Jeżeli cena znowu wyszła ponad próg, uzbrajamy
-  // możliwość wysłania kolejnego e-maila przy przyszłym spadku.
   if (
     result.price !== null &&
-    result.price > targetPrice
+    result.price >
+      targetPrice
   ) {
-    updatePayload.email_alert_armed = true;
+    updatePayload.email_alert_armed =
+      true;
   }
 
-  await supabase
+  const {
+    error: updateError,
+  } = await supabase
     .from("price_watches")
-    .update(updatePayload)
-    .eq("id", watch.id)
-    .eq("user_id", userId);
+    .update(
+      updatePayload
+    )
+    .eq(
+      "id",
+      watch.id
+    )
+    .eq(
+      "user_id",
+      userId
+    );
 
-  await supabase.from("price_watch_checks").insert({
-    price_watch_id: watch.id,
-    user_id: userId,
-    price: result.price,
-    available: result.available,
-    source_url: result.checkedUrl || url,
-    checked_at: checkedAt,
-  });
+  if (updateError) {
+    console.error(
+      "[ASARVO MONITOR][WATCH UPDATE]",
+      updateError
+    );
+  }
+
+  const {
+    error: checkLogError,
+  } = await supabase
+    .from(
+      "price_watch_checks"
+    )
+    .insert({
+      price_watch_id:
+        watch.id,
+
+      user_id:
+        userId,
+
+      price:
+        result.price,
+
+      available:
+        result.available,
+
+      source_url:
+        result.checkedUrl ||
+        url,
+
+      checked_at:
+        checkedAt,
+    });
+
+  if (checkLogError) {
+    console.error(
+      "[ASARVO MONITOR][CHECK LOG]",
+      checkLogError
+    );
+  }
 
   let emailSent = false;
 
-  // Wysyłka tylko po wejściu w strefę celu.
-  // Dzięki email_alert_armed nie spamujemy przy każdym checku.
   if (
     targetReached &&
     result.price !== null &&
     watch.email_alert_armed
   ) {
-    emailSent = await maybeSendEmailAlert({
-      watch,
-      productName: name,
-      store,
-      productUrl: url,
-      price: result.price,
-      targetPrice,
-    });
+    emailSent =
+      await maybeSendEmailAlert({
+        watch,
+        productName:
+          name,
+        store,
+        productUrl:
+          url,
+        price:
+          result.price,
+        targetPrice,
+        supabase,
+      });
   }
 
   return {
-    id: watch.id,
-    ok: result.ok,
-    skipped: false,
-    price: result.price,
-    available: result.available,
+    id:
+      watch.id,
+
+    ok:
+      result.ok,
+
+    skipped:
+      false,
+
+    price:
+      result.price,
+
+    available:
+      result.available,
+
     targetReached,
+
     emailSent,
-    reason: result.error,
+
+    reason:
+      result.error,
   };
 }
