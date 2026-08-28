@@ -1831,6 +1831,7 @@ function SearchPageContent() {
             last_checked_price: null,
             last_checked_at: null,
             active: true,
+              email_alert_armed: true,
           },
           {
             onConflict: "user_id,product_key",

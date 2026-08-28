@@ -1153,6 +1153,7 @@ export default function Home() {
       .update({
         target_price: targetPrice,
         active: true,
+        email_alert_armed: true,
       })
       .eq("id", priceWatchEditor.key)
       .eq("user_id", user.id);
