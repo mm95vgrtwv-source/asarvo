@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE120 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE121 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE121: OLX public JSON parameters that belong to one concrete
+ *   listing now preserve their proven HARD requirement keys through final
+ *   verification. Only the API's structured `params` are eligible; the seller
+ *   description and unrelated page text cannot create this proof.
  * - CORE119 closes the live CORE118 rare-HARD phase overrun:
  *   if ordinary discovery ends with zero trusted evidence for one HARD axis but
  *   only ~6.7–8.7 s remain, a compact direct-retailer pulse still runs instead of
@@ -35,7 +39,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE120 CORE
+ * V34.CORE121 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -65,7 +69,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE120 – Universal Shopping Engine
+ * AIShopping V34.CORE121 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -26185,6 +26189,21 @@ function parseOlxPublicApiResponse(
         .join(" | ")
     ).slice(0, 1800);
 
+    // V34.CORE121: OLX public JSON `params` are structured fields bound to
+    // THIS concrete listing. Preserve only HARD keys explicitly evidenced by
+    // those fields. The free-form seller description remains ineligible, so a
+    // colour/size/spec mentioned in unrelated prose cannot become HARD proof.
+    const structuredRequirementProofKeys = parsed.intent.required
+      .filter((requirement) => requirement.hard)
+      .filter((requirement) =>
+        requirementHasEvidenceInContext(
+          requirement,
+          paramText,
+          parsed.intent.required
+        )
+      )
+      .map((requirement) => requirement.key);
+
     const priceText = price.price !== null && price.currency
       ? `Cena: ${price.price} ${price.currency}`
       : "";
@@ -26204,6 +26223,7 @@ function parseOlxPublicApiResponse(
       snippet,
       source: "OLXDirect",
       searchRank: results.length,
+      catalogRequirementProofKeys: structuredRequirementProofKeys,
     };
 
     // API search can contain promoted/fuzzy neighbours. Keep discovery broad,
@@ -41706,7 +41726,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE120 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE121 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -41783,7 +41803,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE120");
+    console.log("[AIShopping] NEW SEARCH V34.CORE121");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
