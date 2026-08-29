@@ -1,7 +1,28 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE125 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE128 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE128: Network Burst Shield bounds ordinary fetchHtml concurrency at
+ *   18 sockets. Queue wait uses the same per-fetch timeout, preventing a large
+ *   simultaneous marketplace + retailer + Bing/RSS/DDG burst from turning
+ *   healthy outbound connectivity into request-wide `network` failures. The
+ *   445-domain Store Mesh, query portfolio, Ceneo merchant expansion priority,
+ *   all identity/HARD/condition/price/availability/originality/accessory gates
+ *   and the 20 s route budget remain unchanged.
+ * - V34.CORE127: concrete Ceneo product pages receive a bounded scheduling
+ *   priority during discovery validation so an exact comparison card can reach
+ *   the already-existing Ceneo merchant expansion before the accepted-target
+ *   or validation-time budget stops the loop. One Ceneo product can therefore
+ *   fan out into multiple real seller offers without increasing the 20 s route
+ *   budget or relaxing identity, HARD, condition, price, availability,
+ *   originality, accessory or relevance verification.
+ * - V34.CORE126: Store Mesh expands the matched retail directory across major
+ *   Polish shopping verticals and adds office/stationery coverage. Primary
+ *   retailer fanout stays bounded; requirement-heavy secondary discovery now
+ *   uses four slots with deterministic tail diversification, while sparse
+ *   exact-host recovery blends stable ordered hosts with the same diversified
+ *   secondary set. Identity, HARD, condition, price, availability, originality,
+ *   accessory rejection and the 20 s route budget remain unchanged.
  * - V34.CORE125: Allegro Lokalnie result names now stop before flattened
  *   structured listing attributes such as `Opcje SIM:` / `Model telefonu:`.
  *   Those fields remain in the card snippet for HARD-proof verification, but
@@ -60,7 +81,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE125 CORE
+ * V34.CORE128 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -90,7 +111,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE125 – Universal Shopping Engine
+ * AIShopping V34.CORE128 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -922,6 +943,21 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl",
       "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl",
       "neo24.pl", "hard-pc.pl", "foxkomputer.pl",
+      "techlord.pl",
+      "krsystem.pl",
+      "senetic.pl",
+      "itnes.pl",
+      "zadowolenie.pl",
+      "agdhome.pl",
+      "tme.eu",
+      "kamami.pl",
+      "eltrox.pl",
+      "dipol.com.pl",
+      "komputerymarkowe.pl",
+      "komputery.pl",
+      "samsung.com",
+      "apple.com",
+
     ],
   },
   {
@@ -943,6 +979,19 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "e-horyzont.pl", "centrumrowerowe.pl", "rowertour.com", "hop-sport.pl",
       "e-insportline.pl", "martessport.com.pl", "intersport.pl", "supersklep.pl",
       "4f.com.pl", "fitanu.com", "ski-team.pl", "snowshop.pl", "militaria.pl",
+      "dadelo.pl",
+      "sprint-rowery.pl",
+      "bikeman.pl",
+      "sport-shop.pl",
+      "sklep-presto.pl",
+      "prosportowy.pl",
+      "bieganie.pl",
+      "runnersclub.pl",
+      "rowerystylowe.pl",
+      "dobrerowery.pl",
+      "bikeatelier.pl",
+      "rowerplus.pl",
+
     ],
   },
   {
@@ -971,6 +1020,21 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl",
       "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl",
       "homegarden.com.pl", "meblobranie.pl",
+      "bricoman.pl",
+      "lazienkaplus.pl",
+      "kammar24.pl",
+      "tools4pro.pl",
+      "narzedziak.pl",
+      "fixero.com",
+      "dedra.pl",
+      "swiatnarzedzi.pl",
+      "elektro-met.pl",
+      "domni.pl",
+      "in360.pl",
+      "viverto.pl",
+      "plytki.pl",
+      "e-floor.com.pl",
+
     ],
   },
   {
@@ -991,6 +1055,13 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "intercars.pl", "iparts.pl", "motointegrator.com", "autodoc.pl",
       "ucando.pl", "motostacja.com", "motos.pl", "strefakierowcy.pl",
       "topracingshop.pl", "2407.pl", "motochemia.pl", "e-autoparts.pl",
+      "motoneo.pl",
+      "aparts.pl",
+      "autofixer.com",
+      "hamulce.net",
+      "haparts.pl",
+      "autosklep24.pl",
+
     ],
   },
   {
@@ -1007,6 +1078,13 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
     domains: [
       "oponeo.pl", "sklepopon.com", "intercars.pl", "iparts.pl",
       "autodoc.pl", "motos.pl", "motointegrator.com", "strefakierowcy.pl",
+      "felgeo.pl",
+      "oponytanio.pl",
+      "tirendo.pl",
+      "123opony.pl",
+      "lideropon.pl",
+      "oponyexpress.pl",
+
     ],
   },
   {
@@ -1031,6 +1109,32 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "adidas.pl", "newbalance.pl", "eu.puma.com", "puma.com",
       "reserved.com", "hm.com", "zara.com", "peek-cloppenburg.pl",
       "temu.com", "etsy.com",
+      "limango.pl",
+      "vitkac.com",
+      "moliera2.com",
+      "sneakerstudio.pl",
+      "runcolors.pl",
+      "distance.pl",
+      "footshop.pl",
+      "deezee.pl",
+      "wojas.pl",
+      "kazar.com",
+      "rylko.com",
+      "ecco.com",
+      "sinsay.com",
+      "cropp.com",
+      "housebrand.com",
+      "mohito.com",
+      "medicine.pl",
+      "monnari.com.pl",
+      "diverse-system.com",
+      "bigstar.pl",
+      "vistula.pl",
+      "bytom.com.pl",
+      "wittchen.com",
+      "ochnik.com",
+      "van-graaf.com",
+
     ],
   },
   {
@@ -1054,6 +1158,21 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "hairstore.pl", "topestetic.pl", "pachnidelko.pl", "brasty.pl",
       "bodyland.pl", "mojezapachy.pl", "cocolita.pl", "drogerienatura.pl",
       "kontigo.com.pl",
+      "flaconi.pl",
+      "tagomago.pl",
+      "ekobieca.pl",
+      "ladymakeup.pl",
+      "drogeriapigment.pl",
+      "e-glamour.pl",
+      "parfumdreams.pl",
+      "horex.pl",
+      "perfumeria.pl",
+      "nabea.pl",
+      "trena.pl",
+      "fryzomania.pl",
+      "loczek.pl",
+      "sklepziaja.pl",
+
     ],
   },
   {
@@ -1073,6 +1192,13 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "sfd.pl", "kfd.pl", "olimpstore.pl", "trec.pl", "bodypak.pl",
       "gymbeam.pl", "muscle-zone.pl", "allnutrition.pl", "decathlon.pl",
       "sportano.pl", "strefamocy.pl",
+      "ostrovit.com",
+      "nutrend.pl",
+      "biotechusa.pl",
+      "scitec.pl",
+      "activlab.pl",
+      "formotiva.pl",
+
     ],
   },
   {
@@ -1091,6 +1217,12 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "doz.pl", "gemini.pl", "drmax.pl", "wapteka.pl", "aptekaolmed.pl",
       "i-apteka.pl", "zikoapteka.pl", "apteka-melissa.pl", "aptekazawiszy.pl",
       "apteline.pl",
+      "cefarm24.pl",
+      "aptekacodzienna.pl",
+      "apteka123.pl",
+      "aptekaslonik.pl",
+      "aptekagalena.pl",
+
     ],
   },
   {
@@ -1108,6 +1240,13 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
     domains: [
       "cyfrowe.pl", "fotoforma.pl", "fotoplus.pl", "abfoto.pl", "beafoto.pl",
       "interfoto.eu", "fotojoker.pl", "notopstryk.pl",
+      "foto-tip.pl",
+      "foto-net.pl",
+      "e-oko.pl",
+      "fotosoft.pl",
+      "fototechnika.com",
+      "fotopoker.pl",
+
     ],
   },
   {
@@ -1125,6 +1264,14 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
     domains: [
       "riff.net.pl", "muzyczny.pl", "musicexpress.pl", "thomann.de",
       "guitarcenter.pl", "pasja.com.pl", "musicstore.de", "midi.pl",
+      "audiostacja.pl",
+      "megamusic.pl",
+      "musiccenter.pl",
+      "musicdealer.pl",
+      "soundshop.pl",
+      "supersound.pl",
+      "fxmusic.pl",
+
     ],
   },
   {
@@ -1145,6 +1292,15 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "planteon.pl", "nierafinowane.pl", "swiat-orkiszu.pl", "saluti.pl",
       "sklepkawa.pl", "cosdlazdrowia.pl", "selgros24.pl", "leclerc24.net",
       "bee.pl", "polskikoszyk.pl", "sklep.kaufland.pl",
+      "delio.com.pl",
+      "barbora.pl",
+      "organic24.pl",
+      "biofuturo.pl",
+      "biosklep.com.pl",
+      "zdrowesmaczki.pl",
+      "e-spar.com.pl",
+      "sklep.lidl.pl",
+
     ],
   },
   {
@@ -1163,6 +1319,14 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "zooplus.pl", "maxizoo.pl", "fera.pl", "kakadu.pl", "zooart.com.pl",
       "unizoo.pl", "petkarma.pl", "zoopers.pl", "kuchniapupila.pl",
       "karusek.com.pl",
+      "apetete.pl",
+      "telekarma.pl",
+      "petissimo.pl",
+      "johndog.pl",
+      "alezwierzaki.pl",
+      "zoo24.pl",
+      "hubun.pl",
+
     ],
   },
   {
@@ -1182,6 +1346,14 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "mediaexpert.pl", "lego.com", "lionelo.pl", "klocki.edu.pl",
       "fabrykabodziakow.pl", "elfi.pl", "pinkorblue.pl", "tantis.pl", "bee.pl",
       "temu.com", "etsy.com",
+      "babyhit.pl",
+      "tosia.pl",
+      "abcgps.pl",
+      "3kiwi.pl",
+      "mamissima.pl",
+      "albee.pl",
+      "marko-baby.pl",
+
     ],
   },
   {
@@ -1204,6 +1376,21 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com",
       "dekoria.pl", "sfmeble.pl", "meblobranie.pl", "tanieprezenty.pl",
       "verk.sklep.pl", "zona-design.pl", "temu.com", "etsy.com",
+      "westwing.pl",
+      "komfort.pl",
+      "abra-meble.pl",
+      "vox.pl",
+      "beliani.pl",
+      "meble.pl",
+      "halmar.pl",
+      "fabrykaform.pl",
+      "9design.pl",
+      "selsey.pl",
+      "meble-bogart.pl",
+      "meblewojcik.com.pl",
+      "forte.com.pl",
+      "home.biedronka.pl",
+
     ],
   },
   {
@@ -1222,6 +1409,17 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "matfel.pl", "pwn.pl", "gandalf.com.pl", "rebel.pl", "tantis.pl",
       "czytam.pl", "aros.pl", "planszomania.pl", "aleplanszowki.pl",
       "voiceshop.pl", "colorland.pl", "etsy.com",
+      "znak.com.pl",
+      "dvdmax.pl",
+      "booktime.pl",
+      "helion.pl",
+      "literia.pl",
+      "muza.com.pl",
+      "wydawnictwoliterackie.pl",
+      "czarnaowca.pl",
+      "fabrykaslow.com.pl",
+      "wydawnictwoalbatros.com",
+
     ],
   },
   {
@@ -1240,6 +1438,38 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
       "kraina-czasu.pl", "happytime.com.pl", "karkosik.pl", "labizu.pl",
       "marmad.pl", "energetix.com.pl", "mennicaswidnicka.pl", "time24.pl",
       "etsy.com",
+      "zegarownia.pl",
+      "timetrend.pl",
+      "swiss.com.pl",
+      "e-zegarki.pl",
+      "aniakruk.pl",
+      "pandora.net",
+      "tous.com",
+      "lilou.pl",
+      "jubilersezam.pl",
+      "zegarki.pl",
+      "watchard.com",
+      "otozegarki.pl",
+
+    ],
+  },
+  {
+    id: "office_stationery",
+    categories: [],
+    signals: [
+      "artykuly biurowe", "artykuły biurowe", "papier ksero", "papier do drukarki",
+      "dlugopis", "długopis", "pioro", "pióro", "marker", "zakreslacz", "zakreślacz",
+      "segregator", "zeszyt", "notes", "toner", "tusz do drukarki", "kartridz",
+      "niszczarka", "laminator", "etykiety", "koperty",
+    ],
+    primaryDomains: [
+      "ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com",
+      "tonerpartner.pl", "dobretonery.pl",
+    ],
+    domains: [
+      "ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com",
+      "tonerpartner.pl", "dobretonery.pl", "papierniczy.pl", "dalprint.pl",
+      "123drukuj.pl", "inkhouse.pl",
     ],
   },
 ];
@@ -1347,16 +1577,29 @@ function getTargetedPrimaryRetailerDiscoveryDomains(parsed: ParsedQuery): string
 }
 
 
+function getStableRetailerRotationSeed(parsed: ParsedQuery): number {
+  const source = normalizeMatchText(
+    `${parsed.country} ${parsed.category ?? ""} ${parsed.intent.productPhrase} ` +
+    `${parsed.intent.searchBase} ${parsed.queryText}`
+  );
+  let hash = 2166136261;
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
 function getIntentSecondaryRetailerDomains(
   parsed: ParsedQuery,
-  limit = 2
+  limit = 4
 ): string[] {
   if (limit <= 0) return [];
   const primary = new Set(
     getIntentPrimaryRetailerDomains(parsed).map((domain) => domain.toLowerCase())
   );
 
-  return getIntentVerticalAcceleratorDomains(parsed)
+  const candidates = getIntentVerticalAcceleratorDomains(parsed)
     .map((domain) => domain.replace(/^www\./i, "").trim().toLowerCase())
     .filter(Boolean)
     .filter((domain) => !primary.has(domain))
@@ -1365,8 +1608,22 @@ function getIntentSecondaryRetailerDomains(
         retailerHostMatchesDomain(domain, String(marketplace))
       )
     )
-    .filter((domain, index, array) => array.indexOf(domain) === index)
-    .slice(0, limit);
+    .filter((domain, index, array) => array.indexOf(domain) === index);
+
+  if (candidates.length <= limit) return candidates;
+
+  // CORE126: keep two stable quality anchors, then diversify the remaining
+  // secondary slots deterministically from the full matched vertical catalog.
+  // This broadens real retailer coverage without turning one request into
+  // hundreds of site: queries or weakening any final acceptance gate.
+  const stableCount = Math.min(2, limit, candidates.length);
+  const stable = candidates.slice(0, stableCount);
+  const tail = candidates.slice(stableCount);
+  if (tail.length === 0) return stable.slice(0, limit);
+
+  const offset = getStableRetailerRotationSeed(parsed) % tail.length;
+  const rotated = [...tail.slice(offset), ...tail.slice(0, offset)];
+  return Array.from(new Set([...stable, ...rotated])).slice(0, limit);
 }
 
 function getRetailerProductSiteScope(domain: string): string {
@@ -11670,7 +11927,7 @@ function buildV28ExactVerticalRetailerQueries(
 
   const hardRequirementCount = parsed.intent.required.filter((item) => item.hard).length;
   const secondaryCoverageDomains = hardRequirementCount >= 2
-    ? getIntentSecondaryRetailerDomains(parsed, 2)
+    ? getIntentSecondaryRetailerDomains(parsed, 4)
     : [];
 
   return Array.from(new Set([
@@ -13292,7 +13549,16 @@ function buildCoverageExactHostQueries(
     `${core} ${missingRelationalHints.join(" ")}`
   );
 
-  return Array.from(new Set(orderedDomains))
+  const uniqueOrderedDomains = Array.from(new Set(orderedDomains));
+  const diversifiedSecondary = getIntentSecondaryRetailerDomains(parsed, 4)
+    .filter((domain) => uniqueOrderedDomains.includes(domain));
+  const diversifiedCoverageDomains = Array.from(new Set([
+    ...uniqueOrderedDomains.slice(0, 4),
+    ...diversifiedSecondary,
+    ...uniqueOrderedDomains,
+  ]));
+
+  return diversifiedCoverageDomains
     .slice(0, 8)
     .map((domain) =>
       `site:${getRetailerProductSiteScope(domain)} ${quoteSearchTerm(hardFootprintCore)}`
@@ -17420,23 +17686,121 @@ function unwrapSearchEngineUrl(rawUrl: string): string {
   return /^https?:\/\//i.test(current) ? normalizeUrl(current) : "";
 }
 
+// V34.CORE128 NETWORK BURST SHIELD:
+// Normal discovery can schedule marketplaces, retailer catalogs and several
+// search-engine branches at the same time. On Windows/consumer connections a
+// very large instantaneous socket burst can make otherwise healthy fetch()
+// calls fail together as generic "network" errors. Keep the catalog and query
+// portfolio unchanged, but bound ordinary HTML fetch concurrency. Queue wait
+// consumes the same per-fetch timeout, so the 20 s route budget cannot grow.
+const OUTBOUND_FETCH_MAX_CONCURRENCY = 18;
+
+type OutboundFetchWaiter = {
+  grant: () => void;
+  signal?: AbortSignal;
+  onAbort?: () => void;
+};
+
+let outboundFetchActive = 0;
+const outboundFetchQueue: OutboundFetchWaiter[] = [];
+
+function drainOutboundFetchQueue(): void {
+  while (
+    outboundFetchActive < OUTBOUND_FETCH_MAX_CONCURRENCY &&
+    outboundFetchQueue.length > 0
+  ) {
+    const waiter = outboundFetchQueue.shift();
+    if (!waiter) break;
+
+    if (waiter.signal?.aborted) {
+      waiter.signal.removeEventListener("abort", waiter.onAbort ?? (() => {}));
+      continue;
+    }
+
+    waiter.grant();
+  }
+}
+
+function acquireOutboundFetchSlot(
+  signal?: AbortSignal
+): Promise<() => void> {
+  if (signal?.aborted) {
+    return Promise.reject(new DOMException("Aborted", "AbortError"));
+  }
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const releaseFactory = () => {
+      outboundFetchActive += 1;
+      settled = true;
+
+      if (signal && onAbort) {
+        signal.removeEventListener("abort", onAbort);
+      }
+
+      let released = false;
+      resolve(() => {
+        if (released) return;
+        released = true;
+        outboundFetchActive = Math.max(0, outboundFetchActive - 1);
+        drainOutboundFetchQueue();
+      });
+    };
+
+    const waiter: OutboundFetchWaiter = {
+      grant: releaseFactory,
+      signal,
+    };
+
+    const onAbort = () => {
+      if (settled) return;
+
+      const index = outboundFetchQueue.indexOf(waiter);
+      if (index >= 0) outboundFetchQueue.splice(index, 1);
+
+      settled = true;
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    waiter.onAbort = onAbort;
+
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    if (outboundFetchActive < OUTBOUND_FETCH_MAX_CONCURRENCY) {
+      releaseFactory();
+      return;
+    }
+
+    outboundFetchQueue.push(waiter);
+  });
+}
+
 async function fetchHtml(
   url: string,
   timeoutMs = FETCH_TIMEOUT_MS,
   externalSignal?: AbortSignal
 ): Promise<{ status: number; html: string; finalUrl: string } | null> {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const fetchSignal = externalSignal
+    ? AbortSignal.any([timeoutSignal, externalSignal])
+    : timeoutSignal;
+
+  let releaseSlot: (() => void) | null = null;
+
   try {
-    if (externalSignal?.aborted) return null;
+    if (fetchSignal.aborted) return null;
+
+    releaseSlot = await acquireOutboundFetchSlot(fetchSignal);
+
+    if (fetchSignal.aborted) return null;
 
     const response = await fetch(url, {
       redirect: "follow",
       cache: "no-store",
-      signal: externalSignal
-        ? AbortSignal.any([
-            AbortSignal.timeout(timeoutMs),
-            externalSignal,
-          ])
-        : AbortSignal.timeout(timeoutMs),
+      signal: fetchSignal,
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
@@ -17456,6 +17820,8 @@ async function fetchHtml(
     };
   } catch {
     return null;
+  } finally {
+    releaseSlot?.();
   }
 }
 
@@ -32406,6 +32772,21 @@ function getDiscoveryValidationPriority(
   if (result.source === "RetailerRescue") score += 180;
   if (/Direct$/i.test(result.source)) score += 150;
   if (result.ceneoMerchantOffer) score += 145;
+
+  // V34.CORE127: a concrete Ceneo product page is unusually valuable because
+  // the verifier can expand one exact product card into multiple real merchant
+  // offers. Keep those concrete /<productId> pages ahead of noisy marketplace
+  // cards during the bounded discovery-validation pass so the existing Ceneo
+  // merchant expansion gets a chance to run before the accepted-target or
+  // validation budget is exhausted. This is scheduling only: the local Ceneo
+  // card filter, merchant standalone identity, HARD, condition, price,
+  // availability, originality and final relevance gates remain unchanged.
+  if (
+    result.source === "CeneoDirect" &&
+    /^https?:\/\/(?:www\.)?ceneo\.pl\/\d+(?:\/|$)/iu.test(result.url)
+  ) {
+    score += 280;
+  }
   if (host && isConfiguredCommerceDomain(result.url)) score += 120;
   if (host && V28_UNIVERSAL_MARKETPLACE_DOMAINS.some((item) => String(item) === host)) {
     score += 105;
@@ -41961,7 +42342,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE125 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE128 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -42038,7 +42419,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE125");
+    console.log("[AIShopping] NEW SEARCH V34.CORE128");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
