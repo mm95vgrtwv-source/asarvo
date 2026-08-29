@@ -1,7 +1,39 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE133 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE136 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE136: Strict Bound Color Proof separates trusted concrete
+ *   colour evidence from broad page feature text. A listing-specific colour can
+ *   now be proven only by the exact verified title, bound Product/Offer
+ *   description, trusted catalog/card proof, or canonical concrete-product
+ *   HARD extraction.
+ * - V34.CORE136: recommendation widgets, sibling variants and other incidental
+ *   page-wide HTML can no longer satisfy a HARD colour requirement by
+ *   themselves. A retailer product with no bound colour proof is rejected.
+ * - V34.CORE136: CORE135 explicit colour-conflict shield and CORE134
+ *   electronics Store Mesh remain unchanged.
+ * - V34.CORE135: Listing-Bound Color Conflict Shield synchronizes the
+ *   legacy title-conflict colour taxonomy with CORE134 graphite/Graphite.
+ *   An explicit different colour in the concrete title now wins over incidental
+ *   page-wide sibling/recommendation text before HARD colour propagation.
+ * - V34.CORE135: grey-family grammar recognizes Pale Grey/Pale Gray,
+ *   Space Gray/Space Grey, gwiezdna szarość and star gray/grey as explicit
+ *   grey variants. These can no longer masquerade as requested Graphite.
+ * - V34.CORE135: products whose title does not name a colour remain eligible
+ *   for strict concrete-page colour proof, preserving legitimate x-kom/Morele
+ *   offers whose exact colour lives only in structured product specifications.
+ * - V34.CORE134: Brand-Aware Tech Routing lets exact manufacturer+model
+ *   queries enter the electronics_tech Store Mesh even when the user omits a
+ *   generic device noun (for example a mouse model without the word "mysz").
+ *   The prior is generic across established technology manufacturers and
+ *   requires a non-brand model/product footprint; brand-only searches do not
+ *   trigger the mesh.
+ * - V34.CORE134: graphite/grafit colour grammar is promoted to the universal
+ *   HARD color requirement, so Polish "grafitowa" and retailer "Graphite"
+ *   become equivalent evidence and pale-grey/other colour variants cannot win
+ *   merely because the model identity matches.
+ * - V34.CORE134: source routing only is broadened; final brand/model/HARD
+ *   attribute/condition/availability/price verification remains unchanged.
  * - V34.CORE133: Leading Quantity Query Grammar promotes user-written
  *   "5x Papier ..." into HARD pack_count=5, matching "5 ryz" and "5x500".
  *   The multiplier is stripped from product identity while the sold object
@@ -125,7 +157,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE133 CORE
+ * V34.CORE136 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -155,7 +187,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE133 – Universal Shopping Engine
+ * AIShopping V34.CORE136 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -1624,6 +1656,33 @@ function hasOfficePaperRetailIntent(parsed: ParsedQuery): boolean {
   );
 }
 
+const V34_TECH_RETAIL_BRANDS = new Set([
+  "apple", "samsung", "sony", "lenovo", "asus", "acer", "hp", "dell", "msi",
+  "logitech", "microsoft", "xbox", "playstation", "nintendo", "jbl",
+  "hyperx", "steelseries", "razer", "nvidia", "amd", "lg", "gigabyte",
+  "palit", "zotac", "gainward", "corsair", "kingston", "crucial",
+  "xiaomi", "dreame", "roborock", "irobot", "eureka", "dyson", "anker",
+]);
+
+function hasTechnologyBrandRetailIntent(parsed: ParsedQuery): boolean {
+  const brand = normalizeMatchText(parsed.brand ?? "");
+  if (!brand || !V34_TECH_RETAIL_BRANDS.has(brand)) return false;
+
+  const nonBrandIdentity = parsed.intent.identityTerms
+    .map((term) => normalizeMatchText(term))
+    .filter((term) => term && term !== brand);
+
+  // Brand-only queries are too vague. Route only when the user also supplied
+  // a product/model footprint. This keeps the prior generic and prevents an
+  // isolated company name from launching the electronics Store Mesh.
+  const hasModelLikeToken = nonBrandIdentity.some((term) =>
+    /[a-z].*\d|\d.*[a-z]/iu.test(term) || /^\d{2,}[a-z]?$/iu.test(term)
+  );
+  const hasMultiTokenProductFootprint = nonBrandIdentity.length >= 2;
+
+  return hasModelLikeToken || hasMultiTokenProductFootprint;
+}
+
 function getRetailVerticalMatches(
   parsed: ParsedQuery
 ): Array<{ profile: RetailVerticalProfile; score: number }> {
@@ -1641,6 +1700,15 @@ function getRetailVerticalMatches(
     // gram/mm² or sheet/ream topology. Route that intent into office_stationery
     // without inventing a category or weakening product verification.
     if (profile.id === "office_stationery" && hasOfficePaperRetailIntent(parsed)) {
+      score += 12;
+    }
+
+    // V34.CORE134: a user often supplies only manufacturer + exact model
+    // ("Logitech MX Master 3S") without the generic noun "mysz". Known
+    // technology manufacturers plus a real model/product footprint are enough
+    // to route discovery into electronics_tech. This affects source selection
+    // only; brand/model/spec/condition/price verification remains unchanged.
+    if (profile.id === "electronics_tech" && hasTechnologyBrandRetailIntent(parsed)) {
       score += 12;
     }
 
@@ -5923,11 +5991,12 @@ function extractUniversalRequirements(
   }
 
   const colors: Array<[RegExp, string, string[]]> = [
+    [/\b(?:grafitowy|grafitowa|grafitowe|grafit|graphite|graphit)\b/i, "grafitowy", ["grafitowy", "grafitowa", "grafitowe", "grafit", "graphite", "graphit"]],
     [/\b(?:czarny|czarna|czarne|czarni|black)\b/i, "czarny", ["czarny", "czarna", "czarne", "czarni", "black"]],
     [/\b(?:bialy|biały|biala|biała|biale|białe|biali|bialych|białych|white)\b/i, "biały", ["bialy", "biały", "biala", "biała", "biale", "białe", "biali", "bialych", "białych", "white"]],
     [/\b(?:chromowany|chromowana|chromowane|chrom|chrome|chromed)\b/i, "chrom", ["chromowany", "chromowana", "chromowane", "chrom", "chrome", "chromed"]],
     [/\b(?:srebrny|srebrna|srebrne|silver)\b/i, "srebrny", ["srebrny", "srebrna", "srebrne", "silver"]],
-    [/\b(?:szary|szara|szare|grey|gray)\b/i, "szary", ["szary", "szara", "szare", "grey", "gray"]],
+    [/\b(?:szary|szara|szare|szarosc|szarość|grey|gray|pale\s+grey|pale\s+gray|space\s+grey|space\s+gray|gwiezdna\s+szarosc|gwiezdna\s+szarość|star\s+grey|star\s+gray)\b/i, "szary", ["szary", "szara", "szare", "szarosc", "szarość", "grey", "gray", "pale grey", "pale gray", "space grey", "space gray", "gwiezdna szarosc", "gwiezdna szarość", "star grey", "star gray"]],
     [/\b(?:czerwony|czerwona|czerwone|red)\b/i, "czerwony", ["czerwony", "czerwona", "czerwone", "red"]],
     [/\b(?:niebieski|niebieska|niebieskie|blue)\b/i, "niebieski", ["niebieski", "niebieska", "niebieskie", "blue"]],
     [/\b(?:zielony|zielona|zielone|green)\b/i, "zielony", ["zielony", "zielona", "zielone", "green"]],
@@ -8853,6 +8922,10 @@ function hasConflictingHardRequirementInTitle(
   }
 
   if (requirement.key === "color") {
+    // V34.CORE135: keep explicit retailer-title colours listing-bound. A title
+    // that says Pale Grey / Space Gray / gwiezdna szarość must conflict with a
+    // requested Graphite even if the rest of the product page contains a
+    // sibling/recommendation/spec token "grafitowy".
     // CORE57: a normal colour request is inclusive, not exclusive. Real retail
     // variants frequently use multi-colour names such as "black white" or
     // "blue silver" while still genuinely being the requested black/blue
@@ -8867,7 +8940,8 @@ function hasConflictingHardRequirementInTitle(
       ["bialy", "biały", "biala", "biała", "biale", "białe", "bialo", "biało", "white"],
       ["chromowany", "chromowana", "chromowane", "chrom", "chrome", "chromed"],
       ["srebrny", "srebrna", "srebrne", "silver"],
-      ["szary", "szara", "szare", "grey", "gray"],
+      ["grafitowy", "grafitowa", "grafitowe", "grafit", "graphite", "graphit"],
+      ["szary", "szara", "szare", "szarosc", "szarość", "grey", "gray", "pale grey", "pale gray", "space grey", "space gray", "gwiezdna szarosc", "gwiezdna szarość", "star grey", "star gray"],
       ["czerwony", "czerwona", "czerwone", "red"],
       ["niebieski", "niebieska", "niebieskie", "niebiesko", "blue", "granatowy", "granatowa", "granatowe", "granatowo", "navy"],
       ["zielony", "zielona", "zielone", "green"],
@@ -35673,6 +35747,11 @@ async function verifySearchResult(
   let readerPageVerified = false;
   let finalUrl = result.url;
   let universalFeatureEvidence = "";
+  // V34.CORE136: keep exact/bounded requirement channels separate from the
+  // broad feature-evidence bucket. Listing-specific colour may only be proven
+  // from these bound channels, never from incidental page-wide text.
+  let trustedCanonicalConcreteRequirementEvidence = "";
+  let trustedRetailerCardHardRequirementEvidence = "";
   // V34.CORE120: product-class proof can come from the focused CURRENT concrete
   // product page even when a retailer/comparison title is only brand + model.
   // The token is added only after the page itself exposes a category alias in
@@ -36335,7 +36414,7 @@ async function verifySearchResult(
             page.html,
             finalName || result.name
           );
-        const canonicalConcretePageRequirementEvidence =
+        trustedCanonicalConcreteRequirementEvidence =
           extractCanonicalHardRequirementEvidenceFromConcreteHtml(
             page.html,
             finalName || result.name,
@@ -36344,15 +36423,15 @@ async function verifySearchResult(
           );
 
         universalFeatureEvidence = normalizeText(
-          `${universalFeatureEvidence} ${boundPageDescription ?? ""} ${htmlRequirementEvidence} ${canonicalConcretePageRequirementEvidence}`
+          `${universalFeatureEvidence} ${boundPageDescription ?? ""} ${htmlRequirementEvidence} ${trustedCanonicalConcreteRequirementEvidence}`
         ).slice(0, 30_000);
 
-        if (canonicalConcretePageRequirementEvidence) {
+        if (trustedCanonicalConcreteRequirementEvidence) {
           console.log(
             "[AIShopping] V34.CORE120 concrete-page HARD propagation:",
             getResultHostname(finalUrl),
             finalName,
-            canonicalConcretePageRequirementEvidence
+            trustedCanonicalConcreteRequirementEvidence
           );
         }
       }
@@ -37411,7 +37490,7 @@ async function verifySearchResult(
     ? getTrustedPortfolioHardProofKeys(result, parsed)
     : [];
   if (trustedRetailerCardHardProofKeys.length > 0) {
-    const trustedRetailerCardHardEvidence = parsed.intent.required
+    trustedRetailerCardHardRequirementEvidence = parsed.intent.required
       .filter((requirement) =>
         requirement.hard && trustedRetailerCardHardProofKeys.includes(requirement.key)
       )
@@ -37419,9 +37498,9 @@ async function verifySearchResult(
       .filter(Boolean)
       .join(" ");
 
-    if (trustedRetailerCardHardEvidence) {
+    if (trustedRetailerCardHardRequirementEvidence) {
       universalFeatureEvidence = normalizeText(
-        `${universalFeatureEvidence} ${trustedRetailerCardHardEvidence}`
+        `${universalFeatureEvidence} ${trustedRetailerCardHardRequirementEvidence}`
       ).slice(0, 30_000);
       console.log(
         "[AIShopping] V34.CORE120 trusted retailer-card HARD propagation:",
@@ -37592,6 +37671,31 @@ async function verifySearchResult(
   // must be visible on THIS offer/card/page. Static exact-model proof is allowed
   // only for requirements classified by canUseExternalProofForRequirement().
   const listingBoundHardRequirements = getListingBoundHardRequirements(parsed);
+
+  // V34.CORE136 STRICT BOUND COLOR PROOF
+  // Colour is a per-offer/configuration fact. Do not let broad HTML feature
+  // text prove it because recommendation widgets, sibling variants and hidden
+  // page payloads can contain another colour. Only the exact verified title,
+  // bound Product/Offer description, trusted filtered catalog/card evidence,
+  // or canonical concrete-product HARD extraction may satisfy it.
+  const strictBoundColorRequirements = listingBoundHardRequirements.filter(
+    (requirement) => requirement.kind === "color" || requirement.key === "color"
+  );
+  const strictBoundColorEvidence = normalizeText(
+    `${universalVerifiedIdentityTitle} ${trustedBoundProductDescription} ${trustedCatalogRequirementEvidence} ${trustedRetailerCardHardRequirementEvidence} ${trustedCanonicalConcreteRequirementEvidence}`
+  );
+  const missingStrictBoundColorRequirements = strictBoundColorRequirements.filter(
+    (requirement) => !requirementHasEvidence(requirement, strictBoundColorEvidence)
+  );
+  if (missingStrictBoundColorRequirements.length > 0) {
+    console.log(
+      "[AIShopping] V34.CORE136 reject strict bound color not proven:",
+      finalUrl,
+      missingStrictBoundColorRequirements.map((item) => item.label)
+    );
+    return null;
+  }
+
   const listingBoundEvidence = normalizeText(
     `${universalVerifiedIdentityTitle} ${trustedBoundProductDescription} ${trustedCatalogRequirementEvidence} ${trustedVerifiedDescription} ${universalFeatureEvidence}`
   );
@@ -42838,7 +42942,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE133 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE136 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -42915,7 +43019,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE133");
+    console.log("[AIShopping] NEW SEARCH V34.CORE136");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
