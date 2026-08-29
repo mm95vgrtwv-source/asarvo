@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE128 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE129 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE129: Exact-Model Specialist Mesh makes category-specific secondary
+ *   stores reachable for precise model searches even when the request has only
+ *   one HARD attribute. A one-HARD exact-model request gets at most 3 secondary
+ *   stores; 2+ HARD requests keep the existing 4-store cap. Power-tool routing
+ *   now prefers Kammar24, Tools4Pro, Narzedziak, Fixero and other specialist
+ *   domains before the broad home/DIY tail. This is category/store routing only:
+ *   no product/SKU exception, no extra verifier trust, no relaxed identity,
+ *   HARD, condition, price, availability, originality or accessory gate.
  * - V34.CORE128: Network Burst Shield bounds ordinary fetchHtml concurrency at
  *   18 sockets. Queue wait uses the same per-fetch timeout, preventing a large
  *   simultaneous marketplace + retailer + Bing/RSS/DDG burst from turning
@@ -81,7 +89,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE128 CORE
+ * V34.CORE129 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -111,7 +119,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE128 – Universal Shopping Engine
+ * AIShopping V34.CORE129 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -894,6 +902,38 @@ const V27_CATEGORY_ACCELERATOR_DOMAINS: Readonly<
   ],
 };
 
+// V34.CORE129 EXACT-MODEL SPECIALIST MESH.
+// These are category-level secondary specialists, never product/SKU mappings.
+// They are intentionally excluded from the normal first wave. A precise model
+// request can borrow only a few of them through deterministic rotation, keeping
+// the 20 s route budget bounded while making the large Store Mesh genuinely
+// reachable outside the historical primary stores.
+const V34_CATEGORY_SECONDARY_RETAILER_DOMAINS: Readonly<
+  Record<string, readonly string[]>
+> = {
+  power_tool: [
+    "kammar24.pl",
+    "tools4pro.pl",
+    "narzedziak.pl",
+    "fixero.com",
+    "swiatnarzedzi.pl",
+    "makita.sklep.pl",
+    "imakita.pl",
+    "makitamarket.pl",
+    "dedra.pl",
+    "bricoman.pl",
+    "elektro-met.pl",
+    "bosch-professional.com",
+  ],
+};
+
+function getCategorySecondaryRetailerDomains(
+  category: string | null
+): string[] {
+  if (!category) return [];
+  return [...(V34_CATEGORY_SECONDARY_RETAILER_DOMAINS[category] ?? [])];
+}
+
 type RetailVerticalProfile = {
   id: string;
   categories: readonly string[];
@@ -1599,7 +1639,10 @@ function getIntentSecondaryRetailerDomains(
     getIntentPrimaryRetailerDomains(parsed).map((domain) => domain.toLowerCase())
   );
 
-  const candidates = getIntentVerticalAcceleratorDomains(parsed)
+  const candidates = [
+    ...getCategorySecondaryRetailerDomains(parsed.category),
+    ...getIntentVerticalAcceleratorDomains(parsed),
+  ]
     .map((domain) => domain.replace(/^www\./i, "").trim().toLowerCase())
     .filter(Boolean)
     .filter((domain) => !primary.has(domain))
@@ -11926,9 +11969,20 @@ function buildV28ExactVerticalRetailerQueries(
       : [];
 
   const hardRequirementCount = parsed.intent.required.filter((item) => item.hard).length;
-  const secondaryCoverageDomains = hardRequirementCount >= 2
-    ? getIntentSecondaryRetailerDomains(parsed, 4)
-    : [];
+  const hasExactModelAnchor = Boolean(
+    getCompactExactModelDiscoveryCore(parsed) ||
+    getNamedVariantDiscoveryCore(parsed)
+  );
+  const secondaryCoverageLimit =
+    hardRequirementCount >= 2
+      ? 4
+      : hasExactModelAnchor && hardRequirementCount >= 1
+        ? 3
+        : 0;
+  const secondaryCoverageDomains =
+    secondaryCoverageLimit > 0
+      ? getIntentSecondaryRetailerDomains(parsed, secondaryCoverageLimit)
+      : [];
 
   return Array.from(new Set([
     ...categorySpecificProductScopes,
@@ -42342,7 +42396,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE128 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE129 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -42419,7 +42473,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE128");
+    console.log("[AIShopping] NEW SEARCH V34.CORE129");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
