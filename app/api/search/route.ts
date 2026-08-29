@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE136 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE137 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE137: Brand-Model Secondary Store Mesh carries CORE134
+ *   manufacturer+model technology routing through the later exact-store
+ *   discovery stages. Brand+model queries no longer spend scarce targeted
+ *   query slots repeating the same primary retailer hosts while the broader
+ *   matched retail directory stays unreachable.
+ * - V34.CORE137: exact/model-like retail intents get a bounded secondary wave:
+ *   two stores for a model-only request, three when one HARD requirement is
+ *   present, and four for 2+ HARD requirements. The stores are selected by the
+ *   existing deterministic rotation from the matched vertical directory.
+ * - V34.CORE137: selected secondary stores are promoted to bounded Bing HTML +
+ *   RSS discovery instead of RSS-only, while primary fanout, fetch concurrency
+ *   18, all identity/HARD/condition/availability/price/originality gates and
+ *   the hard 20 second route deadline remain unchanged.
  * - V34.CORE136: Strict Bound Color Proof separates trusted concrete
  *   colour evidence from broad page feature text. A listing-specific colour can
  *   now be proven only by the exact verified title, bound Product/Offer
@@ -157,7 +170,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE136 CORE
+ * V34.CORE137 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -187,7 +200,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE136 – Universal Shopping Engine
+ * AIShopping V34.CORE137 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -1784,6 +1797,30 @@ function getStableRetailerRotationSeed(parsed: ParsedQuery): number {
     hash = Math.imul(hash, 16777619);
   }
   return hash >>> 0;
+}
+
+function hasBoundedSecondaryRetailerModelFootprint(parsed: ParsedQuery): boolean {
+  // CORE137: CORE134 brand+model technology routing must survive into the
+  // secondary store stage. The compact/named-variant detectors remain the
+  // generic exact-model signals for every other vertical. This changes only
+  // WHICH stores are searched; offer acceptance is unchanged.
+  return Boolean(
+    getCompactExactModelDiscoveryCore(parsed) ||
+    getNamedVariantDiscoveryCore(parsed) ||
+    hasTechnologyBrandRetailIntent(parsed)
+  );
+}
+
+function getIntentSecondaryRetailerCoverageLimit(parsed: ParsedQuery): number {
+  const hardRequirementCount = parsed.intent.required.filter(
+    (item) => item.hard
+  ).length;
+  const hasModelFootprint = hasBoundedSecondaryRetailerModelFootprint(parsed);
+
+  if (hardRequirementCount >= 2) return 4;
+  if (hasModelFootprint && hardRequirementCount >= 1) return 3;
+  if (hasModelFootprint) return 2;
+  return 0;
 }
 
 function getIntentSecondaryRetailerDomains(
@@ -12484,17 +12521,13 @@ function buildV28ExactVerticalRetailerQueries(
           )
       : [];
 
-  const hardRequirementCount = parsed.intent.required.filter((item) => item.hard).length;
-  const hasExactModelAnchor = Boolean(
-    getCompactExactModelDiscoveryCore(parsed) ||
-    getNamedVariantDiscoveryCore(parsed)
-  );
+  // CORE137: the later Store Mesh now recognizes the same bounded model
+  // footprint as CORE134 brand-aware technology routing. This prevents a query
+  // such as manufacturer + model from being routed to electronics_tech and then
+  // silently losing secondary retailer coverage because an older compact-model
+  // detector did not fire. Fanout remains capped at 2/3/4 stores.
   const secondaryCoverageLimit =
-    hardRequirementCount >= 2
-      ? 4
-      : hasExactModelAnchor && hardRequirementCount >= 1
-        ? 3
-        : 0;
+    getIntentSecondaryRetailerCoverageLimit(parsed);
   const secondaryCoverageDomains =
     secondaryCoverageLimit > 0
       ? getIntentSecondaryRetailerDomains(parsed, secondaryCoverageLimit)
@@ -13050,10 +13083,7 @@ function buildTargetedRetailerQueries(
     // same host. Search engines frequently answered the weaker duplicate with
     // unrelated pages, inflating the validation pass without adding coverage.
     // Keep one strongest query per host while preserving every distinct store.
-    return (
-      getCompactExactModelDiscoveryCore(parsed) ||
-      getNamedVariantDiscoveryCore(parsed)
-    )
+    return hasBoundedSecondaryRetailerModelFootprint(parsed)
       ? dedupeExactModelSiteQueriesByHost(assembled)
       : assembled;
   }
@@ -13068,10 +13098,7 @@ function buildTargetedRetailerQueries(
     ...specialistQueries,
   ]));
 
-  return (
-    getCompactExactModelDiscoveryCore(parsed) ||
-    getNamedVariantDiscoveryCore(parsed)
-  )
+  return hasBoundedSecondaryRetailerModelFootprint(parsed)
     ? dedupeExactModelSiteQueriesByHost(assembled)
     : assembled;
 }
@@ -29012,10 +29039,33 @@ async function runSearch(
     .filter((host) => directAdapterHosts.has(host))
     .filter((host) => !getIntentPrimaryRetailerDomains(parsed).includes(host))
     .slice(0, 3);
+
+  // CORE137: exact/model-like intents may spend a very small HTML-search wave
+  // on the SAME rotated secondary stores already admitted by the site-query
+  // builder. Previously those hosts were usually RSS-only, which made the large
+  // Store Mesh nominally configured but weakly reachable. No new verifier trust
+  // is granted and no extra secondary domain beyond the 2/3/4 cap is selected.
+  const secondaryCoverageLimit =
+    getIntentSecondaryRetailerCoverageLimit(parsed);
+  const exactModelSecondaryHtmlHosts =
+    secondaryCoverageLimit > 0
+      ? getIntentSecondaryRetailerDomains(
+          parsed,
+          Math.min(3, secondaryCoverageLimit)
+        )
+      : [];
   const targetedHtmlRetailerHosts = new Set([
     ...getTargetedPrimaryRetailerDiscoveryDomains(parsed),
     ...secondaryDirectoryHtmlHosts,
+    ...exactModelSecondaryHtmlHosts,
   ]);
+
+  if (exactModelSecondaryHtmlHosts.length > 0) {
+    console.log(
+      "[AIShopping] V34.CORE137 secondary retailer hosts:",
+      exactModelSecondaryHtmlHosts
+    );
+  }
 
   console.log(
     "[AIShopping] V34.CORE120 targeted HTML retailer hosts:",
@@ -42942,7 +42992,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE136 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE137 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -43019,7 +43069,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE136");
+    console.log("[AIShopping] NEW SEARCH V34.CORE137");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
