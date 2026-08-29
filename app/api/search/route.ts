@@ -1,17 +1,45 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE137 — STRICT 20 SECOND ORCHESTRATION
- * - V34.CORE137: Brand-Model Secondary Store Mesh carries CORE134
+ * V34.CORE155 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE155: Priority Ceneo Preflight runs one exact-site recovery lane
+ *   before the large Bing/retailer fanout for precise technology/model intents.
+ *   The request-scoped result is reused by direct Ceneo discovery, preventing
+ *   duplicate Ceneo index calls and avoiding socket/search-engine contention.
+ *   Final concrete numeric URL, identity, HARD, condition, availability, price
+ *   and merchant verification remain unchanged.
+ * - V34.CORE154: Reachable Lightweight Ceneo Retry reserves enough bounded
+ *   time for the already-coded second RSS attempt after a transient primary
+ *   timeout/network miss; no extra fan-out and no verifier weakening.
+ * - V34.CORE153: Scoped Ceneo Reader Merchant Identity recovers seller rows
+ *   whose Jina Click/Offer anchor contains only a merchant-logo asset label.
+ *   Recovery is allowed only inside the concrete product's own scoped offer
+ *   section, after the exact parent independently proves identity and every
+ *   requested HARD attribute; row-local conflicts and used-state checks stay
+ *   fail-closed.
+ * - V34.CORE152: Lightweight Exact-Site Ceneo RSS Recovery collapses the
+ *   previous multi-parser host-label burst into one bounded site-scoped RSS
+ *   request before the unchanged concrete-card and merchant verification.
+ * - V34.CORE151: Fail-Closed Ceneo Merchant-Anchor Recovery handles concrete
+ *   Ceneo pages whose transport exposes /Click/Offer/ seller anchors but omits
+ *   the visible merchant-section heading. Unscoped rows must independently
+ *   prove every HARD requirement and cannot inherit parent-page HARD evidence.
+ * - V34.CORE151: Exact-Site Ceneo Index Recovery keeps the existing bounded
+ *   Ceneo empty-page rescue but makes its first public-index query strictly
+ *   `site:ceneo.pl "product identity"`. A second alias may add at most two
+ *   parsed HARD terms. No new engine, reader, domain fanout or verifier rule
+ *   is added; concrete numeric Ceneo URLs and final merchant/HARD verification
+ *   remain mandatory.
+ * - V34.CORE151: Brand-Model Secondary Store Mesh carries CORE134
  *   manufacturer+model technology routing through the later exact-store
  *   discovery stages. Brand+model queries no longer spend scarce targeted
  *   query slots repeating the same primary retailer hosts while the broader
  *   matched retail directory stays unreachable.
- * - V34.CORE137: exact/model-like retail intents get a bounded secondary wave:
+ * - V34.CORE151: exact/model-like retail intents get a bounded secondary wave:
  *   two stores for a model-only request, three when one HARD requirement is
  *   present, and four for 2+ HARD requirements. The stores are selected by the
  *   existing deterministic rotation from the matched vertical directory.
- * - V34.CORE137: selected secondary stores are promoted to bounded Bing HTML +
+ * - V34.CORE151: selected secondary stores are promoted to bounded Bing HTML +
  *   RSS discovery instead of RSS-only, while primary fanout, fetch concurrency
  *   18, all identity/HARD/condition/availability/price/originality gates and
  *   the hard 20 second route deadline remain unchanged.
@@ -170,7 +198,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE137 CORE
+ * V34.CORE151 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -200,7 +228,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE137 – Universal Shopping Engine
+ * AIShopping V34.CORE151 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -12357,39 +12385,45 @@ function buildCeneoIndexedEmptyPageQueries(parsed: ParsedQuery): string[] {
     .map(requirementPrimarySearchTerm)
     .filter(Boolean);
 
-  const identityHardTerms = parsed.intent.required
-    .filter((requirement) =>
-      requirement.hard &&
-      ["gpu_model", "brand", "model"].includes(requirement.key)
-    )
-    .map(requirementPrimarySearchTerm)
-    .filter(Boolean);
-
-  const relationalHints = parsed.intent.required
-    .filter((requirement) =>
-      requirement.hard &&
-      Boolean(requirement.comparison) &&
-      !isRequirementDiscoverySearchEligible(requirement)
-    )
-    .map(requirementPrimarySearchTerm)
-    .filter(Boolean);
-
-  const stateHint = parsed.condition === "new"
-    ? "nowy"
-    : parsed.condition === "used"
-      ? "uzywany"
-      : "";
-
+  // V34.CORE151: Ceneo public-index recovery is identity-first and site-scoped.
+  // In live runs the former query mixed the model identity with colour/state
+  // words, which made an already sparse public-index lane return nine unrelated
+  // reference results and zero ceneo.pl URLs. Ask for the exact product identity
+  // on Ceneo first; a second bounded alias may add at most two HARD terms.
+  // Recovered URLs still have to be concrete /<numericId> Ceneo pages and pass
+  // filterCeneoDirectCandidates + the unchanged final HARD/condition/price/
+  // availability verifier. This changes discovery wording only.
   const values = [
+    normalizeText(`site:ceneo.pl ${quoteSearchTerm(surface)}`),
     normalizeText(
-      `site:ceneo.pl ${surface} ${hardTerms.slice(0, 4).join(" ")}`
-    ),
-    normalizeText(
-      `${quoteSearchTerm(surface)} ceneo ${identityHardTerms.join(" ")} ${relationalHints.slice(0, 3).join(" ")} ${stateHint}`
+      `site:ceneo.pl ${quoteSearchTerm(surface)} ${hardTerms.slice(0, 2).join(" ")}`
     ),
   ].filter(Boolean);
 
   return Array.from(new Set(values.map(normalizeText))).slice(0, 2);
+}
+
+type V34CeneoPriorityPreflightState = {
+  attempted: boolean;
+  results: SearchResult[];
+};
+
+// V34.CORE155 request-scoped cache. ParsedQuery is a fresh object for every
+// request, so WeakMap reuse cannot leak product candidates between users or
+// searches. The preflight is intentionally discovery-only.
+const V34_CENEO_PRIORITY_PREFLIGHT = new WeakMap<
+  ParsedQuery,
+  V34CeneoPriorityPreflightState
+>();
+
+function shouldRunCeneoPriorityPreflight(parsed: ParsedQuery): boolean {
+  if (parsed.country !== "PL" || parsed.intent.accessoryIntent) return false;
+
+  return Boolean(
+    hasTechnologyBrandRetailIntent(parsed) ||
+    getCompactExactModelDiscoveryCore(parsed) ||
+    getNamedVariantDiscoveryCore(parsed)
+  );
 }
 
 async function searchCeneoIndexedEmptyPageFallback(
@@ -12397,51 +12431,123 @@ async function searchCeneoIndexedEmptyPageFallback(
   budgetMs: number,
   externalSignal?: AbortSignal
 ): Promise<SearchResult[]> {
+  const prefetched = V34_CENEO_PRIORITY_PREFLIGHT.get(parsed);
+  if (prefetched?.attempted) {
+    console.log(
+      "[AIShopping] V34.CORE155 Ceneo priority preflight reuse:",
+      prefetched.results.length
+    );
+    return [...prefetched.results];
+  }
+
   if (budgetMs < 650 || externalSignal?.aborted) return [];
 
   const queries = buildCeneoIndexedEmptyPageQueries(parsed);
   if (queries.length === 0) return [];
 
-  const perQueryBudget = Math.max(600, Math.min(1_250, budgetMs));
-  const chunks = await Promise.all(
-    queries.map((query, index) =>
-      searchHostLabelIndexCoverage(
-        query,
-        "ceneo.pl",
-        perQueryBudget,
-        externalSignal,
-        index === 1
+  // V34.CORE154: keep the successful lightweight Ceneo RSS lane and reserve
+  // enough caller budget for ONE sequential retry. CORE153 had retry code but
+  // its 1,350ms caller envelope left only ~100ms after the 1,250ms primary,
+  // below the 650ms retry gate, so the branch was unreachable in practice.
+  // The first attempt is unchanged. Only when it yields zero usable results and
+  // bounded time remains, perform ONE short retry using the second exact-site
+  // alias (or the same query when no second alias exists). This is sequential,
+  // not a fan-out burst, and recovered URLs are still limited to concrete
+  // ceneo.pl/<numericId> pages plus the unchanged universal/HARD verifier.
+  const collectConcrete = (
+    query: string,
+    rssResults: SearchResult[]
+  ): SearchResult[] => {
+    const faithful = enforceSiteQueryHostFidelity(query, rssResults);
+    return dedupeSearchResultsByUrl(faithful)
+      .filter((result) =>
+        isConcreteMarketplaceIndexedProductUrl(result.url, "ceneo.pl")
       )
-    )
+      .map((result) => ({
+        ...result,
+        source: "CeneoDirect",
+        name: cleanCeneoDirectResultName(
+          result.name || titleFromMarketplaceUrl(result.url)
+        ),
+      }))
+      .filter((result) =>
+        isUsableCeneoDirectResultName(result.name) &&
+        evaluateUniversalProductMatch(
+          result.name,
+          result.snippet,
+          result.url,
+          parsed,
+          "discovery",
+          "CeneoDirect"
+        ).pass
+      );
+  };
+
+  const primaryQuery = queries[0];
+  console.log(
+    "[AIShopping] V34.CORE155 Ceneo lightweight exact-site RSS query:",
+    primaryQuery
   );
 
-  const concrete = dedupeSearchResultsByUrl(chunks.flat())
-    .filter((result) => isConcreteMarketplaceIndexedProductUrl(result.url, "ceneo.pl"))
-    .map((result) => ({
-      ...result,
-      source: "CeneoDirect",
-      name: cleanCeneoDirectResultName(
-        result.name || titleFromMarketplaceUrl(result.url)
+  const primaryBudget = Math.max(650, Math.min(1_250, budgetMs));
+  const primaryResults = await withAbortableDeadline(
+    (signal) =>
+      searchBingRss(
+        primaryQuery,
+        externalSignal ? AbortSignal.any([externalSignal, signal]) : signal
       ),
-    }))
-    .filter((result) =>
-      isUsableCeneoDirectResultName(result.name) &&
-      evaluateUniversalProductMatch(
-        result.name,
-        result.snippet,
-        result.url,
-        parsed,
-        "discovery",
-        "CeneoDirect"
-      ).pass
+    primaryBudget,
+    [] as SearchResult[],
+    "Bing RSS Ceneo lightweight exact-site index"
+  );
+
+  let combinedConcrete = collectConcrete(primaryQuery, primaryResults);
+  let retryRaw = 0;
+  let retryQuery = "";
+
+  const remainingBudget = budgetMs - primaryBudget;
+  if (
+    combinedConcrete.length === 0 &&
+    !externalSignal?.aborted &&
+    remainingBudget >= 650
+  ) {
+    retryQuery = queries[1] || primaryQuery;
+    const retryBudget = Math.max(650, Math.min(900, remainingBudget));
+    console.log(
+      "[AIShopping] V34.CORE155 Ceneo lightweight RSS retry:",
+      retryQuery,
+      "budgetMs=",
+      retryBudget
     );
 
-  const accepted = dedupeSearchResultsByUrl(concrete).slice(0, 8);
+    const retryResults = await withAbortableDeadline(
+      (signal) =>
+        searchBingRss(
+          retryQuery,
+          externalSignal ? AbortSignal.any([externalSignal, signal]) : signal
+        ),
+      retryBudget,
+      [] as SearchResult[],
+      "Bing RSS Ceneo lightweight exact-site retry"
+    );
+    retryRaw = retryResults.length;
+    combinedConcrete = [
+      ...combinedConcrete,
+      ...collectConcrete(retryQuery, retryResults),
+    ];
+  }
+
+  const accepted = dedupeSearchResultsByUrl(combinedConcrete).slice(0, 8);
   console.log(
-    "[AIShopping] V34.CORE120 Ceneo indexed empty-page rescue:",
+    "[AIShopping] V34.CORE155 Ceneo lightweight indexed rescue:",
     accepted.length,
-    "queries=",
-    queries
+    "rssRaw=",
+    primaryResults.length,
+    "retryRaw=",
+    retryRaw,
+    "query=",
+    primaryQuery,
+    retryQuery ? `retry=${retryQuery}` : ""
   );
   return accepted;
 }
@@ -19748,8 +19854,26 @@ function isCeneoMerchantCta(valueRaw: string): boolean {
   );
 }
 
-function extractCeneoMerchantShopName(cardTextRaw: string): string {
+function extractCeneoMerchantShopName(
+  cardTextRaw: string,
+  anchorLabelRaw = ""
+): string {
   const cardText = normalizeText(decodeHtml(cardTextRaw));
+  const assetLabel = normalizeText(decodeHtml(anchorLabelRaw));
+  const assetMatch = assetLabel.match(
+    /^Image\s+\d+\s*:\s*(.{2,90})$/iu
+  );
+  const assetShopName = normalizeText(assetMatch?.[1] ?? "")
+    .replace(/\s+/gu, " ")
+    .trim();
+
+  // V34.CORE153: Jina commonly renders the Click/Offer anchor as the seller
+  // logo alt text (for example "Image 85: <shop>"). The label is accepted as
+  // a shop name only; it is NEVER product identity or HARD evidence.
+  if (assetShopName.length >= 2 && assetShopName.length <= 90) {
+    return assetShopName;
+  }
+
   const patterns = [
     /Dane\s+i\s+opinie\s+o\s+(.{2,90}?)(?=\s+(?:Zobacz\s+ofertę|Zobacz\s+oferte|Zgłoś\s+uwagi|Zglos\s+uwagi|Warianty|Dokonując|Dokonujac|$))/iu,
     /(?:Gamepady|Klocki|Produkty|Oferta|Oferty|Kontrolery|Pady)\s+od\s+(.{2,70}?)(?=\s+(?:Warianty|Zgłoś|Zglos|$))/iu,
@@ -19829,6 +19953,20 @@ function getCeneoMerchantSectionBounds(html: string): CeneoMerchantSectionBounds
   // "Podobne oferty" Click/Offer links. Treating those as merchants would let
   // a different product inherit this parent page's specs.
   if (sectionStart < 0) {
+    // V34.CORE151: some Ceneo responses expose concrete /Click/Offer/ seller
+    // anchors while omitting or escaping the visible "Oferty firm" heading.
+    // In that transport shape we may scan the document, but parse-time safety
+    // becomes stricter: every unscoped merchant row must independently prove
+    // all HARD requirements and may not inherit parent-page requirement proof.
+    const clickOfferAnchorCount = (lowerHtml.match(/\/click\/offer\//giu) ?? []).length;
+    if (clickOfferAnchorCount >= 2) {
+      console.log(
+        "[AIShopping] V34.CORE151 Ceneo unscoped merchant-anchor fallback:",
+        clickOfferAnchorCount
+      );
+      return { start: 0, end: html.length, scoped: false };
+    }
+
     return { start: 0, end: 0, scoped: false };
   }
 
@@ -19974,6 +20112,36 @@ function evaluateCeneoMerchantStandaloneIdentity(
   }
 
   return base;
+}
+
+function convertCeneoReaderMarkdownToMerchantHtml(
+  markdownRaw: string
+): string {
+  if (!markdownRaw) return "";
+
+  // V34.CORE151: Jina exposes Ceneo's concrete seller rows as markdown links.
+  // Convert only markdown link syntax into inert pseudo-HTML so the already
+  // battle-tested merchant parser can keep its Click/Offer grouping, local
+  // row price binding, identity gates and HARD-proof rules unchanged.
+  const withoutImages = markdownRaw
+    .replace(/\r\n?/gu, "\n")
+    .replace(/!\[([^\]]*)\]\(([^)\n]+)\)/gu, "$1");
+
+  const withAnchors = withoutImages.replace(
+    /\[([^\]\n]{1,700})\]\((https?:\/\/[^\s)\n]+|\/[^\s)\n]+)\)/gu,
+    (_match, labelRaw: string, hrefRaw: string) => {
+      const label = String(labelRaw)
+        .replace(/&/gu, "&amp;")
+        .replace(/</gu, "&lt;")
+        .replace(/>/gu, "&gt;");
+      const href = String(hrefRaw)
+        .replace(/&/gu, "&amp;")
+        .replace(/"/gu, "&quot;");
+      return `<a href="${href}">${label}</a>`;
+    }
+  );
+
+  return withAnchors.replace(/\n+/gu, " ").slice(0, 220_000);
 }
 
 function parseCeneoMerchantOffersFromHtml(
@@ -20171,18 +20339,85 @@ function parseCeneoMerchantOffersFromHtml(
       continue;
     }
 
+    // V34.CORE151 fail-closed unscoped fallback: when the transport omitted
+    // the merchant-section heading, a seller row cannot borrow any HARD value
+    // from the parent Ceneo product page. This keeps recommendation/sibling
+    // rows from inheriting colour, quantity, storage, size or other specs.
+    if (!merchantSection.scoped) {
+      const missingUnscopedHard = parsed.intent.required.filter(
+        (requirement) =>
+          requirement.hard &&
+          !requirementHasEvidence(requirement, boundedMerchantEvidence)
+      );
+      if (missingUnscopedHard.length > 0) {
+        console.log(
+          "[AIShopping] V34.CORE151 Ceneo unscoped merchant HARD not proven:",
+          offerName,
+          missingUnscopedHard.map((item) => item.label)
+        );
+        continue;
+      }
+    }
+
+    let resolvedOfferName = offerName;
     const standaloneIdentity = evaluateCeneoMerchantStandaloneIdentity(
       offerName,
       parsed,
       parentName
     );
     if (!standaloneIdentity.pass) {
-      console.log(
-        "[AIShopping] V34.CORE120 Ceneo merchant standalone identity reject:",
-        offerName,
-        standaloneIdentity.reasons
+      const readerAssetLabel = /^Image\s+\d+\s*:\s*.+$/iu.test(
+        normalizeText(offerName)
       );
-      continue;
+      const trustedScopedParentEvidence = normalizeText(
+        `${parentName} ${trustedExactParentRequirementEvidence}`
+      ).slice(0, 18_000);
+      const scopedParentHardProofComplete = parsed.intent.required
+        .filter((requirement) => requirement.hard)
+        .every((requirement) =>
+          requirementHasEvidence(requirement, trustedScopedParentEvidence)
+        );
+      const scopedParentIdentity =
+        merchantSection.scoped && readerAssetLabel
+          ? evaluateUniversalProductMatch(
+              parentName,
+              trustedExactParentRequirementEvidence,
+              productPageUrl,
+              parsed,
+              "verified",
+              "CeneoMerchant"
+            )
+          : null;
+      const canUseScopedParentIdentity = Boolean(
+        readerAssetLabel &&
+        merchantSection.scoped &&
+        standaloneIdentity.reasons.length === 1 &&
+        standaloneIdentity.reasons[0] === "secondary-product-reference" &&
+        scopedParentIdentity?.pass &&
+        scopedParentHardProofComplete
+      );
+
+      if (canUseScopedParentIdentity) {
+        // V34.CORE153: the reader anchor is only a merchant-logo asset label.
+        // Because this row sits inside THIS concrete product's own scoped
+        // merchant section, the already trusted exact parent may provide
+        // identity/HARD proof. Local row conflicts and used-condition checks
+        // above still win, so sibling/recommendation rows remain fail-closed.
+        resolvedOfferName = parentName;
+        console.log(
+          "[AIShopping] V34.CORE153 Ceneo scoped reader merchant identity:",
+          offerName,
+          "=>",
+          resolvedOfferName
+        );
+      } else {
+        console.log(
+          "[AIShopping] V34.CORE120 Ceneo merchant standalone identity reject:",
+          offerName,
+          standaloneIdentity.reasons
+        );
+        continue;
+      }
     }
 
     // After the seller title proves its own product identity, parent evidence
@@ -20194,12 +20429,12 @@ function parseCeneoMerchantOffersFromHtml(
     // preserved, but every missing HARD spec must then be proven from the
     // merchant's own exact model through the unchanged verifier.
     const sharedParentModelCode = extractSharedCeneoMerchantConcreteModelCode(
-      offerName,
+      resolvedOfferName,
       parentName,
       parsed
     );
     const merchantConcreteModelCode =
-      extractCeneoMerchantConcreteModelCodes(offerName, parsed)[0] ?? "";
+      extractCeneoMerchantConcreteModelCodes(resolvedOfferName, parsed)[0] ?? "";
     const parentConcreteModelCodes = new Set(
       extractCeneoMerchantConcreteModelCodes(parentName, parsed)
     );
@@ -20208,10 +20443,11 @@ function parseCeneoMerchantOffersFromHtml(
       !sharedParentModelCode &&
       !parentConcreteModelCodes.has(merchantConcreteModelCode)
     );
-    const merchantProductName = detachedExactMerchantModel ? offerName : parentName;
-    const merchantProductEvidence = detachedExactMerchantModel
-      ? boundedMerchantEvidence
-      : focusedParentEvidence;
+    const merchantProductName = detachedExactMerchantModel ? resolvedOfferName : parentName;
+    const merchantProductEvidence =
+      detachedExactMerchantModel || !merchantSection.scoped
+        ? boundedMerchantEvidence
+        : focusedParentEvidence;
 
     if (detachedExactMerchantModel) {
       console.log(
@@ -20220,12 +20456,12 @@ function parseCeneoMerchantOffersFromHtml(
         "parent=",
         parentName,
         "merchant=",
-        offerName
+        resolvedOfferName
       );
     }
 
     const localMatch = evaluateUniversalProductMatch(
-      offerName,
+      resolvedOfferName,
       merchantProductEvidence,
       productPageUrl,
       parsed,
@@ -20238,7 +20474,7 @@ function parseCeneoMerchantOffersFromHtml(
       localMatch.reasons.every((reason) => reason === "missing-required-attribute");
     if (!localMatch.pass && !exactIdentityOnlyMissingHard) continue;
 
-    const shopName = extractCeneoMerchantShopName(cardText);
+    const shopName = extractCeneoMerchantShopName(cardText, offerName);
     const shipping = extractShippingFromText(cardText, priceInfo.price);
     const reviewsMatches = Array.from(
       normalizeMatchText(prefixText).matchAll(/\b(\d{1,7})\s+opini/giu)
@@ -20255,14 +20491,14 @@ function parseCeneoMerchantOffersFromHtml(
 
     const budget = budgetComparablePrice(
       comparableTotal,
-      `${offerName} ${cardText}`,
+      `${resolvedOfferName} ${cardText}`,
       parsed
     );
     if (parsed.maxPrice !== null && budget.comparable > parsed.maxPrice) {
       console.log(
         "[AIShopping] V34.CORE120 Ceneo merchant pre-reject over budget:",
         shopName,
-        offerName,
+        resolvedOfferName,
         "item=",
         priceInfo.price,
         "shipping=",
@@ -20282,7 +20518,7 @@ function parseCeneoMerchantOffersFromHtml(
 
     results.push({
       url: group.url,
-      name: offerName,
+      name: resolvedOfferName,
       snippet,
       source: "CeneoMerchant",
       searchRank: searchRankBase + results.length,
@@ -20305,7 +20541,12 @@ function parseCeneoMerchantOffersFromHtml(
   }
 
   return {
-    foundMerchantCards: ordered.length > 0,
+    // A scoped own-offer section is authoritative even if all rows fail.
+    // In CORE149 unscoped fallback mode, suppress the aggregate Ceneo card
+    // only when at least one independently verified merchant survived.
+    foundMerchantCards: merchantSection.scoped
+      ? ordered.length > 0
+      : results.length > 0,
     results,
   };
 }
@@ -28342,10 +28583,10 @@ async function searchDirectMarketplacePages(
         const indexedResults = await withDeadline(
           searchCeneoIndexedEmptyPageFallback(
             parsed,
-            1_350,
+            1_950,
             sourceSignal
           ),
-          1_450,
+          2_050,
           [] as SearchResult[],
           `Ceneo indexed ${source} empty-page rescue`
         );
@@ -28867,6 +29108,9 @@ async function runSearch(
   // source to delay the whole response.
   const targetedQueryLimit = getTargetedRetailerQueryLimit(parsed);
 
+  const ceneoPriorityPreflightAttempted =
+    V34_CENEO_PRIORITY_PREFLIGHT.get(parsed)?.attempted === true;
+
   const targetedQueries = Array.from(
     new Set([
       ...buildAutomotiveTargetedRetailerQueries(parsed),
@@ -28876,7 +29120,14 @@ async function runSearch(
       ),
       ...buildTargetedRetailerQueries(parsed),
     ])
-  ).slice(0, targetedQueryLimit);
+  )
+    .filter((query) =>
+      !(
+        ceneoPriorityPreflightAttempted &&
+        getSiteQueryRequestedHost(query) === "ceneo.pl"
+      )
+    )
+    .slice(0, targetedQueryLimit);
 
   console.log(
     "[AIShopping] V34.CORE120 generic search queries:",
@@ -29062,7 +29313,7 @@ async function runSearch(
 
   if (exactModelSecondaryHtmlHosts.length > 0) {
     console.log(
-      "[AIShopping] V34.CORE137 secondary retailer hosts:",
+      "[AIShopping] V34.CORE155 secondary retailer hosts:",
       exactModelSecondaryHtmlHosts
     );
   }
@@ -34731,13 +34982,74 @@ async function expandCeneoMerchantVerificationCandidates(
         return;
       }
 
-      const expansion = parseCeneoMerchantOffersFromHtml(
+      let expansion = parseCeneoMerchantOffersFromHtml(
         page.html,
         candidate.name,
         page.finalUrl || candidate.url,
         parsed,
         candidate.searchRank * 10
       );
+
+      // V34.CORE151: Ceneo's direct HTML can be a shell with no merchant
+      // anchors even though the same concrete product page is fully readable
+      // through Jina. Recover merchant rows here, BEFORE aggregate Ceneo is
+      // treated as a final shop. The converted reader document still passes
+      // the exact same row-local identity/HARD/price parser; no broad page
+      // evidence bypass is introduced.
+      if (!expansion.foundMerchantCards) {
+        const readerRemaining =
+          hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
+        if (readerRemaining >= 2_000) {
+          const readerTimeoutMs = Math.max(
+            1_500,
+            Math.min(3_200, readerRemaining - 500)
+          );
+          const readerText = await fetchViaJina(
+            page.finalUrl || candidate.url,
+            readerTimeoutMs,
+            false
+          );
+
+          if (readerText && !isBlockedOrChallengePage(readerText)) {
+            const merchantHtml = convertCeneoReaderMarkdownToMerchantHtml(
+              readerText
+            );
+            const readerExpansion = parseCeneoMerchantOffersFromHtml(
+              merchantHtml,
+              candidate.name,
+              page.finalUrl || candidate.url,
+              parsed,
+              candidate.searchRank * 10
+            );
+
+            if (
+              readerExpansion.foundMerchantCards ||
+              readerExpansion.results.length > expansion.results.length
+            ) {
+              expansion = readerExpansion;
+            }
+
+            console.log(
+              "[AIShopping] V34.CORE153 Ceneo merchant reader expansion:",
+              candidate.name,
+              "readerLength=",
+              readerText.length,
+              "cards=",
+              readerExpansion.foundMerchantCards,
+              "eligible=",
+              readerExpansion.results.length
+            );
+          } else {
+            console.log(
+              "[AIShopping] V34.CORE153 Ceneo merchant reader unavailable:",
+              candidate.url,
+              "received=",
+              Boolean(readerText)
+            );
+          }
+        }
+      }
+
       expansionByUrl.set(normalizeUrl(candidate.url), expansion);
 
       console.log(
@@ -42992,7 +43304,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE137 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE155 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -43069,7 +43381,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE137");
+    console.log("[AIShopping] NEW SEARCH V34.CORE155");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -43105,6 +43417,40 @@ export async function POST(request: Request): Promise<NextResponse> {
     console.log("================================================");
 
     const queries = buildSearchQueries(parsed);
+
+    // V34.CORE155 PRIORITY CENEO PREFLIGHT
+    // Precise model/technology searches previously launched the exact Ceneo
+    // RSS lookup into the same 20+ branch network burst as generic/targeted
+    // Bing and retailer discovery. Live runs proved the lookup itself works,
+    // but it intermittently timed out before receiving a socket/response. Give
+    // that single high-value comparison lane a bounded head start, then reuse
+    // its request-scoped result later inside direct Ceneo discovery.
+    if (shouldRunCeneoPriorityPreflight(parsed)) {
+      const ceneoPreflightStartedAt = Date.now();
+      console.log(
+        "[AIShopping] V34.CORE155 Ceneo priority preflight start"
+      );
+
+      const ceneoPreflightResults = await withDeadline(
+        searchCeneoIndexedEmptyPageFallback(parsed, 1_950),
+        2_050,
+        [] as SearchResult[],
+        "Ceneo priority preflight"
+      );
+
+      V34_CENEO_PRIORITY_PREFLIGHT.set(parsed, {
+        attempted: true,
+        results: ceneoPreflightResults,
+      });
+
+      console.log(
+        "[AIShopping] V34.CORE155 Ceneo priority preflight settled:",
+        {
+          results: ceneoPreflightResults.length,
+          elapsedMs: Date.now() - ceneoPreflightStartedAt,
+        }
+      );
+    }
 
     // V34.CORE120 REQUEST-START OPEN-WEB RECOVERY PREFETCH
     // It runs concurrently with normal discovery and is consumed only if the
