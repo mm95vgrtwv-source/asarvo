@@ -1,8 +1,24 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE155 — STRICT 20 SECOND ORCHESTRATION
- * - V34.CORE155: Priority Ceneo Preflight runs one exact-site recovery lane
+ * V34.CORE162 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE162: exact-model electronics use a two-wave first-party retailer mesh:
+ *   reliable direct HTML adapters first, transport-heavy fallbacks only if store coverage stays sparse.
+ * - V34.CORE162: exact-tech catalog discovery suppresses reader fallbacks so the globally throttled
+ *   reader queue remains available for Ceneo merchant recovery and concrete-page verification.
+ * - V34.CORE162: first-wave direct retailer pages use shorter source-local timeouts and at most two
+ *   user-derived search URLs per store; partial concrete cards remain preserved immediately.
+ * - V34.CORE162: second-wave MediaExpert/EURO/OleOle discovery is bounded and runs only when the
+ *   first wave has fewer than three concrete retailer hosts.
+ * - V34.CORE162: Sferis uses its current retailer-owned /wyszukaj/<slug> surface and only concrete
+ *   product URLs ending in -i<digits> may enter final-offer verification.
+ * - V34.CORE162: exact-tech Ceneo merchant expansion hydrates only the strongest exact product card;
+ *   one successful comparison card can already expose multiple independent merchants.
+ * - V34.CORE162: exact-tech verification portfolio is globally capped at two candidates per retailer,
+ *   one aggregate Ceneo card, and one candidate for a retailer whose direct adapter timed out empty.
+ * - V34.CORE162: no benchmark product, model, SKU, price or merchant is hard-coded; all discovery
+ *   text still comes from ParsedQuery and all final identity/HARD/condition/price gates are unchanged.
+ * - V34.CORE162: Priority Ceneo Preflight runs one exact-site recovery lane
  *   before the large Bing/retailer fanout for precise technology/model intents.
  *   The request-scoped result is reused by direct Ceneo discovery, preventing
  *   duplicate Ceneo index calls and avoiding socket/search-engine contention.
@@ -2560,9 +2576,15 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
     },
   },
   {
+    // V34.CORE162: current Sferis search surface. Discovery only; child cards
+    // still pass the unchanged universal verifier.
     host: "sferis.pl",
     categories: [],
     verticals: ["electronics_tech"],
+    readerCatalogStrategy: "empty-fallback",
+    readerCatalogTimeoutMs: 1_700,
+    retryTransientDirectOnce: true,
+    maxSearchUrls: 1,
     buildSearchUrls: ({ exactSearchText, preciseSearchText, compactSearchText, pivotSearchText, secondaryPivotSearchText, relaxedSearchText }) =>
       Array.from(new Set([
         pivotSearchText,
@@ -2571,9 +2593,16 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
         preciseSearchText,
         compactSearchText,
         relaxedSearchText,
-      ].filter(Boolean))).slice(0, 3).map((searchText) =>
-        `https://www.sferis.pl/szukaj?q=${encodeURIComponent(searchText)}`
-      ),
+      ].filter(Boolean)))
+        .slice(0, 1)
+        .map((searchText) => {
+          const slug = normalizeMatchText(searchText)
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "")
+            .slice(0, 110);
+          return slug ? `https://www.sferis.pl/wyszukaj/${encodeURIComponent(slug)}` : "";
+        })
+        .filter(Boolean),
   },
   {
     host: "rossmann.pl",
@@ -12408,7 +12437,7 @@ type V34CeneoPriorityPreflightState = {
   results: SearchResult[];
 };
 
-// V34.CORE155 request-scoped cache. ParsedQuery is a fresh object for every
+// V34.CORE162 request-scoped cache. ParsedQuery is a fresh object for every
 // request, so WeakMap reuse cannot leak product candidates between users or
 // searches. The preflight is intentionally discovery-only.
 const V34_CENEO_PRIORITY_PREFLIGHT = new WeakMap<
@@ -12434,7 +12463,7 @@ async function searchCeneoIndexedEmptyPageFallback(
   const prefetched = V34_CENEO_PRIORITY_PREFLIGHT.get(parsed);
   if (prefetched?.attempted) {
     console.log(
-      "[AIShopping] V34.CORE155 Ceneo priority preflight reuse:",
+      "[AIShopping] V34.CORE162 Ceneo priority preflight reuse:",
       prefetched.results.length
     );
     return [...prefetched.results];
@@ -12485,7 +12514,7 @@ async function searchCeneoIndexedEmptyPageFallback(
 
   const primaryQuery = queries[0];
   console.log(
-    "[AIShopping] V34.CORE155 Ceneo lightweight exact-site RSS query:",
+    "[AIShopping] V34.CORE162 Ceneo lightweight exact-site RSS query:",
     primaryQuery
   );
 
@@ -12514,7 +12543,7 @@ async function searchCeneoIndexedEmptyPageFallback(
     retryQuery = queries[1] || primaryQuery;
     const retryBudget = Math.max(650, Math.min(900, remainingBudget));
     console.log(
-      "[AIShopping] V34.CORE155 Ceneo lightweight RSS retry:",
+      "[AIShopping] V34.CORE162 Ceneo lightweight RSS retry:",
       retryQuery,
       "budgetMs=",
       retryBudget
@@ -12539,7 +12568,7 @@ async function searchCeneoIndexedEmptyPageFallback(
 
   const accepted = dedupeSearchResultsByUrl(combinedConcrete).slice(0, 8);
   console.log(
-    "[AIShopping] V34.CORE155 Ceneo lightweight indexed rescue:",
+    "[AIShopping] V34.CORE162 Ceneo lightweight indexed rescue:",
     accepted.length,
     "rssRaw=",
     primaryResults.length,
@@ -14799,7 +14828,15 @@ function selectDiverseSearchResults(
 
     const host = getResultHostname(result.url) || "unknown";
     const count = hostCounts.get(host) ?? 0;
-    if (count >= perHostLimit) return false;
+    let effectivePerHostLimit = perHostLimit;
+    if (isV34Core162PreciseTechIntent(parsed) && host !== "unknown") {
+      effectivePerHostLimit = Math.min(effectivePerHostLimit, host === "ceneo.pl" ? 1 : 2);
+      const health = getRetailerRequestHealthBucket(parsed)?.hosts.get(host);
+      if (health?.adapterTimedOut && health.products === 0) {
+        effectivePerHostLimit = Math.min(effectivePerHostLimit, 1);
+      }
+    }
+    if (count >= effectivePerHostLimit) return false;
 
     if (
       hasNonOlxEligibleHost &&
@@ -15099,7 +15136,15 @@ function selectDiverseSearchResults(
 
       const host = getResultHostname(result.url) || "unknown";
       const count = hostCounts.get(host) ?? 0;
-      if (count >= absolutePerHostLimit) continue;
+      let effectiveAbsolutePerHostLimit = absolutePerHostLimit;
+      if (isV34Core162PreciseTechIntent(parsed) && host !== "unknown") {
+        effectiveAbsolutePerHostLimit = Math.min(effectiveAbsolutePerHostLimit, host === "ceneo.pl" ? 1 : 2);
+        const health = getRetailerRequestHealthBucket(parsed)?.hosts.get(host);
+        if (health?.adapterTimedOut && health.products === 0) {
+          effectiveAbsolutePerHostLimit = Math.min(effectiveAbsolutePerHostLimit, 1);
+        }
+      }
+      if (count >= effectiveAbsolutePerHostLimit) continue;
 
       if (
         hasNonOlxEligibleHost &&
@@ -16343,6 +16388,10 @@ function looksLikeConcreteRescuedRetailerAnchorUrl(
     const parsedUrl = new URL(urlRaw);
     const pathname = parsedUrl.pathname;
     const lowerPath = pathname.toLowerCase();
+    const host = parsedUrl.hostname.replace(/^www\./i, "").toLowerCase();
+    if (host === "sferis.pl" && !/-i\d+(?:\/)?$/i.test(pathname)) {
+      return false;
+    }
     const parts = pathname.split("/").filter(Boolean);
     const lastPart = decodeURIComponent(parts[parts.length - 1] ?? "");
     const normalizedLastPart = normalizeMatchText(
@@ -17465,6 +17514,27 @@ type DirectRetailerCatalogSearchOptions = {
   directFetchTimeoutMs?: number;
 };
 
+function isV34Core162PreciseTechIntent(parsed: ParsedQuery): boolean {
+  if (!hasTechnologyBrandRetailIntent(parsed)) return false;
+  return Boolean(
+    getCompactExactModelDiscoveryCore(parsed) ||
+    getNamedVariantDiscoveryCore(parsed)
+  );
+}
+
+const V34_CORE162_EXACT_TECH_PRIMARY_DIRECT_HOSTS: readonly string[] = [
+  "morele.net",
+  "mediamarkt.pl",
+  "x-kom.pl",
+  "sferis.pl",
+];
+
+const V34_CORE162_EXACT_TECH_FALLBACK_DIRECT_HOSTS: readonly string[] = [
+  "mediaexpert.pl",
+  "euro.com.pl",
+  "oleole.pl",
+];
+
 function buildDirectRetailerCatalogRequests(
   parsed: ParsedQuery,
   options: DirectRetailerCatalogSearchOptions = {}
@@ -17887,6 +17957,74 @@ async function searchDirectRetailerCatalogPages(
   return chunks.flat();
 }
 
+async function searchDirectRetailerCatalogPagesCore162(
+  parsed: ParsedQuery,
+  externalSignal?: AbortSignal,
+  onPartialResults?: (results: SearchResult[]) => void
+): Promise<SearchResult[]> {
+  if (!isV34Core162PreciseTechIntent(parsed)) {
+    return searchDirectRetailerCatalogPages(parsed, externalSignal, onPartialResults);
+  }
+
+  const startedAt = Date.now();
+  console.log(
+    "[AIShopping] V34.CORE162 exact-tech direct mesh first wave:",
+    V34_CORE162_EXACT_TECH_PRIMARY_DIRECT_HOSTS
+  );
+
+  const firstWave = await searchDirectRetailerCatalogPages(
+    parsed,
+    externalSignal,
+    onPartialResults,
+    {
+      hosts: V34_CORE162_EXACT_TECH_PRIMARY_DIRECT_HOSTS,
+      adapterBudgetMs: 3_650,
+      maxAdapters: 4,
+      maxUrlsPerAdapter: 2,
+      disableReaderFallback: true,
+      disableDirectRetries: true,
+      directFetchTimeoutMs: 1_950,
+    }
+  );
+
+  const firstHosts = new Set(
+    firstWave.map((result) => getResultHostname(result.url)).filter(Boolean)
+  );
+  if (externalSignal?.aborted || firstHosts.size >= 3) {
+    console.log(
+      "[AIShopping] V34.CORE162 exact-tech direct mesh settled after first wave:",
+      { hosts: [...firstHosts], results: firstWave.length, elapsedMs: Date.now() - startedAt }
+    );
+    return dedupeSearchResultsByUrl(firstWave);
+  }
+
+  console.log(
+    "[AIShopping] V34.CORE162 exact-tech direct mesh fallback wave:",
+    V34_CORE162_EXACT_TECH_FALLBACK_DIRECT_HOSTS
+  );
+  const secondWave = await searchDirectRetailerCatalogPages(
+    parsed,
+    externalSignal,
+    onPartialResults,
+    {
+      hosts: V34_CORE162_EXACT_TECH_FALLBACK_DIRECT_HOSTS,
+      adapterBudgetMs: 1_650,
+      maxAdapters: 3,
+      maxUrlsPerAdapter: 1,
+      disableReaderFallback: true,
+      disableDirectRetries: true,
+      directFetchTimeoutMs: 1_250,
+    }
+  );
+
+  const combined = dedupeSearchResultsByUrl([...firstWave, ...secondWave]);
+  console.log(
+    "[AIShopping] V34.CORE162 exact-tech direct mesh final:",
+    { firstWave: firstWave.length, secondWave: secondWave.length, uniqueHosts: new Set(combined.map((result) => getResultHostname(result.url)).filter(Boolean)).size, elapsedMs: Date.now() - startedAt }
+  );
+  return combined;
+}
+
 function getNegativeTerms(category: string | null): string[] {
   const common = [
     "jak naprawić",
@@ -18064,6 +18202,11 @@ function isProbablyRealOfferUrl(url: string): boolean {
 
     if (hostname === "vinted.pl" || hostname.endsWith(".vinted.pl")) {
       return pathname.startsWith("/items/");
+    }
+
+    // V34.CORE162: only canonical Sferis product URLs are final offers.
+    if (hostname === "sferis.pl" || hostname.endsWith(".sferis.pl")) {
+      return /-i\d+(?:\/)?$/i.test(pathname);
     }
 
     if (hostname === "ceneo.pl") {
@@ -29214,7 +29357,7 @@ async function runSearch(
 
   const directRetailerCatalogPromise = withAbortableDeadlineSnapshot(
     (phaseSignal) =>
-      searchDirectRetailerCatalogPages(
+      searchDirectRetailerCatalogPagesCore162(
         parsed,
         discoverySignal
           ? AbortSignal.any([discoverySignal, phaseSignal])
@@ -29313,7 +29456,7 @@ async function runSearch(
 
   if (exactModelSecondaryHtmlHosts.length > 0) {
     console.log(
-      "[AIShopping] V34.CORE155 secondary retailer hosts:",
+      "[AIShopping] V34.CORE162 secondary retailer hosts:",
       exactModelSecondaryHtmlHosts
     );
   }
@@ -34945,6 +35088,7 @@ async function expandCeneoMerchantVerificationCandidates(
   parsed: ParsedQuery,
   hardDeadlineAt: number
 ): Promise<SearchResult[]> {
+  const ceneoExpansionLimit = isV34Core162PreciseTechIntent(parsed) ? 1 : 3;
   const ceneoCandidates = results
     .filter(
       (result) =>
@@ -34956,7 +35100,7 @@ async function expandCeneoMerchantVerificationCandidates(
         getSearchResultPriority(b, parsed) - getSearchResultPriority(a, parsed) ||
         a.searchRank - b.searchRank
     )
-    .slice(0, 3);
+    .slice(0, ceneoExpansionLimit);
 
   if (ceneoCandidates.length === 0) return results;
 
@@ -43304,7 +43448,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE155 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE162 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -43381,7 +43525,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE155");
+    console.log("[AIShopping] NEW SEARCH V34.CORE162");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -43418,7 +43562,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const queries = buildSearchQueries(parsed);
 
-    // V34.CORE155 PRIORITY CENEO PREFLIGHT
+    // V34.CORE162 PRIORITY CENEO PREFLIGHT
     // Precise model/technology searches previously launched the exact Ceneo
     // RSS lookup into the same 20+ branch network burst as generic/targeted
     // Bing and retailer discovery. Live runs proved the lookup itself works,
@@ -43428,7 +43572,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (shouldRunCeneoPriorityPreflight(parsed)) {
       const ceneoPreflightStartedAt = Date.now();
       console.log(
-        "[AIShopping] V34.CORE155 Ceneo priority preflight start"
+        "[AIShopping] V34.CORE162 Ceneo priority preflight start"
       );
 
       const ceneoPreflightResults = await withDeadline(
@@ -43444,7 +43588,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
 
       console.log(
-        "[AIShopping] V34.CORE155 Ceneo priority preflight settled:",
+        "[AIShopping] V34.CORE162 Ceneo priority preflight settled:",
         {
           results: ceneoPreflightResults.length,
           elapsedMs: Date.now() - ceneoPreflightStartedAt,
