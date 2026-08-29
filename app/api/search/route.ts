@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE129 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE130 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE130: Quantity & Pack Integrity promotes explicit package topology
+ *   to HARD requirements. Counts such as "500 arkuszy" and "5 ryz" are now
+ *   independent verified axes; paper-style "5x500" can prove both only in
+ *   paper/ream context. A one-ream listing can no longer satisfy a five-ream
+ *   request merely because gram weight matches. ISO paper formats A0-A6/B4-B6
+ *   are excluded from open-world brand inference, so "A4" is not a brand.
+ *   No source, timing, marketplace trust or final-verifier relaxation is added.
  * - V34.CORE129: Exact-Model Specialist Mesh makes category-specific secondary
  *   stores reachable for precise model searches even when the request has only
  *   one HARD attribute. A one-HARD exact-model request gets at most 3 secondary
@@ -89,7 +96,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE129 CORE
+ * V34.CORE130 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -119,7 +126,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE129 – Universal Shopping Engine
+ * AIShopping V34.CORE130 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -3022,6 +3029,10 @@ const OPEN_WORLD_NON_BRAND_CAPITALIZED_TOKENS = new Set([
   "ps4", "ps5", "xbox", "pc", "tv", "ram", "vram", "ssd", "nvme",
   "anc", "enc", "pcie", "pci-e", "sata", "ahci", "rpm", "mbps",
   "gen3", "gen4", "gen5",
+  // V34.CORE130: ISO paper-format tokens are specifications, not manufacturers.
+  // In title-style queries ("Papier ksero A4 ...") capitalization fallback must
+  // never reinterpret A4/A3/B5 as a brand.
+  "a0", "a1", "a2", "a3", "a4", "a5", "a6", "b4", "b5", "b6",
   "rtx", "geforce", "gtx", "radeon", "rx",
   "ddr3", "ddr4", "ddr5", "dimm", "udimm", "sodimm", "so-dimm", "cl",
   "gb", "tb", "mah", "ah", "hz", "mhz", "mts", "mt/s", "w", "kw", "v", "pa", "kpa", "mm", "cm",
@@ -4925,9 +4936,12 @@ function extractUniversalRequirements(
     }
 
     const grams = massUnit === "kg" ? numeric * 1000 : numeric;
+    const sheetMaterialGrammageContext =
+      massUnit === "g" &&
+      /\b(?:papier\w*|ksero|arkusz\w*|karton\w*)\b/iu.test(massAround);
     add(
       "package_weight",
-      "masa/ilość",
+      sheetMaterialGrammageContext ? "gramatura" : "masa/ilość",
       `${canonicalNumber(numeric)}${match[2].toLowerCase()}`,
       uniqueNormalized([
         `${canonicalNumber(numeric)} ${match[2].toLowerCase()}`,
@@ -5195,6 +5209,88 @@ function extractUniversalRequirements(
       true,
       detectUniversalNumericComparison(text, start, end)
     );
+  }
+
+  // V34.CORE130: package topology is a first-class HARD constraint.
+  // Shopping queries often specify both the number of units inside ONE pack
+  // ("500 arkuszy") and the number of packs/reams to buy ("5 ryz"). These are
+  // independent axes and must not collapse into generic identity numbers.
+  //
+  // This is deliberately generic package grammar, not a product/SKU exception:
+  // sheet_count handles explicit sheet/card counts, while pack_count handles
+  // explicit packs/reams/packages. Paper-style compact topology ("5x500") is
+  // understood only when paper/ream context is present.
+  const paperLikePackageContext =
+    /\b(?:papier\w*|ksero|ryz\w*|reams?|arkusz\w*|kartek|kartki)\b/iu.test(text);
+
+  for (const match of text.matchAll(
+    /\b(\d{2,5})\s*(?:arkusz(?:y|e|a|ów|ow)?|kartek|kartki|sheets?)\b/giu
+  )) {
+    if (typeof match.index !== "number") continue;
+    const count = Number(match[1]);
+    if (!Number.isFinite(count) || count < 2 || count > 100000) continue;
+    add(
+      "sheet_count",
+      "liczba arkuszy w opakowaniu",
+      String(count),
+      [
+        `${count} arkuszy`, `${count} arkusze`, `${count} arkusz`,
+        `${count} kartek`, `${count} kartki`, `${count} sheets`,
+      ],
+      "spec",
+      true,
+      detectUniversalNumericComparison(text, match.index, match.index + match[0].length)
+    );
+  }
+
+  for (const match of text.matchAll(
+    /\b(\d{1,3})\s*(?:[x×]\s*)?(?:ryz(?:a|y|e|ę|ach)?|reams?|paczek|paczki|paczka|opakowa[nń](?:ia|ie|iu|)?|packages?|packs?)\b/giu
+  )) {
+    if (typeof match.index !== "number") continue;
+    const count = Number(match[1]);
+    if (!Number.isFinite(count) || count < 1 || count > 1000) continue;
+    add(
+      "pack_count",
+      "liczba opakowań/ryz",
+      String(count),
+      [
+        `${count} ryz`, `${count} ryzy`, `${count} ryza`, `${count} ryz papieru`,
+        `${count} reams`, `${count} paczek`, `${count} paczki`,
+        `${count} opakowań`, `${count} opakowan`, `${count} packs`, `${count} packages`,
+      ],
+      "bundle"
+    );
+  }
+
+  if (paperLikePackageContext) {
+    for (const match of text.matchAll(/\b(\d{1,3})\s*[x×]\s*(\d{2,5})\b/giu)) {
+      const packs = Number(match[1]);
+      const sheets = Number(match[2]);
+      if (
+        Number.isFinite(packs) && packs >= 1 && packs <= 1000 &&
+        !requirements.some((item) => item.key === "pack_count")
+      ) {
+        add(
+          "pack_count",
+          "liczba opakowań/ryz",
+          String(packs),
+          [`${packs}x${sheets}`, `${packs} x ${sheets}`, `${packs} ryz`, `${packs} reams`],
+          "bundle"
+        );
+      }
+      if (
+        Number.isFinite(sheets) && sheets >= 2 && sheets <= 100000 &&
+        !requirements.some((item) => item.key === "sheet_count")
+      ) {
+        add(
+          "sheet_count",
+          "liczba arkuszy w opakowaniu",
+          String(sheets),
+          [`${packs}x${sheets}`, `${packs} x ${sheets}`, `${sheets} arkuszy`, `${sheets} kartek`],
+          "spec"
+        );
+      }
+    }
   }
 
   // CORE93: component count is not the number of separately sold items.
@@ -6299,6 +6395,18 @@ function stripRequirementGrammarLabelsFromProductPhrase(
       .replace(/\b(?:elementow|elementów|elementy|elements?|parts?|pieces?)\b/giu, " ")
       .replace(/\b(?:minimum|min\.?|co\s+najmniej|przynajmniej|at\s+least)\b/giu, " ");
   }
+  if (keys.has("sheet_count")) {
+    phrase = phrase.replace(
+      /\b(?:arkusz(?:y|e|a|ów|ow)?|kartek|kartki|sheets?)\b/giu,
+      " "
+    );
+  }
+  if (keys.has("pack_count")) {
+    phrase = phrase.replace(
+      /\b(?:ryz(?:a|y|e|ę|ach)?|reams?|paczek|paczki|paczka|opakowa[nń](?:ia|ie|iu|)?|packages?|packs?)\b/giu,
+      " "
+    );
+  }
   if (keys.has("load_capacity_kg")) {
     phrase = phrase
       .replace(/\b(?:udzwig|udźwig|nosnosc|nośność|obciazen\w*|obciążen\w*|max(?:imum)?\s+load|weight\s+capacity|user\s+weight)\b/giu, " ")
@@ -7336,6 +7444,77 @@ function extractExplicitPieceCountsFromEvidence(evidenceRaw: string): number[] {
   return Array.from(counts);
 }
 
+function extractExplicitSheetCountsFromEvidence(evidenceRaw: string): number[] {
+  const evidence = normalizeMatchText(evidenceRaw);
+  const counts = new Set<number>();
+  const paperContext = /\b(?:papier\w*|ksero|ryz\w*|reams?|arkusz\w*|kartek|kartki)\b/iu.test(evidence);
+
+  for (const match of evidence.matchAll(
+    /(?:^|[^a-z0-9])(\d{2,5})\s*(?:arkusz(?:y|e|a|ów|ow)?|kartek|kartki|sheets?)(?=$|[^a-z0-9])/giu
+  )) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) counts.add(value);
+  }
+
+  // Marketplace paper cards frequently say "ryza 500 szt." instead of
+  // "500 arkuszy". Require paper/ream context and a sheet-like count so this
+  // cannot reinterpret ordinary product bundle quantities.
+  if (paperContext) {
+    for (const match of evidence.matchAll(
+      /(?:^|[^a-z0-9])(\d{2,5})\s*(?:szt\.?|sztuk|sztuki)(?=$|[^a-z0-9])/giu
+    )) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value) && value >= 25) counts.add(value);
+    }
+
+    // Compact carton notation: "5x500" -> 500 sheets per ream.
+    for (const match of evidence.matchAll(
+      /(?:^|[^a-z0-9])(\d{1,3})\s*[x×]\s*(\d{2,5})(?=$|[^a-z0-9])/giu
+    )) {
+      const value = Number(match[2]);
+      if (Number.isFinite(value)) counts.add(value);
+    }
+  }
+
+  return Array.from(counts);
+}
+
+function extractExplicitPackCountsFromEvidence(evidenceRaw: string): number[] {
+  const evidence = normalizeMatchText(evidenceRaw);
+  const counts = new Set<number>();
+  const paperContext = /\b(?:papier\w*|ksero|ryz\w*|reams?|arkusz\w*|kartek|kartki)\b/iu.test(evidence);
+
+  for (const match of evidence.matchAll(
+    /(?:^|[^a-z0-9])(\d{1,3})\s*(?:[x×]\s*)?(?:ryz(?:a|y|e|ę|ach)?|reams?|paczek|paczki|paczka|opakowa[nń](?:ia|ie|iu|)?|packages?|packs?)(?=$|[^a-z0-9])/giu
+  )) {
+    const value = Number(match[1]);
+    if (Number.isFinite(value)) counts.add(value);
+  }
+
+  const labelPatterns = [
+    /\b(?:liczba|ilosc|ilość)\s+(?:ryz|opakowa[nń]|paczek|packs?|packages?)\s*[:=\-]?\s*(\d{1,3})\b/giu,
+    /\b(?:jednostka|opakowanie|karton)\s*[:=\-]?\s*(\d{1,3})\s*(?:ryz|reams?|packs?)\b/giu,
+  ];
+  for (const pattern of labelPatterns) {
+    for (const match of evidence.matchAll(pattern)) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value)) counts.add(value);
+    }
+  }
+
+  // Compact paper-carton notation: "5x500" -> five reams/packs.
+  if (paperContext) {
+    for (const match of evidence.matchAll(
+      /(?:^|[^a-z0-9])(\d{1,3})\s*[x×]\s*(\d{2,5})(?=$|[^a-z0-9])/giu
+    )) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value)) counts.add(value);
+    }
+  }
+
+  return Array.from(counts);
+}
+
 function universalBundleCountWords(countRaw: string): string[] {
   const count = String(countRaw).trim();
   const map: Record<string, string[]> = {
@@ -7380,6 +7559,12 @@ function requirementBundleHasContextualEvidence(
       if (!alias || !/^\d{1,3}\s+[a-ząćęłńóśźż-]+$/iu.test(alias)) return false;
       return new RegExp(`(?:^|[^a-z0-9])${escapeRegExp(alias).replace(/\\ /g, "\\s+")}(?=$|[^a-z0-9])`, "iu").test(evidence);
     });
+  }
+
+  if (requirement.key === "pack_count") {
+    const requested = Number(count);
+    if (!Number.isFinite(requested)) return false;
+    return extractExplicitPackCountsFromEvidence(evidence).includes(requested);
   }
 
   // Listing-specific bundle counts must never be reconstructed from unrelated
@@ -7898,6 +8083,15 @@ function requirementHasExactNumericEvidence(
     }
 
     return false;
+  }
+
+  if (requirement.key === "sheet_count") {
+    const requested = Number(requirement.value);
+    if (!Number.isFinite(requested)) return null;
+    const offered = extractExplicitSheetCountsFromEvidence(evidence);
+    return offered.some((value) => universalNumericComparisonSatisfied(
+      value, requested, universalRequirementComparison(requirement)
+    ));
   }
 
   if (requirement.key === "component_count") {
@@ -8883,6 +9077,22 @@ function hasConflictingHardRequirementInTitle(
   if (requirement.key === "piece_count") {
     const requested = Number(requirement.value);
     const offered = extractExplicitPieceCountsFromEvidence(title);
+    if (Number.isFinite(requested) && offered.length > 0) {
+      return !offered.includes(requested);
+    }
+  }
+
+  if (requirement.key === "sheet_count") {
+    const requested = Number(requirement.value);
+    const offered = extractExplicitSheetCountsFromEvidence(title);
+    if (Number.isFinite(requested) && offered.length > 0) {
+      return !offered.includes(requested);
+    }
+  }
+
+  if (requirement.key === "pack_count") {
+    const requested = Number(requirement.value);
+    const offered = extractExplicitPackCountsFromEvidence(title);
     if (Number.isFinite(requested) && offered.length > 0) {
       return !offered.includes(requested);
     }
@@ -42396,7 +42606,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE129 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE130 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -42473,7 +42683,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE129");
+    console.log("[AIShopping] NEW SEARCH V34.CORE130");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
