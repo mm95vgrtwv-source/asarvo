@@ -1,7 +1,36 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE130 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE133 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE133: Leading Quantity Query Grammar promotes user-written
+ *   "5x Papier ..." into HARD pack_count=5, matching "5 ryz" and "5x500".
+ *   The multiplier is stripped from product identity while the sold object
+ *   remains in the product phrase.
+ * - V34.CORE133: capitalization-based brand inference ignores a leading
+ *   numeric-x multiplier, preventing generic "Papier" from becoming a fake
+ *   brand in "5x Papier ksero Navigator...".
+ * - V34.CORE133: paper grammage suffix grammar "/m2" and "/m²" is removed
+ *   after 80g is extracted so units cannot pollute identity/search terms.
+ * - V34.CORE132: Leading Pack Multiplier Proof recognizes retailer package
+ *   titles such as "5x Papier ..." as explicit pack_count evidence, but only
+ *   inside paper/ream context and only for a bounded multiplier directly before
+ *   the sold paper object. This closes the false-negative observed on the exact
+ *   Ofix Navigator Universal 5x500 product while keeping one-ream/unknown-pack
+ *   offers rejected.
+ * - V34.CORE131: Office Paper Routing + First-Party Recall recognizes branded
+ *   office paper even when the literal phrase "papier ksero" is absent, using
+ *   a high-precision paper-format + grammage/sheet/ream footprint. This restores
+ *   the office_stationery Store Mesh for queries such as branded A4/A3 paper.
+ * - V34.CORE131: Ofix and Lyreco gain bounded retailer-owned paper catalog
+ *   adapters for stable A4/A3 (plus Lyreco A5) category surfaces. These pages
+ *   are discovery-only; product identity, HARD specs, package topology, public
+ *   price and availability must still pass the unchanged final verifier.
+ * - V34.CORE131: targeted exact-host queries scope Ofix to /produkt/ and Lyreco
+ *   to the Polish webshop tree, improving concrete-product recall.
+ * - V34.CORE131: a requested pack_count can prove a legitimate same-product
+ *   multipack before generic "zestaw ... do" accessory grammar rejects it,
+ *   while compatibility kits without the sold product before the relation stay
+ *   rejected.
  * - V34.CORE130: Quantity & Pack Integrity promotes explicit package topology
  *   to HARD requirements. Counts such as "500 arkuszy" and "5 ryz" are now
  *   independent verified axes; paper-style "5x500" can prove both only in
@@ -96,7 +125,7 @@ import { NextResponse } from "next/server";
  *   repeated failed DDG/Jina tail lanes are not allowed to consume the route.
  * - V34.CORE120: hard-requirement discovery now races one bounded DuckDuckGo lane in parallel; exact-model brand/static proof gains the same independent engine; Ceneo merchant rows may recover only the generic product-class noun from an exact shared alphanumeric parent MPN while all HARD/price/condition verification stays unchanged.
  * - V34.CORE120: requirement-heavy retailer fallback keeps HARD anchors instead of collapsing to a bare product noun; blocked first-party indexed rescue also runs when product identity exists but no primary candidate proves all HARD requirements; free-floating JSON descriptions must bind to the current product identity before they can prove features.
- * V34.CORE130 CORE
+ * V34.CORE133 CORE
  * - V34.CORE120: request-start zero-result prefetch prefers one precise adapter-derived first-party catalog reader over generic Google/Jina when the parsed query has HARD/exact identity; recovered bounded retailer cards can short-circuit broad marketplace recovery only when their own card proves every HARD requirement and carries re-bound trusted price/availability evidence.
  * ------------------
  * - V34.CORE120: Media Expert laptop discovery can derive a first-party GPU-filter collection from the generic parsed gpu_model requirement (NVIDIA GeForce RTX/GTX, AMD Radeon RX, Intel Arc) and the laptop/gaming category surface; the collection is discovery-only, never product/SKU-specific, and every child card still passes the unchanged HARD/condition/availability/price verifier.
@@ -126,7 +155,7 @@ import { NextResponse } from "next/server";
  */
 
 /**
- * AIShopping V34.CORE130 – Universal Shopping Engine
+ * AIShopping V34.CORE133 – Universal Shopping Engine
  * - V34.CORE120: complete trusted HARD-footprint detection now separates real spec coverage from mere concrete-host coverage; sparse multi-HARD searches get bounded lexical/index recovery, while marketplace candidates that already prove all HARD attributes preserve verification time.
  * - V34.CORE120: OLX verification prioritizes complete own-card HARD footprints and may use a tighter verifier-only response reserve, giving a concrete reader enough room to finish while the unchanged 20 s hard route deadline still keeps 250 ms for final ranking/JSON.
  * - V34.CORE120: relational discovery adds bounded attribute-class lexical variants (for example load-capacity and spin-speed vocabulary) without changing any final HARD comparator or evidence gate.
@@ -1550,7 +1579,50 @@ const V28_RETAILER_PRODUCT_SITE_SCOPES: Readonly<Record<string, string>> = {
   "hard-pc.pl": "sklep.hard-pc.pl/",
   "ccc.eu": "ccc.eu/pl/product/",
   "sportano.com": "sportano.com/p/",
+  // V34.CORE131: concrete office-shop product namespaces. These scopes are
+  // retailer-level routing only; product identity/spec/pack/price verification
+  // remains unchanged.
+  "ofix.pl": "ofix.pl/produkt/",
+  "lyreco.com": "lyreco.com/webshop/PLPL/",
 };
+
+function hasOfficePaperRetailIntent(parsed: ParsedQuery): boolean {
+  const evidence = normalizeMatchText(
+    `${parsed.intent.productPhrase} ${parsed.intent.searchBase} ` +
+    `${parsed.intent.identityTerms.join(" ")} ${parsed.queryText}`
+  );
+
+  // "papier" alone is intentionally insufficient: wallpaper, toilet paper,
+  // photographic craft paper, etc. should not all be routed into office stores.
+  // Require an office-printing/package footprint derived from the user's query.
+  const hasPaperNoun =
+    /(?:^|[^a-z0-9])(?:papier|paper)(?=$|[^a-z0-9])/iu.test(evidence);
+  if (!hasPaperNoun) return false;
+
+  const hardKeys = new Set(
+    parsed.intent.required
+      .filter((item) => item.hard)
+      .map((item) => item.key)
+  );
+  const hasSheetTopology =
+    hardKeys.has("sheet_count") || hardKeys.has("pack_count");
+  const hasPaperGrammage = parsed.intent.required.some(
+    (item) =>
+      item.hard &&
+      item.key === "package_weight" &&
+      normalizeMatchText(item.label) === "gramatura"
+  );
+  const hasOfficePrintLexicon =
+    /\b(?:ksero|xero|drukark\w*|kopiark\w*|arkusz\w*|kartek|kartki|ryz\w*|reams?)\b/iu.test(evidence);
+  const hasIsoPaperFormat =
+    /(?:^|[^a-z0-9])(?:a[0-6]|b[4-6])(?=$|[^a-z0-9])/iu.test(evidence);
+
+  return (
+    hasOfficePrintLexicon ||
+    (hasIsoPaperFormat && hasSheetTopology) ||
+    (hasIsoPaperFormat && hasPaperGrammage)
+  );
+}
 
 function getRetailVerticalMatches(
   parsed: ParsedQuery
@@ -1562,6 +1634,15 @@ function getRetailVerticalMatches(
 
   const matches = V28_RETAIL_VERTICAL_PROFILES.map((profile) => {
     let score = profile.categories.includes(parsed.category ?? "") ? 18 : 0;
+
+    // V34.CORE131: branded office paper often omits the literal phrases
+    // "papier ksero" / "papier do drukarki" ("Papier Navigator Universal A4...").
+    // The specification footprint is still unambiguous: ISO paper format +
+    // gram/mm² or sheet/ream topology. Route that intent into office_stationery
+    // without inventing a category or weakening product verification.
+    if (profile.id === "office_stationery" && hasOfficePaperRetailIntent(parsed)) {
+      score += 12;
+    }
 
     for (const signalRaw of profile.signals) {
       const signal = normalizeMatchText(signalRaw);
@@ -2084,6 +2165,65 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
       return [
         `https://www.maxizoo.pl/c/marki/${brandSlug}/`,
       ];
+    },
+  },
+  {
+    // V34.CORE131: Ofix has stable first-party A4/A3 paper category surfaces
+    // containing concrete product cards, including multipacks. The category
+    // page is discovery-only; every child product still has to prove brand,
+    // grammage, sheet_count, pack_count, price and availability.
+    host: "ofix.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "empty-fallback",
+    readerCatalogTimeoutMs: 3_200,
+    retryTransientDirectOnce: true,
+    maxSearchUrls: 1,
+    buildSearchUrls: ({ productPhrase, exactSearchText, preciseSearchText }) => {
+      const scope = normalizeMatchText(
+        `${productPhrase} ${exactSearchText} ${preciseSearchText}`
+      );
+      if (/(?:^|[^a-z0-9])a4(?=$|[^a-z0-9])/iu.test(scope)) {
+        return ["https://www.ofix.pl/kategoria/papier-ksero-a4-711798"];
+      }
+      if (/(?:^|[^a-z0-9])a3(?=$|[^a-z0-9])/iu.test(scope)) {
+        return ["https://www.ofix.pl/kategoria/papier-ksero-a3-711797"];
+      }
+      return [];
+    },
+  },
+  {
+    // V34.CORE131: Lyreco exposes stable Polish paper-format catalogs with
+    // concrete product links. Prices may require login, so lack of a public
+    // price never becomes a trusted final offer; the page is recall-only.
+    host: "lyreco.com",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 3_600,
+    readerCatalogMaxPages: 1,
+    retryTransientDirectOnce: true,
+    maxSearchUrls: 1,
+    buildSearchUrls: ({ productPhrase, exactSearchText, preciseSearchText }) => {
+      const scope = normalizeMatchText(
+        `${productPhrase} ${exactSearchText} ${preciseSearchText}`
+      );
+      if (/(?:^|[^a-z0-9])a4(?=$|[^a-z0-9])/iu.test(scope)) {
+        return [
+          "https://www.lyreco.com/webshop/PLPL/papier-i-koperty/papiery-biale-uniwersalne/format-a4-category-001001001.html",
+        ];
+      }
+      if (/(?:^|[^a-z0-9])a3(?=$|[^a-z0-9])/iu.test(scope)) {
+        return [
+          "https://www.lyreco.com/webshop/PLPL/papier-i-koperty/papiery-biale-uniwersalne/format-a3-category-001001002.html",
+        ];
+      }
+      if (/(?:^|[^a-z0-9])a5(?=$|[^a-z0-9])/iu.test(scope)) {
+        return [
+          "https://www.lyreco.com/webshop/PLPL/papier-i-koperty/papiery-biale-uniwersalne/format-a5-category-001001005.html",
+        ];
+      }
+      return [];
     },
   },
   {
@@ -3047,13 +3187,19 @@ const OPEN_WORLD_NON_BRAND_CAPITALIZED_TOKENS = new Set([
 
 function inferOpenWorldBrandFromCapitalization(queryRaw: string): string | null {
   const query = normalizeText(queryRaw);
+  // V34.CORE133: "5x" is package grammar. Without stripping it, the next
+  // capitalized generic noun ("Papier") can be mistaken for a manufacturer.
+  const brandInferenceQuery = query.replace(
+    /^\s*\d{1,3}\s*[x×]\s*(?=[\p{L}])/u,
+    ""
+  );
 
   // Identify the leading product noun after removing measurable/colour
   // requirements. This prevents title-style input such as "Czerwone Wiadro
   // 20l" from treating "Wiadro" as a manufacturer, while
   // "Nowy Powerbank Baseus 20000mAh" can still infer Baseus.
-  const inferredRequirements = extractUniversalRequirements(query, null);
-  const inferredCore = extractCoreProductPhrase(query)
+  const inferredRequirements = extractUniversalRequirements(brandInferenceQuery, null);
+  const inferredCore = extractCoreProductPhrase(brandInferenceQuery)
     .split(/\s+(?:z|ze|bez)\s+/iu)[0] ?? query;
   const inferredProductPhrase = stripRequirementTermsFromProductPhrase(
     inferredCore,
@@ -3080,8 +3226,8 @@ function inferOpenWorldBrandFromCapitalization(queryRaw: string): string | null 
   // "powerbank Baseus". V32.12 also recovers a leading brand in brand-led
   // queries ("Fender Player Stratocaster") when category inference already
   // proves that the first word is not the product class itself.
-  const tokens = query.split(/\s+/).filter(Boolean);
-  const inferredCategory = detectCategory(query);
+  const tokens = brandInferenceQuery.split(/\s+/).filter(Boolean);
+  const inferredCategory = detectCategory(brandInferenceQuery);
 
   // V34.CORE120: in automotive compatibility phrases, capitalized words
   // after "do/dla" usually describe vehicle fitment, not the sold part manufacturer. An unknown part
@@ -5263,6 +5409,33 @@ function extractUniversalRequirements(
   }
 
   if (paperLikePackageContext) {
+    // V34.CORE133: user-written "5x Papier ..." is package topology, not
+    // product identity. Promote the leading multiplier to HARD pack_count only
+    // when it directly modifies a paper/ream sold-object noun.
+    for (const match of text.matchAll(
+      /\b(\d{1,3})\s*[x×]\s*(?=(?:papier\w*|paper\b|ryz\w*|reams?)\b)/giu
+    )) {
+      if (typeof match.index !== "number") continue;
+      const packs = Number(match[1]);
+      if (
+        !Number.isFinite(packs) || packs < 1 || packs > 1000 ||
+        requirements.some((item) => item.key === "pack_count")
+      ) {
+        continue;
+      }
+      add(
+        "pack_count",
+        "liczba opakowań/ryz",
+        String(packs),
+        [
+          `${packs}x`, `${packs} x`, `${packs}×`,
+          `${packs} ryz`, `${packs} ryzy`, `${packs} reams`,
+          `${packs} paczek`, `${packs} opakowań`, `${packs} packs`,
+        ],
+        "bundle"
+      );
+    }
+
     for (const match of text.matchAll(/\b(\d{1,3})\s*[x×]\s*(\d{2,5})\b/giu)) {
       const packs = Number(match[1]);
       const sheets = Number(match[2]);
@@ -6321,6 +6494,17 @@ function stripRequirementTermsFromProductPhrase(
       );
     }
 
+    if (requirement.key === "pack_count" && /^\d{1,3}$/.test(String(requirement.value))) {
+      // V34.CORE133: "5x Papier Navigator" -> "Papier Navigator".
+      phrase = phrase.replace(
+        new RegExp(
+          `^\\s*${escapeRegExp(String(requirement.value))}\\s*[x×]\\s*(?=[a-ząćęłńóśźż])`,
+          "iu"
+        ),
+        " "
+      );
+    }
+
     const units = measurementUnitsByKey[requirement.key];
     if (units) {
       const requirementPattern =
@@ -6347,6 +6531,15 @@ function stripRequirementTermsFromProductPhrase(
           return requirementHasEvidence(requirement, full) ? " " : full;
         }
       );
+    }
+
+    if (
+      requirement.key === "package_weight" &&
+      normalizeMatchText(requirement.label) === "gramatura"
+    ) {
+      // V34.CORE133: "80g/m2" leaves "/m2" after the mass token is removed.
+      // The suffix is units grammar, never product/model identity.
+      phrase = phrase.replace(/(?:\/\s*)?m(?:2|²)\b/giu, " ");
     }
 
     for (const alias of [...requirement.aliases].sort((a, b) => b.length - a.length)) {
@@ -6777,7 +6970,31 @@ function isGenericAccessoryResult(
       queryExplicitlyRequestsMultiItemSet(parsed) &&
       hasExplicitMultiUnitCountForRequestedCategory(titleRaw, parsed);
 
-    if (!explicitlyRequestedSameProductPack) return true;
+    // V34.CORE131: package-count intent is not always a category-level
+    // piece_count. For consumables, "5 ryz", "5 paczek" or "5x500" describes
+    // multiple units of the requested MAIN product. A legitimate title such as
+    // "zestaw 5x papier ... do drukarek" used to trip the generic
+    // "zestaw ... do" compatibility/accessory grammar even though "papier"
+    // is clearly the sold object before the relation.
+    const requestedPackRequirement = parsed.intent.required.find(
+      (requirement) => requirement.hard && requirement.key === "pack_count"
+    );
+    const requestedPackCount = Number(requestedPackRequirement?.value ?? "");
+    const relationPrefix = lead.split(/\b(?:do|dla|for)\b/iu, 1)[0] ?? lead;
+    const requestedSoldObjectBeforeRelation = parsed.intent.identityTerms
+      .map((term) => normalizeMatchText(term))
+      .filter((term) => term.length >= 3 && !/^\d/.test(term))
+      .some((term) => universalEvidenceHasBoundedIdentityTerm(term, relationPrefix));
+    const explicitlyRequestedSameProductPackage =
+      Number.isFinite(requestedPackCount) &&
+      requestedPackCount >= 2 &&
+      extractExplicitPackCountsFromEvidence(titleRaw).includes(requestedPackCount) &&
+      requestedSoldObjectBeforeRelation;
+
+    if (
+      !explicitlyRequestedSameProductPack &&
+      !explicitlyRequestedSameProductPackage
+    ) return true;
   }
 
   // V34.CORE120: third-party accessory brands often precede the sold-object noun:
@@ -7509,6 +7726,21 @@ function extractExplicitPackCountsFromEvidence(evidenceRaw: string): number[] {
     )) {
       const value = Number(match[1]);
       if (Number.isFinite(value)) counts.add(value);
+    }
+
+    // V34.CORE132: retailer titles often encode a package count as a leading
+    // multiplier before the sold paper object instead of repeating "ryz":
+    //   "5x Papier ksero Navigator Universal, A4, 80g, 500 arkuszy"
+    // This is strong package evidence only inside explicit paper/ream context.
+    // It must be a bounded leading multiplier directly attached to the paper
+    // sold-object noun; unrelated "x" dimensions/numbers remain untouched.
+    for (const match of evidence.matchAll(
+      /(?:^|[^a-z0-9])(\d{1,3})\s*[x×]\s*(?:papier\w*|paper\b|ryz\w*|reams?)(?=$|[^a-z0-9])/giu
+    )) {
+      const value = Number(match[1]);
+      if (Number.isFinite(value) && value >= 1 && value <= 100) {
+        counts.add(value);
+      }
     }
   }
 
@@ -42606,7 +42838,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE130 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE133 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -42683,7 +42915,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE130");
+    console.log("[AIShopping] NEW SEARCH V34.CORE133");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
