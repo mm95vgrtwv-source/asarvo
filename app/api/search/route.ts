@@ -1,24 +1,39 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE162 — STRICT 20 SECOND ORCHESTRATION
- * - V34.CORE162: exact-model electronics use a two-wave first-party retailer mesh:
+ * V34.CORE168 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE168: stabilization rollback of the CORE167 sparse-coverage marketplace-index experiment after live regression showed no additional verified stores and slower total runtime.
+ * - V34.CORE168: retains the proven CORE166 OLX/Allegro Lokalnie scheduling and bounded high-constraint cross-store expansion.
+ * - V34.CORE168: no acceptance gate is relaxed; identity, brand, HARD requirements, condition, availability and price verification remain fail-closed and unchanged.
+ * - V34.CORE164: broad named-model tech intents (brand + multi-token identity + numeric generation) now enter the exact-tech two-wave mesh even when the numeric token is short, so discovery reader fallbacks are actually suppressed and Ceneo keeps reader priority.
+ * - V34.CORE164: a suspiciously tiny successful Ceneo reader document gets one bounded fresh no-cache retry when deadline headroom remains; the unchanged scoped merchant parser still decides whether any seller row is trusted.
+ * - V34.CORE164: the fresh-reader retry is Ceneo-product-page-only, single-shot, deadline-gated and never relaxes identity, HARD, condition, availability, row-local price or merchant checks.
+ * - V34.CORE164: request-local source health distinguishes hard direct blocks from transient failures; one explicit 403/404/429 can suppress redundant same-host direct retries while indexed discovery remains available.
+ * - V34.CORE164: second retailer catalog pages are slightly staggered and can be cancelled when page one proves the host is hard-blocked, avoiding duplicated blocked requests without serializing healthy stores.
+ * - V34.CORE164: requirement-heavy searches use shorter retailer adapter/mesh ceilings; partial first-party results are still published immediately and all strict verification gates are unchanged.
+ * - V34.CORE164: speculative request-start Jina prefetch is deferred for heavily constrained intents already covered by a matched direct retailer adapter, preserving reader capacity for concrete verification.
+ * - V34.CORE164: Ceneo keeps its lightweight/indexed empty-page rescue, but skips the slow search-page reader for heavily constrained direct-retail intents where it has no indexed product hit.
+ * - V34.CORE164: targeted site-query fanout is reduced for explicit-brand searches with multiple HARD requirements, while direct adapters, marketplaces and strict final verification remain active.
+ * - V34.CORE164: pre-verification pruning rejects title-bound explicit competing brands only when the candidate itself already proves the HARD footprint, preventing expensive brand-proof work on obvious wrong-brand bundles.
+ * - V34.CORE164: verification candidates from repeatedly blocked/empty retailer hosts are capped to one; healthy hosts and Ceneo merchant cards retain their normal diversity.
+ * - V34.CORE164: high-constraint explicit-brand intents use a smaller verification portfolio, prioritizing exact first-party matches and preserving a larger hard-deadline margin.
+ * - V34.CORE164: exact-model electronics use a two-wave first-party retailer mesh:
  *   reliable direct HTML adapters first, transport-heavy fallbacks only if store coverage stays sparse.
- * - V34.CORE162: exact-tech catalog discovery suppresses reader fallbacks so the globally throttled
+ * - V34.CORE164: exact-tech catalog discovery suppresses reader fallbacks so the globally throttled
  *   reader queue remains available for Ceneo merchant recovery and concrete-page verification.
- * - V34.CORE162: first-wave direct retailer pages use shorter source-local timeouts and at most two
+ * - V34.CORE164: first-wave direct retailer pages use shorter source-local timeouts and at most two
  *   user-derived search URLs per store; partial concrete cards remain preserved immediately.
- * - V34.CORE162: second-wave MediaExpert/EURO/OleOle discovery is bounded and runs only when the
+ * - V34.CORE164: second-wave MediaExpert/EURO/OleOle discovery is bounded and runs only when the
  *   first wave has fewer than three concrete retailer hosts.
- * - V34.CORE162: Sferis uses its current retailer-owned /wyszukaj/<slug> surface and only concrete
+ * - V34.CORE164: Sferis uses its current retailer-owned /wyszukaj/<slug> surface and only concrete
  *   product URLs ending in -i<digits> may enter final-offer verification.
- * - V34.CORE162: exact-tech Ceneo merchant expansion hydrates only the strongest exact product card;
+ * - V34.CORE164: exact-tech Ceneo merchant expansion hydrates only the strongest exact product card;
  *   one successful comparison card can already expose multiple independent merchants.
- * - V34.CORE162: exact-tech verification portfolio is globally capped at two candidates per retailer,
+ * - V34.CORE164: exact-tech verification portfolio is globally capped at two candidates per retailer,
  *   one aggregate Ceneo card, and one candidate for a retailer whose direct adapter timed out empty.
- * - V34.CORE162: no benchmark product, model, SKU, price or merchant is hard-coded; all discovery
+ * - V34.CORE164: no benchmark product, model, SKU, price or merchant is hard-coded; all discovery
  *   text still comes from ParsedQuery and all final identity/HARD/condition/price gates are unchanged.
- * - V34.CORE162: Priority Ceneo Preflight runs one exact-site recovery lane
+ * - V34.CORE164: Priority Ceneo Preflight runs one exact-site recovery lane
  *   before the large Bing/retailer fanout for precise technology/model intents.
  *   The request-scoped result is reused by direct Ceneo discovery, preventing
  *   duplicate Ceneo index calls and avoiding socket/search-engine contention.
@@ -1963,10 +1978,14 @@ function getOrderedCoreRetailerDomains(parsed: ParsedQuery): string[] {
 type RetailerRequestHealthState = {
   directAttempts: number;
   directHardFailures: number;
+  directBlockFailures: number;
   directSuccesses: number;
   readerSuccesses: number;
+  readerFailures: number;
+  readerChallenges: number;
   products: number;
   adapterTimedOut: boolean;
+  lastDirectStatus: number | null;
   updatedAt: number;
 };
 
@@ -2023,10 +2042,14 @@ function mutateRetailerRequestHealth(
   const state = bucket.hosts.get(host) ?? {
     directAttempts: 0,
     directHardFailures: 0,
+    directBlockFailures: 0,
     directSuccesses: 0,
     readerSuccesses: 0,
+    readerFailures: 0,
+    readerChallenges: 0,
     products: 0,
     adapterTimedOut: false,
+    lastDirectStatus: null,
     updatedAt: Date.now(),
   };
   mutation(state);
@@ -2046,6 +2069,7 @@ function shouldCircuitBreakDirectRetailerCrawl(
   // active, so source health improves latency without turning a 403 into a
   // permanent recall loss.
   return (
+    state.directBlockFailures >= 1 ||
     state.directHardFailures >= 2 ||
     (
       state.adapterTimedOut &&
@@ -2576,7 +2600,7 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
     },
   },
   {
-    // V34.CORE162: current Sferis search surface. Discovery only; child cards
+    // V34.CORE164: current Sferis search surface. Discovery only; child cards
     // still pass the unchanged universal verifier.
     host: "sferis.pl",
     categories: [],
@@ -12437,7 +12461,7 @@ type V34CeneoPriorityPreflightState = {
   results: SearchResult[];
 };
 
-// V34.CORE162 request-scoped cache. ParsedQuery is a fresh object for every
+// V34.CORE164 request-scoped cache. ParsedQuery is a fresh object for every
 // request, so WeakMap reuse cannot leak product candidates between users or
 // searches. The preflight is intentionally discovery-only.
 const V34_CENEO_PRIORITY_PREFLIGHT = new WeakMap<
@@ -12463,7 +12487,7 @@ async function searchCeneoIndexedEmptyPageFallback(
   const prefetched = V34_CENEO_PRIORITY_PREFLIGHT.get(parsed);
   if (prefetched?.attempted) {
     console.log(
-      "[AIShopping] V34.CORE162 Ceneo priority preflight reuse:",
+      "[AIShopping] V34.CORE164 Ceneo priority preflight reuse:",
       prefetched.results.length
     );
     return [...prefetched.results];
@@ -12514,7 +12538,7 @@ async function searchCeneoIndexedEmptyPageFallback(
 
   const primaryQuery = queries[0];
   console.log(
-    "[AIShopping] V34.CORE162 Ceneo lightweight exact-site RSS query:",
+    "[AIShopping] V34.CORE164 Ceneo lightweight exact-site RSS query:",
     primaryQuery
   );
 
@@ -12543,7 +12567,7 @@ async function searchCeneoIndexedEmptyPageFallback(
     retryQuery = queries[1] || primaryQuery;
     const retryBudget = Math.max(650, Math.min(900, remainingBudget));
     console.log(
-      "[AIShopping] V34.CORE162 Ceneo lightweight RSS retry:",
+      "[AIShopping] V34.CORE164 Ceneo lightweight RSS retry:",
       retryQuery,
       "budgetMs=",
       retryBudget
@@ -12568,7 +12592,7 @@ async function searchCeneoIndexedEmptyPageFallback(
 
   const accepted = dedupeSearchResultsByUrl(combinedConcrete).slice(0, 8);
   console.log(
-    "[AIShopping] V34.CORE162 Ceneo lightweight indexed rescue:",
+    "[AIShopping] V34.CORE164 Ceneo lightweight indexed rescue:",
     accepted.length,
     "rssRaw=",
     primaryResults.length,
@@ -14829,7 +14853,7 @@ function selectDiverseSearchResults(
     const host = getResultHostname(result.url) || "unknown";
     const count = hostCounts.get(host) ?? 0;
     let effectivePerHostLimit = perHostLimit;
-    if (isV34Core162PreciseTechIntent(parsed) && host !== "unknown") {
+    if (isV34Core164PreciseTechIntent(parsed) && host !== "unknown") {
       effectivePerHostLimit = Math.min(effectivePerHostLimit, host === "ceneo.pl" ? 1 : 2);
       const health = getRetailerRequestHealthBucket(parsed)?.hosts.get(host);
       if (health?.adapterTimedOut && health.products === 0) {
@@ -15137,7 +15161,7 @@ function selectDiverseSearchResults(
       const host = getResultHostname(result.url) || "unknown";
       const count = hostCounts.get(host) ?? 0;
       let effectiveAbsolutePerHostLimit = absolutePerHostLimit;
-      if (isV34Core162PreciseTechIntent(parsed) && host !== "unknown") {
+      if (isV34Core164PreciseTechIntent(parsed) && host !== "unknown") {
         effectiveAbsolutePerHostLimit = Math.min(effectiveAbsolutePerHostLimit, host === "ceneo.pl" ? 1 : 2);
         const health = getRetailerRequestHealthBucket(parsed)?.hosts.get(host);
         if (health?.adapterTimedOut && health.products === 0) {
@@ -17514,26 +17538,78 @@ type DirectRetailerCatalogSearchOptions = {
   directFetchTimeoutMs?: number;
 };
 
-function isV34Core162PreciseTechIntent(parsed: ParsedQuery): boolean {
+function isV34Core164PreciseTechIntent(parsed: ParsedQuery): boolean {
   if (!hasTechnologyBrandRetailIntent(parsed)) return false;
-  return Boolean(
+
+  if (
     getCompactExactModelDiscoveryCore(parsed) ||
     getNamedVariantDiscoveryCore(parsed)
+  ) {
+    return true;
+  }
+
+  // CORE164: many real consumer-tech model names are a lexical family plus a
+  // short generation token. The compact-model helper intentionally rejects
+  // those short tokens in isolation, but the full brand + multi-token identity
+  // is still precise enough for transport scheduling. This only selects the
+  // bounded exact-tech discovery mesh; final identity/HARD/price verification
+  // remains unchanged.
+  const brand = normalizeMatchText(parsed.brand ?? "");
+  const nonBrandIdentity = parsed.intent.identityTerms
+    .map((term) => normalizeMatchText(term))
+    .filter((term) => term && term !== brand);
+  const hasShortGenerationToken = nonBrandIdentity.some((term) =>
+    /^(?=.*\d)[a-z0-9-]{2,8}$/iu.test(term.replace(/\s+/g, ""))
   );
+
+  return nonBrandIdentity.length >= 3 && hasShortGenerationToken;
 }
 
-const V34_CORE162_EXACT_TECH_PRIMARY_DIRECT_HOSTS: readonly string[] = [
+const V34_CORE164_EXACT_TECH_PRIMARY_DIRECT_HOSTS: readonly string[] = [
   "morele.net",
   "mediamarkt.pl",
   "x-kom.pl",
   "sferis.pl",
 ];
 
-const V34_CORE162_EXACT_TECH_FALLBACK_DIRECT_HOSTS: readonly string[] = [
+const V34_CORE164_EXACT_TECH_FALLBACK_DIRECT_HOSTS: readonly string[] = [
   "mediaexpert.pl",
   "euro.com.pl",
   "oleole.pl",
 ];
+
+function isV34Core164HighConstraintRetailIntent(parsed: ParsedQuery): boolean {
+  const hardCount = parsed.intent.required.filter((requirement) => requirement.hard).length;
+  return Boolean(
+    parsed.brand &&
+    hardCount >= 2 &&
+    getRetailVerticalMatches(parsed).length > 0
+  );
+}
+
+function getV34Core164DefaultDirectAdapterBudgetMs(parsed: ParsedQuery): number {
+  return isV34Core164HighConstraintRetailIntent(parsed) ? 4_750 : 5_550;
+}
+
+function getV34Core164DirectRetailerMeshBudgetMs(parsed: ParsedQuery): number {
+  return isV34Core164HighConstraintRetailIntent(parsed) ? 5_000 : 5_650;
+}
+
+function shouldV34Core164DeferRequestStartFirstPartyReaderPrefetch(
+  parsed: ParsedQuery,
+  seed: SearchResult
+): boolean {
+  if (!isV34Core164HighConstraintRetailIntent(parsed)) return false;
+  const host = getResultHostname(seed.url);
+  if (!host) return false;
+  return V28_DIRECT_RETAILER_CATALOG_ADAPTERS.some((adapter) =>
+    retailerHostMatchesDomain(host, adapter.host)
+  );
+}
+
+function shouldV34Core164SkipCeneoEmptyPageReader(parsed: ParsedQuery): boolean {
+  return isV34Core164HighConstraintRetailIntent(parsed);
+}
 
 function buildDirectRetailerCatalogRequests(
   parsed: ParsedQuery,
@@ -17656,6 +17732,8 @@ async function searchDirectRetailerCatalogPages(
       const partialProducts: SearchResult[] = [];
       const partialSeen = new Set<string>();
       let partialTimeoutLogged = false;
+      let stopSiblingDirectPages = false;
+      let stopSiblingReaderPages = false;
 
       const collectPartialProducts = (results: SearchResult[]) => {
         for (const result of results) {
@@ -17707,19 +17785,31 @@ async function searchDirectRetailerCatalogPages(
               // Hydrated/blocked catalogs may need a reader. Only the bounded
               // source-declared page set starts immediately, preventing generic
               // retailers from flooding the globally-throttled Jina queue.
-              const parallelReaderPromise: Promise<string> =
-                runReaderInParallel
-                  ? fetchViaJina(
-                      url,
-                      readerTimeoutMs,
-                      false,
-                      adapterSignal
-                    )
-                  : Promise.resolve("");
+              let parallelReaderPromise: Promise<string> | null = null;
 
-              const directStartGapMs = adapter.directPageStartGapMs ?? 0;
+              const directStartGapMs =
+                adapter.directPageStartGapMs ?? (pageIndex > 0 ? 180 : 0);
               if (directStartGapMs > 0 && pageIndex > 0) {
                 await sleep(pageIndex * directStartGapMs, adapterSignal);
+              }
+
+              if (adapterSignal.aborted) return;
+              if (pageIndex > 0 && stopSiblingDirectPages) {
+                console.log(
+                  "[AIShopping] V34.CORE164 source-health sibling page skipped:",
+                  adapter.host,
+                  url
+                );
+                return;
+              }
+
+              if (runReaderInParallel && !(pageIndex > 0 && stopSiblingReaderPages)) {
+                parallelReaderPromise = fetchViaJina(
+                  url,
+                  readerTimeoutMs,
+                  false,
+                  adapterSignal
+                );
               }
 
               let fetched = await fetchHtml(
@@ -17766,17 +17856,34 @@ async function searchDirectRetailerCatalogPages(
 
               mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
                 state.directAttempts += 1;
+                state.lastDirectStatus = fetched?.status ?? null;
                 if (fetched && fetched.status >= 200 && fetched.status < 400) {
                   state.directSuccesses += 1;
                 } else if (
                   !fetched ||
                   fetched.status === 403 ||
+                  fetched.status === 404 ||
                   fetched.status === 429 ||
                   fetched.status >= 500
                 ) {
                   state.directHardFailures += 1;
+                  if (
+                    fetched?.status === 403 ||
+                    fetched?.status === 404 ||
+                    fetched?.status === 429
+                  ) {
+                    state.directBlockFailures += 1;
+                  }
                 }
               });
+
+              if (
+                fetched?.status === 403 ||
+                fetched?.status === 404 ||
+                fetched?.status === 429
+              ) {
+                stopSiblingDirectPages = true;
+              }
               const finalUrl = fetched?.finalUrl || url;
 
               const trustedCatalogRequirements = parsed.intent.required
@@ -17830,7 +17937,9 @@ async function searchDirectRetailerCatalogPages(
                 !adapterSignal.aborted &&
                 options.disableReaderFallback !== true
               ) {
-                if (runReaderInParallel) {
+                if (pageIndex > 0 && stopSiblingReaderPages) {
+                  jinaCatalogText = "";
+                } else if (runReaderInParallel && parallelReaderPromise) {
                   jinaCatalogText = await parallelReaderPromise;
                 } else {
                   const directStatus = fetched?.status ?? 0;
@@ -17882,6 +17991,15 @@ async function searchDirectRetailerCatalogPages(
                     "textLength=",
                     jinaCatalogText.length
                   );
+                } else if (jinaCatalogText || runReaderInParallel) {
+                  const challenge = Boolean(
+                    jinaCatalogText && isBlockedOrChallengePage(jinaCatalogText)
+                  );
+                  mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
+                    state.readerFailures += 1;
+                    if (challenge) state.readerChallenges += 1;
+                  });
+                  if (challenge) stopSiblingReaderPages = true;
                 }
               }
 
@@ -17947,7 +18065,7 @@ async function searchDirectRetailerCatalogPages(
 
           return unique;
         },
-        options.adapterBudgetMs ?? 5_550,
+        options.adapterBudgetMs ?? getV34Core164DefaultDirectAdapterBudgetMs(parsed),
         getPartialSnapshot,
         `direct retailer adapter: ${adapter.host}`
       );
@@ -17957,19 +18075,19 @@ async function searchDirectRetailerCatalogPages(
   return chunks.flat();
 }
 
-async function searchDirectRetailerCatalogPagesCore162(
+async function searchDirectRetailerCatalogPagesCore164(
   parsed: ParsedQuery,
   externalSignal?: AbortSignal,
   onPartialResults?: (results: SearchResult[]) => void
 ): Promise<SearchResult[]> {
-  if (!isV34Core162PreciseTechIntent(parsed)) {
+  if (!isV34Core164PreciseTechIntent(parsed)) {
     return searchDirectRetailerCatalogPages(parsed, externalSignal, onPartialResults);
   }
 
   const startedAt = Date.now();
   console.log(
-    "[AIShopping] V34.CORE162 exact-tech direct mesh first wave:",
-    V34_CORE162_EXACT_TECH_PRIMARY_DIRECT_HOSTS
+    "[AIShopping] V34.CORE164 exact-tech direct mesh first wave:",
+    V34_CORE164_EXACT_TECH_PRIMARY_DIRECT_HOSTS
   );
 
   const firstWave = await searchDirectRetailerCatalogPages(
@@ -17977,7 +18095,7 @@ async function searchDirectRetailerCatalogPagesCore162(
     externalSignal,
     onPartialResults,
     {
-      hosts: V34_CORE162_EXACT_TECH_PRIMARY_DIRECT_HOSTS,
+      hosts: V34_CORE164_EXACT_TECH_PRIMARY_DIRECT_HOSTS,
       adapterBudgetMs: 3_650,
       maxAdapters: 4,
       maxUrlsPerAdapter: 2,
@@ -17992,22 +18110,22 @@ async function searchDirectRetailerCatalogPagesCore162(
   );
   if (externalSignal?.aborted || firstHosts.size >= 3) {
     console.log(
-      "[AIShopping] V34.CORE162 exact-tech direct mesh settled after first wave:",
+      "[AIShopping] V34.CORE164 exact-tech direct mesh settled after first wave:",
       { hosts: [...firstHosts], results: firstWave.length, elapsedMs: Date.now() - startedAt }
     );
     return dedupeSearchResultsByUrl(firstWave);
   }
 
   console.log(
-    "[AIShopping] V34.CORE162 exact-tech direct mesh fallback wave:",
-    V34_CORE162_EXACT_TECH_FALLBACK_DIRECT_HOSTS
+    "[AIShopping] V34.CORE164 exact-tech direct mesh fallback wave:",
+    V34_CORE164_EXACT_TECH_FALLBACK_DIRECT_HOSTS
   );
   const secondWave = await searchDirectRetailerCatalogPages(
     parsed,
     externalSignal,
     onPartialResults,
     {
-      hosts: V34_CORE162_EXACT_TECH_FALLBACK_DIRECT_HOSTS,
+      hosts: V34_CORE164_EXACT_TECH_FALLBACK_DIRECT_HOSTS,
       adapterBudgetMs: 1_650,
       maxAdapters: 3,
       maxUrlsPerAdapter: 1,
@@ -18019,7 +18137,7 @@ async function searchDirectRetailerCatalogPagesCore162(
 
   const combined = dedupeSearchResultsByUrl([...firstWave, ...secondWave]);
   console.log(
-    "[AIShopping] V34.CORE162 exact-tech direct mesh final:",
+    "[AIShopping] V34.CORE164 exact-tech direct mesh final:",
     { firstWave: firstWave.length, secondWave: secondWave.length, uniqueHosts: new Set(combined.map((result) => getResultHostname(result.url)).filter(Boolean)).size, elapsedMs: Date.now() - startedAt }
   );
   return combined;
@@ -18204,7 +18322,7 @@ function isProbablyRealOfferUrl(url: string): boolean {
       return pathname.startsWith("/items/");
     }
 
-    // V34.CORE162: only canonical Sferis product URLs are final offers.
+    // V34.CORE164: only canonical Sferis product URLs are final offers.
     if (hostname === "sferis.pl" || hostname.endsWith(".sferis.pl")) {
       return /-i\d+(?:\/)?$/i.test(pathname);
     }
@@ -18724,7 +18842,8 @@ async function waitForJinaStartSlot(
 async function performJinaRequest(
   clean: string,
   timeoutMs: number,
-  externalSignal?: AbortSignal
+  externalSignal?: AbortSignal,
+  forceFresh = false
 ): Promise<Response> {
   await waitForJinaStartSlot(externalSignal);
 
@@ -18743,6 +18862,12 @@ async function performJinaRequest(
     headers: {
       Accept: "text/plain,text/markdown,*/*",
       "User-Agent": "AIShopping/1.0 (+free-fallback-reader)",
+      ...(forceFresh
+        ? {
+            "Cache-Control": "no-cache",
+            "X-No-Cache": "true",
+          }
+        : {}),
     },
   });
 }
@@ -18802,6 +18927,45 @@ async function fetchViaJina(
     if (externalSignal?.aborted) return "";
 
     console.log("[AIShopping] Jina fallback error:", clean, error);
+    return "";
+  }
+}
+
+
+async function fetchViaJinaFresh(
+  url: string,
+  timeoutMs = 2400,
+  externalSignal?: AbortSignal
+): Promise<string> {
+  const clean = normalizeUrl(url);
+  if (!clean || externalSignal?.aborted) return "";
+
+  try {
+    const response = await performJinaRequest(
+      clean,
+      timeoutMs,
+      externalSignal,
+      true
+    );
+
+    if (!response.ok) {
+      console.log(
+        "[AIShopping] V34.CORE164 Ceneo fresh reader HTTP:",
+        response.status,
+        clean
+      );
+      return "";
+    }
+
+    return await response.text();
+  } catch (error) {
+    if (externalSignal?.aborted) return "";
+
+    console.log(
+      "[AIShopping] V34.CORE164 Ceneo fresh reader error:",
+      clean,
+      error
+    );
     return "";
   }
 }
@@ -28653,14 +28817,31 @@ async function searchDirectMarketplacePages(
       // single bounded reader fallback, but so does a 200 page that yielded
       // zero cards for a concrete product identity. A 200/0 can mean parser
       // drift/application-state rendering, not an actually empty marketplace.
+      const deferSlowAllegroLokalnieReaderForHighConstraint =
+        source === "AllegroLokalnieDirect" &&
+        isV34Core164HighConstraintRetailIntent(parsed);
       const shouldUseAllegroLokalnieReader =
         source === "AllegroLokalnieDirect" &&
+        !deferSlowAllegroLokalnieReaderForHighConstraint &&
         shouldUseAllegroLokalnieReaderOnEmptyDirectPage(
           parsed,
           directStatus,
           parsedResults.length,
           url === allegroLokalnieReaderFallbackUrl
         );
+
+      if (
+        deferSlowAllegroLokalnieReaderForHighConstraint &&
+        parsedResults.length === 0
+      ) {
+        await collectTransientDirectRetry();
+        console.log(
+          "[AIShopping] V34.CORE166 Allegro Lokalnie slow reader deferred for high-constraint retail intent:",
+          url,
+          "results=",
+          parsedResults.length
+        );
+      }
 
       if (shouldUseAllegroLokalnieReader) {
         const [markdown] = await Promise.all([
@@ -28743,6 +28924,11 @@ async function searchDirectMarketplacePages(
             indexedResults.length,
             "afterStatus=",
             directStatus ?? "network",
+            url
+          );
+        } else if (shouldV34Core164SkipCeneoEmptyPageReader(parsed)) {
+          console.log(
+            "[AIShopping] V34.CORE164 Ceneo empty-page reader skipped for high-constraint retail intent:",
             url
           );
         } else {
@@ -28943,6 +29129,27 @@ async function searchDirectMarketplacePages(
 
   const olxChunkPromise: Promise<SearchResult[]> = (async () => {
     if (olxEntries.length === 0) return [];
+
+    // V34.CORE166: for branded, multi-HARD retail requests the OLX public API
+    // is stronger evidence than a rendered search landing: every result is one
+    // atomic listing object with title/description/params/price. Do not spend
+    // another 4-6 seconds reading the same search landing when that API already
+    // produced priced cards. If the API is empty/unavailable, preserve the old
+    // HTML/Jina path as a fallback. This changes scheduling only.
+    if (isV34Core164HighConstraintRetailIntent(parsed)) {
+      const apiCards = await olxPublicApiPromise;
+      if (apiCards.length > 0) {
+        console.log(
+          "[AIShopping] V34.CORE166 OLX legacy landing skipped; public JSON cards available:",
+          apiCards.length
+        );
+        return [];
+      }
+      console.log(
+        "[AIShopping] V34.CORE166 OLX public JSON empty; legacy landing fallback enabled"
+      );
+    }
+
     if (olxEntries.length === 1) return runBoundedSource(olxEntries[0]);
 
     const localController = new AbortController();
@@ -29081,7 +29288,9 @@ function getTargetedRetailerQueryLimit(parsed: ParsedQuery): number {
   // Keep enough site diversity to include the matched vertical plus universal
   // marketplaces, but do not fan out dozens of duplicate lexical variants in
   // the same request. Direct retailer adapters remain independent from this cap.
-  return parsed.original && parsed.category === "perfume" ? 18 : 20;
+  if (parsed.original && parsed.category === "perfume") return 18;
+  if (isV34Core164HighConstraintRetailIntent(parsed)) return 14;
+  return 20;
 }
 
 function buildSemanticProductIdentityDiscoveryAlternates(
@@ -29357,7 +29566,7 @@ async function runSearch(
 
   const directRetailerCatalogPromise = withAbortableDeadlineSnapshot(
     (phaseSignal) =>
-      searchDirectRetailerCatalogPagesCore162(
+      searchDirectRetailerCatalogPagesCore164(
         parsed,
         discoverySignal
           ? AbortSignal.any([discoverySignal, phaseSignal])
@@ -29368,7 +29577,10 @@ async function runSearch(
     // enough room to settle normally, while the snapshot still guarantees that
     // a late sibling cannot erase earlier products. This remains inside the
     // ~7.55 s discovery-network ceiling and the global 20 s hard route budget.
-    Math.min(PRIMARY_DISCOVERY_BUDGET_MS, 5_650),
+    Math.min(
+      PRIMARY_DISCOVERY_BUDGET_MS,
+      getV34Core164DirectRetailerMeshBudgetMs(parsed)
+    ),
     () => {
       if (partialDirectRetailerCatalog.length > 0) {
         console.log(
@@ -29456,7 +29668,7 @@ async function runSearch(
 
   if (exactModelSecondaryHtmlHosts.length > 0) {
     console.log(
-      "[AIShopping] V34.CORE162 secondary retailer hosts:",
+      "[AIShopping] V34.CORE164 secondary retailer hosts:",
       exactModelSecondaryHtmlHosts
     );
   }
@@ -29619,9 +29831,19 @@ async function runSearch(
   );
   const openWorldSpecialistRescuePriority =
     parsed.intent.openWorld && getRetailVerticalMatches(parsed).length === 0;
+  // V34.CORE166: "we can verify one offer" is not the same as "coverage is
+  // healthy" for a precise branded bundle/spec request. When fewer than three
+  // trustworthy hosts expose the requested brand + HARD footprint, allow one
+  // bounded cross-store expansion wave even if a single exact candidate is
+  // already verification-ready. Final acceptance remains unchanged.
+  const highConstraintSparseCoverage =
+    isV34Core164HighConstraintRetailIntent(parsed) &&
+    primaryLikelyCoverageHosts < 3;
   const coverageNeedsExpansion =
-    !primaryVerificationReady &&
-    !primaryCompleteHardCoverageReady &&
+    (
+      (!primaryVerificationReady && !primaryCompleteHardCoverageReady) ||
+      highConstraintSparseCoverage
+    ) &&
     primaryLikelyCoverageHosts < 4 &&
     !openWorldSpecialistRescuePriority;
 
@@ -29835,6 +30057,7 @@ async function runSearch(
       console.log("[AIShopping] V34.CORE120 coverage expansion results:", {
         results: coverageResults.length,
         elapsedMs: Date.now() - coverageWaveStartedAt,
+        highConstraintSparseCoverage,
       });
     }
   } else {
@@ -35088,7 +35311,7 @@ async function expandCeneoMerchantVerificationCandidates(
   parsed: ParsedQuery,
   hardDeadlineAt: number
 ): Promise<SearchResult[]> {
-  const ceneoExpansionLimit = isV34Core162PreciseTechIntent(parsed) ? 1 : 3;
+  const ceneoExpansionLimit = isV34Core164PreciseTechIntent(parsed) ? 1 : 3;
   const ceneoCandidates = results
     .filter(
       (result) =>
@@ -35103,6 +35326,33 @@ async function expandCeneoMerchantVerificationCandidates(
     .slice(0, ceneoExpansionLimit);
 
   if (ceneoCandidates.length === 0) return results;
+
+  // CORE165: Ceneo merchant recovery must not monopolise the first verification
+  // wave when precise-tech discovery has already produced a broad first-party
+  // portfolio. Keep the normal reader attempt, but suppress the additional
+  // fresh/no-cache retry for a tiny document once 3+ independent non-Ceneo
+  // retailer hosts are already queued. This is coverage-derived, not tied to
+  // any benchmark model/store, and all merchant/HARD/price gates stay intact.
+  const preciseTechRetailerHosts = new Set(
+    results
+      .filter((result) => {
+        if (result.source === "CeneoDirect" || result.source === "CeneoMerchant") {
+          return false;
+        }
+        const host = getResultHostname(result.url);
+        if (!host) return false;
+        return (
+          host !== "ceneo.pl" &&
+          !V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+            (marketplaceHost) => String(marketplaceHost) === host
+          )
+        );
+      })
+      .map((result) => getResultHostname(result.url))
+      .filter((host): host is string => Boolean(host))
+  );
+  const protectPreciseTechVerifierBudget =
+    isV34Core164PreciseTechIntent(parsed) && preciseTechRetailerHosts.size >= 3;
 
   const remaining = hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
   if (remaining < 2_200) return results;
@@ -35148,24 +35398,112 @@ async function expandCeneoMerchantVerificationCandidates(
             1_500,
             Math.min(3_200, readerRemaining - 500)
           );
-          const readerText = await fetchViaJina(
+          let readerText = await fetchViaJina(
             page.finalUrl || candidate.url,
             readerTimeoutMs,
             false
           );
 
-          if (readerText && !isBlockedOrChallengePage(readerText)) {
-            const merchantHtml = convertCeneoReaderMarkdownToMerchantHtml(
-              readerText
+          let readerExpansion =
+            readerText && !isBlockedOrChallengePage(readerText)
+              ? parseCeneoMerchantOffersFromHtml(
+                  convertCeneoReaderMarkdownToMerchantHtml(readerText),
+                  candidate.name,
+                  page.finalUrl || candidate.url,
+                  parsed,
+                  candidate.searchRank * 10
+                )
+              : null;
+
+          // CORE164: Jina can occasionally return a tiny cached summary with
+          // HTTP 200 instead of the concrete product merchant section. That
+          // response is never merchant proof. With enough deadline headroom,
+          // make one fresh no-cache read of the same concrete numeric Ceneo URL.
+          const freshReaderRemaining =
+            hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
+          if (
+            readerText &&
+            readerText.length < 1_200 &&
+            !readerExpansion?.foundMerchantCards &&
+            freshReaderRemaining >= 2_600 &&
+            !protectPreciseTechVerifierBudget
+          ) {
+            const freshTimeoutMs = Math.max(
+              1_500,
+              Math.min(2_300, freshReaderRemaining - 650)
             );
-            const readerExpansion = parseCeneoMerchantOffersFromHtml(
-              merchantHtml,
-              candidate.name,
+            const freshReaderText = await fetchViaJinaFresh(
               page.finalUrl || candidate.url,
-              parsed,
-              candidate.searchRank * 10
+              freshTimeoutMs
             );
 
+            if (
+              freshReaderText &&
+              !isBlockedOrChallengePage(freshReaderText) &&
+              freshReaderText.length > readerText.length
+            ) {
+              const freshExpansion = parseCeneoMerchantOffersFromHtml(
+                convertCeneoReaderMarkdownToMerchantHtml(freshReaderText),
+                candidate.name,
+                page.finalUrl || candidate.url,
+                parsed,
+                candidate.searchRank * 10
+              );
+
+              console.log(
+                "[AIShopping] V34.CORE164 Ceneo tiny-reader fresh retry:",
+                candidate.name,
+                "initialLength=",
+                readerText.length,
+                "freshLength=",
+                freshReaderText.length,
+                "cards=",
+                freshExpansion.foundMerchantCards,
+                "eligible=",
+                freshExpansion.results.length
+              );
+
+              if (
+                freshExpansion.foundMerchantCards ||
+                freshExpansion.results.length >
+                  (readerExpansion?.results.length ?? 0)
+              ) {
+                readerText = freshReaderText;
+                readerExpansion = freshExpansion;
+              }
+            } else {
+              console.log(
+                "[AIShopping] V34.CORE164 Ceneo tiny-reader fresh retry unavailable:",
+                candidate.url,
+                "initialLength=",
+                readerText.length,
+                "freshLength=",
+                freshReaderText.length
+              );
+            }
+          } else if (
+            readerText &&
+            readerText.length < 1_200 &&
+            !readerExpansion?.foundMerchantCards &&
+            protectPreciseTechVerifierBudget
+          ) {
+            console.log(
+              "[AIShopping] V34.CORE165 Ceneo tiny-reader fresh retry skipped to protect verifier budget:",
+              candidate.name,
+              "readerLength=",
+              readerText.length,
+              "retailerHosts=",
+              preciseTechRetailerHosts.size,
+              "remainingMs=",
+              freshReaderRemaining
+            );
+          }
+
+          if (
+            readerText &&
+            !isBlockedOrChallengePage(readerText) &&
+            readerExpansion
+          ) {
             if (
               readerExpansion.foundMerchantCards ||
               readerExpansion.results.length > expansion.results.length
@@ -39641,6 +39979,119 @@ function hasDeferredRetailerModelBridgeVerificationPressure(
   );
 }
 
+function getV34Core164ExplicitCompetingTitleBrand(
+  result: SearchResult,
+  parsed: ParsedQuery
+): string {
+  if (!parsed.brand || !isBrandExplicitlyRequested(parsed.brand, parsed.queryText)) {
+    return "";
+  }
+
+  const title = normalizeText(result.name);
+  if (!title) return "";
+
+  const requestedAliases = getUniversalRequestedBrandAliases(parsed)
+    .map(normalizeMatchText)
+    .filter(Boolean);
+  if (requestedAliases.some((alias) => universalEvidenceHasBoundedIdentityTerm(alias, title))) {
+    return "";
+  }
+
+  const inferred = normalizeMatchText(
+    inferOpenWorldBrandFromCapitalization(title) ?? detectBrand(title, parsed.category) ?? ""
+  );
+  if (!inferred) return "";
+  if (requestedAliases.some((alias) => universalEvidenceHasBoundedIdentityTerm(alias, inferred))) {
+    return "";
+  }
+
+  const identityTerms = new Set([
+    ...parsed.intent.identityTerms,
+    ...parsed.intent.qualifierTerms,
+  ].map(normalizeMatchText));
+  if (identityTerms.has(inferred) || OPEN_WORLD_NON_BRAND_CAPITALIZED_TOKENS.has(inferred)) {
+    return "";
+  }
+
+  // Fail closed only when the card itself already proves the HARD footprint.
+  // If page hydration is still needed for any HARD value, brand proof stays
+  // deferred to the normal verified-page logic.
+  if (!resultProvesHardCoverageRequirements(result, parsed)) return "";
+  return inferred;
+}
+
+function pruneV34Core164ExplicitCompetingBrandsBeforeVerification(
+  results: SearchResult[],
+  parsed: ParsedQuery
+): SearchResult[] {
+  const kept: SearchResult[] = [];
+  let rejected = 0;
+  for (const result of results) {
+    const competingBrand = getV34Core164ExplicitCompetingTitleBrand(result, parsed);
+    if (!competingBrand) {
+      kept.push(result);
+      continue;
+    }
+    rejected += 1;
+    console.log(
+      "[AIShopping] V34.CORE164 pre-verification explicit brand conflict:",
+      competingBrand,
+      result.url,
+      result.name
+    );
+  }
+  if (rejected > 0) {
+    console.log(
+      "[AIShopping] V34.CORE164 pre-verification brand prune:",
+      { rejected, kept: kept.length }
+    );
+  }
+  return kept;
+}
+
+function capV34Core164VerificationCandidatesBySourceHealth(
+  results: SearchResult[],
+  parsed: ParsedQuery,
+  limit: number
+): SearchResult[] {
+  const highConstraint = isV34Core164HighConstraintRetailIntent(parsed);
+  const perHost = new Map<string, number>();
+  const kept: SearchResult[] = [];
+  const health = getRetailerRequestHealthBucket(parsed)?.hosts;
+
+  for (const result of results) {
+    if (kept.length >= limit) break;
+    const host = getResultHostname(result.url) || "unknown";
+    const state = health?.get(host);
+    const unhealthyEmptyRetailer = Boolean(
+      result.source === "RetailerRescue" &&
+      state &&
+      state.products === 0 &&
+      (state.directBlockFailures >= 1 || state.directHardFailures >= 2 || state.adapterTimedOut)
+    );
+    const hostCap =
+      result.source === "CeneoMerchant"
+        ? limit
+        : unhealthyEmptyRetailer
+          ? 1
+          : highConstraint
+            ? 3
+            : limit;
+    const used = perHost.get(host) ?? 0;
+    if (used >= hostCap) continue;
+    perHost.set(host, used + 1);
+    kept.push(result);
+  }
+
+  if (kept.length !== results.length) {
+    console.log(
+      "[AIShopping] V34.CORE164 source-health verification cap:",
+      { before: results.length, after: kept.length, hosts: Object.fromEntries(perHost) }
+    );
+  }
+  return kept;
+}
+
 type StagedVerificationBudgetProfile = {
   slowMarketplaceVerificationPressure: boolean;
   deferredModelBridgeVerificationPressure: boolean;
@@ -40941,6 +41392,18 @@ function startZeroResultOpenWebPrefetch(parsed: ParsedQuery): ZeroResultOpenWebP
   if (!firstPartySeed) {
     state.settled = true;
     console.log("[AIShopping] V34.CORE120 request-start recovery prefetch skipped: no precise first-party seed");
+    return { query: null, kind: "none", promise: null, state };
+  }
+
+  if (
+    firstPartySeed &&
+    shouldV34Core164DeferRequestStartFirstPartyReaderPrefetch(parsed, firstPartySeed)
+  ) {
+    state.settled = true;
+    console.log(
+      "[AIShopping] V34.CORE164 request-start first-party reader deferred to recovery:",
+      firstPartySeed.url
+    );
     return { query: null, kind: "none", promise: null, state };
   }
 
@@ -43448,7 +43911,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE162 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE168 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -43525,7 +43988,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE162");
+    console.log("[AIShopping] NEW SEARCH V34.CORE168");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -43562,7 +44025,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const queries = buildSearchQueries(parsed);
 
-    // V34.CORE162 PRIORITY CENEO PREFLIGHT
+    // V34.CORE164 PRIORITY CENEO PREFLIGHT
     // Precise model/technology searches previously launched the exact Ceneo
     // RSS lookup into the same 20+ branch network burst as generic/targeted
     // Bing and retailer discovery. Live runs proved the lookup itself works,
@@ -43572,7 +44035,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (shouldRunCeneoPriorityPreflight(parsed)) {
       const ceneoPreflightStartedAt = Date.now();
       console.log(
-        "[AIShopping] V34.CORE162 Ceneo priority preflight start"
+        "[AIShopping] V34.CORE164 Ceneo priority preflight start"
       );
 
       const ceneoPreflightResults = await withDeadline(
@@ -43588,7 +44051,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
 
       console.log(
-        "[AIShopping] V34.CORE162 Ceneo priority preflight settled:",
+        "[AIShopping] V34.CORE164 Ceneo priority preflight settled:",
         {
           results: ceneoPreflightResults.length,
           elapsedMs: Date.now() - ceneoPreflightStartedAt,
@@ -43716,7 +44179,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     // V32.12 keeps a real verification window. When discovery was slower than
     // usual, verifying fewer strong/diverse candidates is better than preparing
     // twelve and letting every worker discover that the hard deadline is gone.
-    const verificationLimit =
+    const baseVerificationLimit =
       remainingBeforeCandidateSelection < MIN_USEFUL_VERIFICATION_WINDOW_MS
         ? Math.min(4, VERIFICATION_CANDIDATE_LIMIT)
         : remainingBeforeCandidateSelection < 5_500
@@ -43724,14 +44187,23 @@ export async function POST(request: Request): Promise<NextResponse> {
           : remainingBeforeCandidateSelection < 8_000
             ? Math.min(7, VERIFICATION_CANDIDATE_LIMIT)
             : VERIFICATION_CANDIDATE_LIMIT;
+    const hardRequirementCount = parsed.intent.required.filter(
+      (requirement) => requirement.hard
+    ).length;
+    const verificationLimit =
+      parsed.brand && hardRequirementCount >= 3
+        ? Math.min(6, baseVerificationLimit)
+        : parsed.brand && hardRequirementCount >= 2
+          ? Math.min(8, baseVerificationLimit)
+          : baseVerificationLimit;
 
     console.log("[AIShopping] V34.CORE120 verification budget before selection:", {
       remainingMs: remainingBeforeCandidateSelection,
       candidateLimit: verificationLimit,
     });
 
-    const verificationPool = pruneKnownOverBudgetBeforeVerification(
-      searchResults,
+    const verificationPool = pruneV34Core164ExplicitCompetingBrandsBeforeVerification(
+      pruneKnownOverBudgetBeforeVerification(searchResults, parsed),
       parsed
     );
 
@@ -43773,11 +44245,15 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
-    const limitedResults = selectDiverseSearchResults(
-      verificationPool,
-      verificationLimit,
+    const limitedResults = capV34Core164VerificationCandidatesBySourceHealth(
+      selectDiverseSearchResults(
+        verificationPool,
+        verificationLimit,
+        parsed,
+        rareHardGapReserveUrls
+      ),
       parsed,
-      rareHardGapReserveUrls
+      verificationLimit
     );
 
     console.log(
@@ -44094,10 +44570,14 @@ export async function POST(request: Request): Promise<NextResponse> {
               {
                 directAttempts: state.directAttempts,
                 directHardFailures: state.directHardFailures,
+                directBlockFailures: state.directBlockFailures,
                 directSuccesses: state.directSuccesses,
                 readerSuccesses: state.readerSuccesses,
+                readerFailures: state.readerFailures,
+                readerChallenges: state.readerChallenges,
                 products: state.products,
                 adapterTimedOut: state.adapterTimedOut,
+                lastDirectStatus: state.lastDirectStatus,
                 circuitBreakDirectCrawl: shouldCircuitBreakDirectRetailerCrawl(parsed, host),
               },
             ])
