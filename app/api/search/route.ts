@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE176 — COMMERCE COVERAGE AUDIT + STRICT 20 SECOND ORCHESTRATION
- * - V34.CORE176: adds zero-behavior-change coverage telemetry that separates configured commerce domains from direct catalog adapters, product-scoped index routes and directory/index-only coverage.
- * - V34.CORE176: logs query-local retail reachability (matched verticals, primary/secondary domains and direct-adapter participation) so future store expansion is driven by measured routing gaps rather than raw domain-count growth.
+ * V34.CORE179 — EMBEDDED FIRST-PARTY PRODUCT ROUTES + STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE179: adds a generic embedded-product-route fallback for opted-in SSR/SPA retailer catalogs whose transport HTML serializes concrete product URLs outside ordinary <a href> nodes.
+ * - V34.CORE179: adds Delkom as a brand-derived direct electronics adapter in the existing exact-tech fallback wave; no reader request or new serial phase is added, and final identity/HARD/condition/availability/listing-bound-price verification remains unchanged.
+ * - V34.CORE176: keeps coverage telemetry that separates configured commerce domains from direct catalog adapters, product-scoped index routes and directory/index-only coverage.
  * - V34.CORE175: precise-tech direct mesh now counts HARD-ready first-party hosts, not raw host count, before settling after the first wave. A retailer whose discovery card cannot prove every requested HARD requirement no longer suppresses the existing fallback wave.
  * - V34.CORE175: fallback uses only the existing bounded MediaExpert / RTV EURO AGD / OleOle direct adapters; no new crawler, no extra global deadline, and final identity/HARD/condition/availability/price gates remain unchanged.
  * - V34.CORE173: high-constraint branded retail searches protect an already discovered exact first-party HARD-complete priced card from being starved by speculative Ceneo merchant-reader expansion.
@@ -2338,6 +2339,12 @@ type DirectRetailerCatalogAdapter = {
   maxSearchUrls?: number;
   allowDeferredModelIdentityBridge?: boolean;
 
+  // CORE179: some SSR/SPA retailer catalogs serialize concrete product routes
+  // inside hydration payloads instead of rendering ordinary <a href> nodes in
+  // the transport HTML. This source-level flag enables a generic bounded route
+  // extractor; it does not trust identity, price or availability.
+  allowEmbeddedProductRouteFallback?: boolean;
+
   buildSearchUrls: (
     context: DirectRetailerCatalogSearchContext
   ) => readonly string[];
@@ -2767,6 +2774,28 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
           return slug ? `https://www.sferis.pl/wyszukaj/${encodeURIComponent(slug)}` : "";
         })
         .filter(Boolean),
+  },
+  {
+    // CORE179: Delkom exposes brand-owned first-party catalogs at
+    // /producenci/<brand>. Its transport HTML can serialize product /p/ routes
+    // in hydration data rather than ordinary anchors, so enable the generic
+    // embedded-route fallback. Every recovered child still passes the unchanged
+    // universal identity/HARD/condition/availability/price verifier.
+    host: "delkom.pl",
+    categories: [],
+    verticals: ["electronics_tech"],
+    allowEmbeddedProductRouteFallback: true,
+    retryTransientDirectOnce: true,
+    maxSearchUrls: 1,
+    buildSearchUrls: ({ brand }) => {
+      const brandSlug = normalizeMatchText(brand)
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 70);
+      return brandSlug.length >= 2
+        ? [`https://delkom.pl/producenci/${encodeURIComponent(brandSlug)}`]
+        : [];
+    },
   },
   {
     host: "rossmann.pl",
@@ -16927,6 +16956,111 @@ function parseRescuedRetailerLandingHtml(
 }
 
 
+function parseEmbeddedRetailerProductRoutesFromHtmlCore179(
+  htmlRaw: string,
+  pageUrl: string,
+  parsed: ParsedQuery,
+  expectedHostRaw: string,
+  allowDeferredModelIdentityBridge = false
+): SearchResult[] {
+  const expectedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
+  if (!htmlRaw || htmlRaw.length < 100) return [];
+
+  // Normalize the most common hydration/JSON escaping forms without executing
+  // page scripts. The extractor only recovers retailer-owned URLs; all product
+  // semantics remain with the existing matcher/verifier.
+  const hydrated = htmlRaw
+    .replace(/\\u002[fF]/g, "/")
+    .replace(/\\u003[aA]/g, ":")
+    .replace(/\\u002[dD]/g, "-")
+    .replace(/\\\//g, "/")
+    .replace(/&quot;|&#34;/gi, '"')
+    .replace(/&amp;/gi, "&");
+
+  const routeRe = /(?:https?:\/\/[^\s"'<>\\]+|\/(?:p|produkt|product|towar|oferta)\/[^\s"'<>\\]+)/giu;
+  const seen = new Set<string>();
+  const results: SearchResult[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = routeRe.exec(hydrated)) !== null && results.length < 48) {
+    let absoluteUrl = "";
+    try {
+      absoluteUrl = new URL(match[0], pageUrl).toString();
+    } catch {
+      continue;
+    }
+
+    const url = normalizeUrl(absoluteUrl);
+    if (!url || seen.has(url)) continue;
+    if (!retailerHostMatchesDomain(getResultHostname(url), expectedHost)) continue;
+    if (!looksLikeConcreteRescuedRetailerAnchorUrl(url, "", parsed)) continue;
+
+    let slugTitle = "";
+    try {
+      const slug = decodeURIComponent(
+        new URL(url).pathname.split("/").filter(Boolean).pop() ?? ""
+      );
+      slugTitle = cleanTitle(slug.replace(/[-_]+/g, " "));
+    } catch {}
+    if (slugTitle.length < 5) continue;
+
+    // Keep context strictly bounded around the SAME serialized route. It may
+    // provide a discovery price/availability hint, but final page verification
+    // is still mandatory before an offer can be returned.
+    const start = Math.max(0, match.index - 1_400);
+    const end = Math.min(hydrated.length, match.index + match[0].length + 2_800);
+    const rawContext = hydrated.slice(start, end);
+    const boundedCardText = normalizeText(
+      `${slugTitle} ${extractTagText(rawContext)} ${rawContext.replace(/[{}\[\]",:]+/g, " ")}`
+    ).slice(0, 8_000);
+
+    const candidate: SearchResult = {
+      url,
+      name: slugTitle,
+      snippet: boundedCardText.slice(0, 2_200),
+      source: "RetailerRescue",
+      searchRank: results.length,
+      retailerOwnedCardEvidence: true,
+      retailerCatalogCardPrice: extractFirstBoundedRetailerCatalogCardPrice(
+        boundedCardText,
+        slugTitle,
+        parsed.condition
+      ),
+      retailerCatalogCardAvailability: getAvailabilityFromHtml(boundedCardText),
+    };
+
+    if (!looksLikeRescuedRetailerProductCandidate(
+      candidate,
+      parsed,
+      expectedHost,
+      allowDeferredModelIdentityBridge
+    )) {
+      continue;
+    }
+
+    seen.add(url);
+    results.push(candidate);
+  }
+
+  const ranked = results
+    .map((result) => ({ result, priority: getSearchResultPriority(result, parsed) }))
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, 24)
+    .map(({ result }, searchRank) => ({ ...result, searchRank }));
+
+  if (ranked.length > 0) {
+    console.log(
+      "[AIShopping] V34.CORE179 embedded first-party product routes:",
+      expectedHost,
+      "products=",
+      ranked.length
+    );
+  }
+
+  return ranked;
+}
+
+
 function parseRescuedRetailerLandingMarkdown(
   markdown: string,
   pageUrl: string,
@@ -17752,6 +17886,7 @@ const V34_CORE164_EXACT_TECH_FALLBACK_DIRECT_HOSTS: readonly string[] = [
   "mediaexpert.pl",
   "euro.com.pl",
   "oleole.pl",
+  "delkom.pl",
 ];
 
 function isV34Core164HighConstraintRetailIntent(parsed: ParsedQuery): boolean {
@@ -18104,6 +18239,19 @@ async function searchDirectRetailerCatalogPages(
                     adapter.host
                   ),
                 ];
+
+                if (
+                  parsedCatalogProducts.length === 0 &&
+                  adapter.allowEmbeddedProductRouteFallback === true
+                ) {
+                  parsedCatalogProducts = parseEmbeddedRetailerProductRoutesFromHtmlCore179(
+                    fetched.html,
+                    finalUrl,
+                    parsed,
+                    adapter.host,
+                    Boolean(adapter.allowDeferredModelIdentityBridge)
+                  );
+                }
               }
 
               let jinaCatalogText = "";
@@ -18334,7 +18482,7 @@ async function searchDirectRetailerCatalogPagesCore164(
     {
       hosts: V34_CORE164_EXACT_TECH_FALLBACK_DIRECT_HOSTS,
       adapterBudgetMs: 1_650,
-      maxAdapters: 3,
+      maxAdapters: 4,
       maxUrlsPerAdapter: 1,
       disableReaderFallback: true,
       disableDirectRetries: true,
@@ -44320,7 +44468,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE176 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE179 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -44397,7 +44545,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE176");
+    console.log("[AIShopping] NEW SEARCH V34.CORE179");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
