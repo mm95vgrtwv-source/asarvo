@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE168 — STRICT 20 SECOND ORCHESTRATION
- * - V34.CORE168: stabilization rollback of the CORE167 sparse-coverage marketplace-index experiment after live regression showed no additional verified stores and slower total runtime.
- * - V34.CORE168: retains the proven CORE166 OLX/Allegro Lokalnie scheduling and bounded high-constraint cross-store expansion.
- * - V34.CORE168: no acceptance gate is relaxed; identity, brand, HARD requirements, condition, availability and price verification remain fail-closed and unchanged.
+ * V34.CORE175 — STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE175: precise-tech direct mesh now counts HARD-ready first-party hosts, not raw host count, before settling after the first wave. A retailer whose discovery card cannot prove every requested HARD requirement no longer suppresses the existing fallback wave.
+ * - V34.CORE175: fallback uses only the existing bounded MediaExpert / RTV EURO AGD / OleOle direct adapters; no new crawler, no extra global deadline, and final identity/HARD/condition/availability/price gates remain unchanged.
+ * - V34.CORE173: high-constraint branded retail searches protect an already discovered exact first-party HARD-complete priced card from being starved by speculative Ceneo merchant-reader expansion.
+ * - V34.CORE173: when that protection is active, Ceneo expansion is restricted to brand-explicit concrete product cards, capped at one card, and must preserve a bounded verifier reserve; final identity/HARD/condition/availability/price gates are unchanged.
+ * - V34.CORE172: keeps the stable CORE168 discovery/orchestration path and adds adaptive Ceneo multi-card merchant recovery only when precise-tech first-party coverage is sparse.
+ * - V34.CORE172: precise-tech normally expands one Ceneo product card; if fewer than three independent retailer hosts are available and that first Ceneo card exposes fewer than three merchant stores, one secondary concrete Ceneo product card may be expanded inside the existing hard deadline.
+ * - V34.CORE172: no acceptance gate is relaxed; identity, brand, HARD requirements, condition, availability and listing-bound price verification remain fail-closed and unchanged.
  * - V34.CORE164: broad named-model tech intents (brand + multi-token identity + numeric generation) now enter the exact-tech two-wave mesh even when the numeric token is short, so discovery reader fallbacks are actually suppressed and Ceneo keeps reader priority.
  * - V34.CORE164: a suspiciously tiny successful Ceneo reader document gets one bounded fresh no-cache retry when deadline headroom remains; the unchanged scoped merchant parser still decides whether any seller row is trusted.
  * - V34.CORE164: the fresh-reader retry is Ceneo-product-page-only, single-shot, deadline-gated and never relaxes identity, HARD, condition, availability, row-local price or merchant checks.
@@ -14847,6 +14851,36 @@ function selectDiverseSearchResults(
     (result) => getResultHostname(result.url) !== "olx.pl"
   );
 
+  // V34.CORE172: keep a second concrete Ceneo product card available only when
+  // precise-tech discovery has fewer than three independent retailer hosts.
+  // This is portfolio scheduling only; the adaptive Ceneo verifier below still
+  // decides whether that second card is actually expanded.
+  const core172PreciseTechIntent = isV34Core164PreciseTechIntent(parsed);
+  const core172PreciseTechRetailerHosts = new Set(
+    eligibleResults
+      .filter((result) => {
+        if (result.source === "CeneoDirect" || result.source === "CeneoMerchant") {
+          return false;
+        }
+        const host = getResultHostname(result.url);
+        if (!host || host === "ceneo.pl") return false;
+        return !V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+          (marketplaceHost) => String(marketplaceHost) === host
+        );
+      })
+      .map((result) => getResultHostname(result.url))
+      .filter((host): host is string => Boolean(host))
+  );
+  const core172CeneoPortfolioPerHostLimit =
+    core172PreciseTechIntent && core172PreciseTechRetailerHosts.size < 3 ? 2 : 1;
+
+  if (core172PreciseTechIntent) {
+    console.log("[AIShopping] V34.CORE172 precise-tech Ceneo portfolio:", {
+      retailerHosts: core172PreciseTechRetailerHosts.size,
+      ceneoPerHostLimit: core172CeneoPortfolioPerHostLimit,
+    });
+  }
+
   const pushResult = (result: SearchResult, perHostLimit: number): boolean => {
     if (selected.length >= limit) return false;
 
@@ -14854,7 +14888,10 @@ function selectDiverseSearchResults(
     const count = hostCounts.get(host) ?? 0;
     let effectivePerHostLimit = perHostLimit;
     if (isV34Core164PreciseTechIntent(parsed) && host !== "unknown") {
-      effectivePerHostLimit = Math.min(effectivePerHostLimit, host === "ceneo.pl" ? 1 : 2);
+      effectivePerHostLimit = Math.min(
+        effectivePerHostLimit,
+        host === "ceneo.pl" ? core172CeneoPortfolioPerHostLimit : 2
+      );
       const health = getRetailerRequestHealthBucket(parsed)?.hosts.get(host);
       if (health?.adapterTimedOut && health.products === 0) {
         effectivePerHostLimit = Math.min(effectivePerHostLimit, 1);
@@ -15162,7 +15199,10 @@ function selectDiverseSearchResults(
       const count = hostCounts.get(host) ?? 0;
       let effectiveAbsolutePerHostLimit = absolutePerHostLimit;
       if (isV34Core164PreciseTechIntent(parsed) && host !== "unknown") {
-        effectiveAbsolutePerHostLimit = Math.min(effectiveAbsolutePerHostLimit, host === "ceneo.pl" ? 1 : 2);
+        effectiveAbsolutePerHostLimit = Math.min(
+          effectiveAbsolutePerHostLimit,
+          host === "ceneo.pl" ? core172CeneoPortfolioPerHostLimit : 2
+        );
         const health = getRetailerRequestHealthBucket(parsed)?.hosts.get(host);
         if (health?.adapterTimedOut && health.products === 0) {
           effectiveAbsolutePerHostLimit = Math.min(effectiveAbsolutePerHostLimit, 1);
@@ -18108,10 +18148,41 @@ async function searchDirectRetailerCatalogPagesCore164(
   const firstHosts = new Set(
     firstWave.map((result) => getResultHostname(result.url)).filter(Boolean)
   );
-  if (externalSignal?.aborted || firstHosts.size >= 3) {
+  const hardRequirements = parsed.intent.required.filter((requirement) => requirement.hard);
+  const firstHardReadyHosts = new Set(
+    firstWave
+      .filter((result) =>
+        hardRequirements.length === 0 ||
+        getTrustedPortfolioHardProofKeys(result, parsed).length === hardRequirements.length
+      )
+      .map((result) => getResultHostname(result.url))
+      .filter(Boolean)
+  );
+  const firstWaveCoverageReady =
+    hardRequirements.length === 0
+      ? firstHosts.size >= 3
+      : firstHardReadyHosts.size >= 3;
+
+  console.log(
+    "[AIShopping] V34.CORE175 exact-tech first-wave HARD-ready coverage:",
+    {
+      hosts: [...firstHosts],
+      hardReadyHosts: [...firstHardReadyHosts],
+      hardKeys: hardRequirements.map((requirement) => requirement.key),
+      results: firstWave.length,
+      elapsedMs: Date.now() - startedAt,
+    }
+  );
+
+  if (externalSignal?.aborted || firstWaveCoverageReady) {
     console.log(
-      "[AIShopping] V34.CORE164 exact-tech direct mesh settled after first wave:",
-      { hosts: [...firstHosts], results: firstWave.length, elapsedMs: Date.now() - startedAt }
+      "[AIShopping] V34.CORE175 exact-tech direct mesh settled after first wave:",
+      {
+        hosts: [...firstHosts],
+        hardReadyHosts: [...firstHardReadyHosts],
+        results: firstWave.length,
+        elapsedMs: Date.now() - startedAt,
+      }
     );
     return dedupeSearchResultsByUrl(firstWave);
   }
@@ -35311,19 +35382,109 @@ async function expandCeneoMerchantVerificationCandidates(
   parsed: ParsedQuery,
   hardDeadlineAt: number
 ): Promise<SearchResult[]> {
-  const ceneoExpansionLimit = isV34Core164PreciseTechIntent(parsed) ? 1 : 3;
-  const ceneoCandidates = results
-    .filter(
+  const preciseTechIntent = isV34Core164PreciseTechIntent(parsed);
+  const highConstraintRetailIntent = isV34Core164HighConstraintRetailIntent(parsed);
+  const requestedBrandAliases = getUniversalRequestedBrandAliases(parsed);
+
+  // V34.CORE173: a bounded first-party catalog card that already names the
+  // requested brand, passes universal identity, proves every HARD requirement
+  // and carries a listing-bound discovery price is the best verifier-budget
+  // anchor we can have before concrete-page verification. Do not let several
+  // speculative comparison-page readers consume the whole remaining window
+  // before that retailer page gets a worker.
+  const protectedHighConstraintRetailerCandidates = results.filter((result) => {
+    if (!highConstraintRetailIntent) return false;
+    if (result.source === "CeneoDirect" || result.source === "CeneoMerchant") return false;
+    if (result.retailerOwnedCardEvidence !== true) return false;
+
+    const host = getResultHostname(result.url);
+    if (!host || host === "ceneo.pl") return false;
+    if (
+      V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+        (marketplaceHost) => String(marketplaceHost) === host
+      )
+    ) {
+      return false;
+    }
+
+    const title = normalizeMatchText(result.name);
+    const brandExplicit =
+      requestedBrandAliases.length === 0 ||
+      requestedBrandAliases.some((alias) =>
+        phraseMorphologicallyMatches(alias, title) ||
+        automotiveLexicalTermMatches(alias, title)
+      );
+    if (!brandExplicit) return false;
+
+    const match = evaluateUniversalProductMatch(
+      result.name,
+      result.snippet,
+      result.url,
+      parsed,
+      "discovery",
+      result.source
+    );
+    if (!match.pass) return false;
+    if (getTrustedPortfolioHardCoverageScore(result, parsed) < 10_000) return false;
+
+    const discoveryPrice = getSilentDiscoveryPrice(result, parsed);
+    return discoveryPrice.price !== null && Boolean(discoveryPrice.currency);
+  });
+
+  const protectHighConstraintRetailerVerifierBudget =
+    highConstraintRetailIntent && protectedHighConstraintRetailerCandidates.length > 0;
+  const core173VerifierReserveMs = protectHighConstraintRetailerVerifierBudget ? 4_200 : 0;
+
+  const rawCeneoCandidatePool = dedupeSearchResultsByUrl(
+    results.filter(
       (result) =>
         result.source === "CeneoDirect" &&
         /^https?:\/\/(?:www\.)?ceneo\.pl\/\d+(?:\/|$)/iu.test(result.url)
     )
-    .sort(
-      (a, b) =>
-        getSearchResultPriority(b, parsed) - getSearchResultPriority(a, parsed) ||
-        a.searchRank - b.searchRank
-    )
-    .slice(0, ceneoExpansionLimit);
+  ).sort(
+    (a, b) =>
+      getSearchResultPriority(b, parsed) - getSearchResultPriority(a, parsed) ||
+      a.searchRank - b.searchRank
+  );
+
+  // When an exact first-party anchor already proves the full requested bundle,
+  // an anonymous Ceneo title that omits the requested brand is not worth a
+  // globally throttled reader slot. This is scheduling-only and does not make
+  // any Ceneo result easier to accept.
+  const ceneoCandidatePool = protectHighConstraintRetailerVerifierBudget
+    ? rawCeneoCandidatePool.filter((candidate) => {
+        const title = normalizeMatchText(candidate.name);
+        return requestedBrandAliases.some((alias) =>
+          phraseMorphologicallyMatches(alias, title) ||
+          automotiveLexicalTermMatches(alias, title)
+        );
+      })
+    : rawCeneoCandidatePool;
+
+  if (protectHighConstraintRetailerVerifierBudget) {
+    console.log(
+      "[AIShopping] V34.CORE173 high-constraint retailer verifier reserve:",
+      {
+        protectedRetailerHosts: Array.from(
+          new Set(
+            protectedHighConstraintRetailerCandidates
+              .map((result) => getResultHostname(result.url))
+              .filter(Boolean)
+          )
+        ),
+        rawCeneoCards: rawCeneoCandidatePool.length,
+        brandExplicitCeneoCards: ceneoCandidatePool.length,
+        reserveMs: core173VerifierReserveMs,
+      }
+    );
+  }
+
+  const ceneoExpansionLimit = preciseTechIntent
+    ? 1
+    : protectHighConstraintRetailerVerifierBudget
+      ? 1
+      : 3;
+  const ceneoCandidates = ceneoCandidatePool.slice(0, ceneoExpansionLimit);
 
   if (ceneoCandidates.length === 0) return results;
 
@@ -35352,20 +35513,44 @@ async function expandCeneoMerchantVerificationCandidates(
       .filter((host): host is string => Boolean(host))
   );
   const protectPreciseTechVerifierBudget =
-    isV34Core164PreciseTechIntent(parsed) && preciseTechRetailerHosts.size >= 3;
+    preciseTechIntent && preciseTechRetailerHosts.size >= 3;
 
   const remaining = hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
-  if (remaining < 2_200) return results;
+  if (
+    remaining < 2_200 ||
+    (protectHighConstraintRetailerVerifierBudget &&
+      remaining < core173VerifierReserveMs + 1_550)
+  ) {
+    if (protectHighConstraintRetailerVerifierBudget) {
+      console.log(
+        "[AIShopping] V34.CORE173 Ceneo expansion skipped to preserve retailer verifier:",
+        { remainingMs: remaining, reserveMs: core173VerifierReserveMs }
+      );
+    }
+    return results;
+  }
 
   const expansionByUrl = new Map<string, CeneoMerchantExpansion>();
 
-  await Promise.all(
-    ceneoCandidates.map(async (candidate) => {
+  const expandCeneoCandidate = async (candidate: SearchResult): Promise<void> => {
       const candidateRemaining =
         hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
-      if (candidateRemaining < 1_600) return;
+      if (
+        candidateRemaining < 1_600 ||
+        (protectHighConstraintRetailerVerifierBudget &&
+          candidateRemaining < core173VerifierReserveMs + 1_550)
+      ) {
+        return;
+      }
 
-      const timeoutMs = Math.max(1_200, Math.min(2_800, candidateRemaining - 450));
+      const candidateExpansionHeadroom = Math.max(
+        0,
+        candidateRemaining - core173VerifierReserveMs
+      );
+      const timeoutMs = Math.max(
+        1_200,
+        Math.min(2_800, candidateExpansionHeadroom - 450)
+      );
       const page = await fetchHtml(candidate.url, timeoutMs);
       if (!page || page.status >= 400 || !page.html || isBlockedOrChallengePage(page.html)) {
         console.log(
@@ -35393,10 +35578,17 @@ async function expandCeneoMerchantVerificationCandidates(
       if (!expansion.foundMerchantCards) {
         const readerRemaining =
           hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
-        if (readerRemaining >= 2_000) {
+        const readerExpansionHeadroom = Math.max(
+          0,
+          readerRemaining - core173VerifierReserveMs
+        );
+        if (readerExpansionHeadroom >= 1_700) {
           const readerTimeoutMs = Math.max(
-            1_500,
-            Math.min(3_200, readerRemaining - 500)
+            1_300,
+            Math.min(
+              protectHighConstraintRetailerVerifierBudget ? 2_200 : 3_200,
+              readerExpansionHeadroom - 400
+            )
           );
           let readerText = await fetchViaJina(
             page.finalUrl || candidate.url,
@@ -35426,7 +35618,8 @@ async function expandCeneoMerchantVerificationCandidates(
             readerText.length < 1_200 &&
             !readerExpansion?.foundMerchantCards &&
             freshReaderRemaining >= 2_600 &&
-            !protectPreciseTechVerifierBudget
+            !protectPreciseTechVerifierBudget &&
+            !protectHighConstraintRetailerVerifierBudget
           ) {
             const freshTimeoutMs = Math.max(
               1_500,
@@ -35542,12 +35735,92 @@ async function expandCeneoMerchantVerificationCandidates(
         "eligible=",
         expansion.results.length
       );
-    })
-  );
+  };
+
+  await Promise.all(ceneoCandidates.map(expandCeneoCandidate));
+
+  let core172ReservedSecondaryCeneoUrl: string | null = null;
+
+  // V34.CORE172 ADAPTIVE SECOND CENEO PRODUCT CARD.
+  // Precise-tech normally keeps the proven single-card behavior. When live
+  // transport leaves fewer than three independent first-party retailer hosts
+  // and the strongest Ceneo product card itself exposes fewer than three
+  // concrete merchant stores, spend one bounded attempt on the next concrete
+  // Ceneo product card. This is variant-agnostic and still uses the unchanged
+  // row-local identity/HARD/price verifier for every merchant.
+  if (
+    preciseTechIntent &&
+    preciseTechRetailerHosts.size < 3 &&
+    ceneoCandidatePool.length > 1
+  ) {
+    const primaryCandidate = ceneoCandidates[0];
+    const primaryExpansion = primaryCandidate
+      ? expansionByUrl.get(normalizeUrl(primaryCandidate.url))
+      : undefined;
+    const primaryMerchantStores = new Set(
+      (primaryExpansion?.results ?? [])
+        .map((result) =>
+          normalizeText(result.ceneoMerchantOffer?.shopName ?? getResultHostname(result.url))
+            .toLowerCase()
+        )
+        .filter(Boolean)
+    );
+    const secondaryCandidate = ceneoCandidatePool.find((candidate) =>
+      !ceneoCandidates.some(
+        (primary) => normalizeUrl(primary.url) === normalizeUrl(candidate.url)
+      )
+    );
+    const secondaryRemaining =
+      hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
+    core172ReservedSecondaryCeneoUrl = secondaryCandidate
+      ? normalizeUrl(secondaryCandidate.url)
+      : null;
+
+    if (
+      secondaryCandidate &&
+      primaryMerchantStores.size < 3 &&
+      secondaryRemaining >= 1_800
+    ) {
+      console.log(
+        "[AIShopping] V34.CORE172 adaptive secondary Ceneo card:",
+        {
+          retailerHosts: preciseTechRetailerHosts.size,
+          primaryMerchantStores: primaryMerchantStores.size,
+          secondary: secondaryCandidate.name,
+          remainingMs: secondaryRemaining,
+        }
+      );
+      await expandCeneoCandidate(secondaryCandidate);
+    } else {
+      console.log(
+        "[AIShopping] V34.CORE172 secondary Ceneo card skipped:",
+        {
+          retailerHosts: preciseTechRetailerHosts.size,
+          primaryMerchantStores: primaryMerchantStores.size,
+          hasSecondary: Boolean(secondaryCandidate),
+          remainingMs: secondaryRemaining,
+        }
+      );
+    }
+  }
 
   const out: SearchResult[] = [];
   for (const result of results) {
-    const expansion = expansionByUrl.get(normalizeUrl(result.url));
+    const normalizedResultUrl = normalizeUrl(result.url);
+    const expansion = expansionByUrl.get(normalizedResultUrl);
+
+    // The second precise-tech Ceneo card is a recovery reserve, not another
+    // aggregate shopping result. If it was unnecessary or failed to expose
+    // concrete merchant rows, drop only this extra reserved card and preserve
+    // the historical primary Ceneo fallback behavior unchanged.
+    if (
+      core172ReservedSecondaryCeneoUrl &&
+      normalizedResultUrl === core172ReservedSecondaryCeneoUrl &&
+      (!expansion || !expansion.foundMerchantCards)
+    ) {
+      continue;
+    }
+
     if (!expansion) {
       out.push(result);
       continue;
@@ -43911,7 +44184,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE168 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE175 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -43988,7 +44261,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE168");
+    console.log("[AIShopping] NEW SEARCH V34.CORE175");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
