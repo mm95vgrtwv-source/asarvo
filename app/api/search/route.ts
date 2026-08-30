@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE175 — STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE176 — COMMERCE COVERAGE AUDIT + STRICT 20 SECOND ORCHESTRATION
+ * - V34.CORE176: adds zero-behavior-change coverage telemetry that separates configured commerce domains from direct catalog adapters, product-scoped index routes and directory/index-only coverage.
+ * - V34.CORE176: logs query-local retail reachability (matched verticals, primary/secondary domains and direct-adapter participation) so future store expansion is driven by measured routing gaps rather than raw domain-count growth.
  * - V34.CORE175: precise-tech direct mesh now counts HARD-ready first-party hosts, not raw host count, before settling after the first wave. A retailer whose discovery card cannot prove every requested HARD requirement no longer suppresses the existing fallback wave.
  * - V34.CORE175: fallback uses only the existing bounded MediaExpert / RTV EURO AGD / OleOle direct adapters; no new crawler, no extra global deadline, and final identity/HARD/condition/availability/price gates remain unchanged.
  * - V34.CORE173: high-constraint branded retail searches protect an already discovered exact first-party HARD-complete priced card from being starved by speculative Ceneo merchant-reader expansion.
@@ -1956,6 +1958,140 @@ function getConfiguredCommerceDomains(): string[] {
   ])).sort();
 
   return V32_CONFIGURED_COMMERCE_DOMAINS_CACHE;
+}
+
+
+type V34Core176VerticalCoverageAudit = {
+  id: string;
+  configuredDomains: number;
+  primaryDomains: number;
+  directAdapterDomains: number;
+  primaryDirectAdapterDomains: number;
+  productScopedDomains: number;
+  directoryIndexOnlyDomains: number;
+};
+
+type V34Core176StaticCoverageAudit = {
+  configuredDomains: number;
+  directAdapterDomains: number;
+  productScopedDomains: number;
+  productScopedWithoutDirectAdapter: number;
+  structuredRetailerRouteDomains: number;
+  verticalDirectoryDomains: number;
+  verticalDirectoryWithoutDirectAdapter: number;
+  directoryIndexOnlyDomains: number;
+  outsideVerticalDomains: number;
+  universalMarketplaceDomains: number;
+  verticals: V34Core176VerticalCoverageAudit[];
+};
+
+let V34_CORE176_STATIC_COVERAGE_AUDIT_CACHE: V34Core176StaticCoverageAudit | null = null;
+
+function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
+  if (V34_CORE176_STATIC_COVERAGE_AUDIT_CACHE) {
+    return V34_CORE176_STATIC_COVERAGE_AUDIT_CACHE;
+  }
+
+  const configured = getConfiguredCommerceDomains();
+  const configuredSet = new Set(configured);
+  const directAdapterSet = new Set(
+    V28_DIRECT_RETAILER_CATALOG_ADAPTERS.map((adapter) => adapter.host)
+      .filter((host) => configuredSet.has(host))
+  );
+  const productScopedSet = new Set(
+    Object.keys(V28_RETAILER_PRODUCT_SITE_SCOPES)
+      .filter((host) => configuredSet.has(host))
+  );
+  const verticalDirectorySet = new Set(
+    V28_RETAIL_VERTICAL_PROFILES.flatMap((profile) => profile.domains)
+      .filter((host) => configuredSet.has(host))
+  );
+  const structuredRetailerRouteSet = new Set([
+    ...directAdapterSet,
+    ...productScopedSet,
+  ]);
+
+  const verticals = V28_RETAIL_VERTICAL_PROFILES.map((profile) => {
+    const domains = Array.from(new Set(profile.domains))
+      .filter((host) => configuredSet.has(host));
+    const primaryDomains = getRetailVerticalPrimaryDomains(profile)
+      .filter((host) => configuredSet.has(host));
+    const directAdapterDomains = domains.filter((host) => directAdapterSet.has(host));
+    const primaryDirectAdapterDomains = primaryDomains.filter((host) => directAdapterSet.has(host));
+    const productScopedDomains = domains.filter((host) => productScopedSet.has(host));
+    const directoryIndexOnlyDomains = domains.filter(
+      (host) => !directAdapterSet.has(host) && !productScopedSet.has(host)
+    );
+
+    return {
+      id: profile.id,
+      configuredDomains: domains.length,
+      primaryDomains: primaryDomains.length,
+      directAdapterDomains: directAdapterDomains.length,
+      primaryDirectAdapterDomains: primaryDirectAdapterDomains.length,
+      productScopedDomains: productScopedDomains.length,
+      directoryIndexOnlyDomains: directoryIndexOnlyDomains.length,
+    };
+  });
+
+  const audit: V34Core176StaticCoverageAudit = {
+    configuredDomains: configured.length,
+    directAdapterDomains: directAdapterSet.size,
+    productScopedDomains: productScopedSet.size,
+    productScopedWithoutDirectAdapter: [...productScopedSet]
+      .filter((host) => !directAdapterSet.has(host)).length,
+    structuredRetailerRouteDomains: structuredRetailerRouteSet.size,
+    verticalDirectoryDomains: verticalDirectorySet.size,
+    verticalDirectoryWithoutDirectAdapter: [...verticalDirectorySet]
+      .filter((host) => !directAdapterSet.has(host)).length,
+    directoryIndexOnlyDomains: [...verticalDirectorySet]
+      .filter((host) => !directAdapterSet.has(host) && !productScopedSet.has(host)).length,
+    outsideVerticalDomains: configured.filter((host) => !verticalDirectorySet.has(host)).length,
+    universalMarketplaceDomains: V28_UNIVERSAL_MARKETPLACE_DOMAINS.length,
+    verticals,
+  };
+
+  V34_CORE176_STATIC_COVERAGE_AUDIT_CACHE = audit;
+  return audit;
+}
+
+function getV34Core176QueryCoverageAudit(parsed: ParsedQuery) {
+  const matches = getRetailVerticalMatches(parsed);
+  const directAdapterSet = new Set(
+    V28_DIRECT_RETAILER_CATALOG_ADAPTERS.map((adapter) => adapter.host)
+  );
+  const productScopedSet = new Set(Object.keys(V28_RETAILER_PRODUCT_SITE_SCOPES));
+  const primaryDomains = getIntentPrimaryRetailerDomains(parsed);
+  const targetedPrimaryDomains = getTargetedPrimaryRetailerDiscoveryDomains(parsed);
+  const secondaryLimit = getIntentSecondaryRetailerCoverageLimit(parsed);
+  const secondaryDomains = secondaryLimit > 0
+    ? getIntentSecondaryRetailerDomains(parsed, secondaryLimit)
+    : [];
+  const routedDomains = Array.from(new Set([
+    ...targetedPrimaryDomains,
+    ...secondaryDomains,
+  ]));
+
+  return {
+    matchedVerticals: matches.map(({ profile, score }) => ({
+      id: profile.id,
+      score,
+      configuredDomains: profile.domains.length,
+      primaryDomains: getRetailVerticalPrimaryDomains(profile).length,
+      directAdapterDomains: profile.domains.filter((host) => directAdapterSet.has(host)).length,
+      productScopedDomains: profile.domains.filter((host) => productScopedSet.has(host)).length,
+    })),
+    primaryDomains,
+    targetedPrimaryDomains,
+    secondaryLimit,
+    secondaryDomains,
+    routedDomains,
+    routedDirectAdapterDomains: routedDomains.filter((host) => directAdapterSet.has(host)),
+    routedProductScopedDomains: routedDomains.filter((host) => productScopedSet.has(host)),
+    routedDirectoryIndexOnlyDomains: routedDomains.filter(
+      (host) => !directAdapterSet.has(host) && !productScopedSet.has(host)
+    ),
+  };
 }
 
 function isConfiguredCommerceDomain(urlRaw: string): boolean {
@@ -44184,7 +44320,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE175 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE176 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -44261,7 +44397,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE175");
+    console.log("[AIShopping] NEW SEARCH V34.CORE176");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -44273,6 +44409,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     console.log(
       "[AIShopping] V34.CORE120 configured commerce domains:",
       getConfiguredCommerceDomains().length
+    );
+    console.log(
+      "[AIShopping] V34.CORE176 static commerce coverage audit:",
+      getV34Core176StaticCoverageAudit()
+    );
+    console.log(
+      "[AIShopping] V34.CORE176 query retail coverage audit:",
+      getV34Core176QueryCoverageAudit(parsed)
     );
     console.log("[AIShopping] V34.CORE120 universal intent:", {
       productPhrase: parsed.intent.productPhrase,
