@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE179 — EMBEDDED FIRST-PARTY PRODUCT ROUTES + STRICT 20 SECOND ORCHESTRATION
+ * V34.CORE181 — DETERMINISTIC IDENTIFIER STORE BRIDGE + STORE IDENTITY NORMALIZATION
+ * - V34.CORE181: keeps CORE179 as the transport baseline and adds zero-search-request deterministic product-route hypotheses for stores whose concrete product URL is derived from a strong manufacturer identifier already exposed by verified-shape first-party discovery. Senetic is the first route family (/product/<MPN>); final page verification remains mandatory.
+ * - V34.CORE181: canonicalizes common retailer aliases for unique-store counting/display without changing identity/HARD/condition/availability/listing-bound-price acceptance or the strict 20 second orchestration budget.
  * - V34.CORE179: adds a generic embedded-product-route fallback for opted-in SSR/SPA retailer catalogs whose transport HTML serializes concrete product URLs outside ordinary <a href> nodes.
  * - V34.CORE179: adds Delkom as a brand-derived direct electronics adapter in the existing exact-tech fallback wave; no reader request or new serial phase is added, and final identity/HARD/condition/availability/listing-bound-price verification remains unchanged.
  * - V34.CORE176: keeps coverage telemetry that separates configured commerce domains from direct catalog adapters, product-scoped index routes and directory/index-only coverage.
@@ -1962,6 +1964,15 @@ function getConfiguredCommerceDomains(): string[] {
 }
 
 
+
+// CORE181: deterministic product routes do not require a store-search request.
+// A candidate URL is generated only from a strong manufacturer identifier that
+// was already found on a matching first-party product card. The final page is
+// still fetched and verified normally before it can become an offer.
+const V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTE_HOSTS: readonly string[] = [
+  "senetic.pl",
+];
+
 type V34Core176VerticalCoverageAudit = {
   id: string;
   configuredDomains: number;
@@ -1969,6 +1980,7 @@ type V34Core176VerticalCoverageAudit = {
   directAdapterDomains: number;
   primaryDirectAdapterDomains: number;
   productScopedDomains: number;
+  identifierRouteDomains: number;
   directoryIndexOnlyDomains: number;
 };
 
@@ -1977,6 +1989,7 @@ type V34Core176StaticCoverageAudit = {
   directAdapterDomains: number;
   productScopedDomains: number;
   productScopedWithoutDirectAdapter: number;
+  identifierRouteDomains: number;
   structuredRetailerRouteDomains: number;
   verticalDirectoryDomains: number;
   verticalDirectoryWithoutDirectAdapter: number;
@@ -2007,9 +2020,14 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
     V28_RETAIL_VERTICAL_PROFILES.flatMap((profile) => profile.domains)
       .filter((host) => configuredSet.has(host))
   );
+  const identifierRouteSet = new Set(
+    V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTE_HOSTS
+      .filter((host) => configuredSet.has(host))
+  );
   const structuredRetailerRouteSet = new Set([
     ...directAdapterSet,
     ...productScopedSet,
+    ...identifierRouteSet,
   ]);
 
   const verticals = V28_RETAIL_VERTICAL_PROFILES.map((profile) => {
@@ -2020,8 +2038,12 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
     const directAdapterDomains = domains.filter((host) => directAdapterSet.has(host));
     const primaryDirectAdapterDomains = primaryDomains.filter((host) => directAdapterSet.has(host));
     const productScopedDomains = domains.filter((host) => productScopedSet.has(host));
+    const identifierRouteDomains = domains.filter((host) => identifierRouteSet.has(host));
     const directoryIndexOnlyDomains = domains.filter(
-      (host) => !directAdapterSet.has(host) && !productScopedSet.has(host)
+      (host) =>
+        !directAdapterSet.has(host) &&
+        !productScopedSet.has(host) &&
+        !identifierRouteSet.has(host)
     );
 
     return {
@@ -2031,6 +2053,7 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
       directAdapterDomains: directAdapterDomains.length,
       primaryDirectAdapterDomains: primaryDirectAdapterDomains.length,
       productScopedDomains: productScopedDomains.length,
+      identifierRouteDomains: identifierRouteDomains.length,
       directoryIndexOnlyDomains: directoryIndexOnlyDomains.length,
     };
   });
@@ -2041,12 +2064,18 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
     productScopedDomains: productScopedSet.size,
     productScopedWithoutDirectAdapter: [...productScopedSet]
       .filter((host) => !directAdapterSet.has(host)).length,
+    identifierRouteDomains: identifierRouteSet.size,
     structuredRetailerRouteDomains: structuredRetailerRouteSet.size,
     verticalDirectoryDomains: verticalDirectorySet.size,
     verticalDirectoryWithoutDirectAdapter: [...verticalDirectorySet]
       .filter((host) => !directAdapterSet.has(host)).length,
     directoryIndexOnlyDomains: [...verticalDirectorySet]
-      .filter((host) => !directAdapterSet.has(host) && !productScopedSet.has(host)).length,
+      .filter(
+        (host) =>
+          !directAdapterSet.has(host) &&
+          !productScopedSet.has(host) &&
+          !identifierRouteSet.has(host)
+      ).length,
     outsideVerticalDomains: configured.filter((host) => !verticalDirectorySet.has(host)).length,
     universalMarketplaceDomains: V28_UNIVERSAL_MARKETPLACE_DOMAINS.length,
     verticals,
@@ -2062,6 +2091,7 @@ function getV34Core176QueryCoverageAudit(parsed: ParsedQuery) {
     V28_DIRECT_RETAILER_CATALOG_ADAPTERS.map((adapter) => adapter.host)
   );
   const productScopedSet = new Set(Object.keys(V28_RETAILER_PRODUCT_SITE_SCOPES));
+  const identifierRouteSet = new Set(V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTE_HOSTS);
   const primaryDomains = getIntentPrimaryRetailerDomains(parsed);
   const targetedPrimaryDomains = getTargetedPrimaryRetailerDiscoveryDomains(parsed);
   const secondaryLimit = getIntentSecondaryRetailerCoverageLimit(parsed);
@@ -2081,6 +2111,7 @@ function getV34Core176QueryCoverageAudit(parsed: ParsedQuery) {
       primaryDomains: getRetailVerticalPrimaryDomains(profile).length,
       directAdapterDomains: profile.domains.filter((host) => directAdapterSet.has(host)).length,
       productScopedDomains: profile.domains.filter((host) => productScopedSet.has(host)).length,
+      identifierRouteDomains: profile.domains.filter((host) => identifierRouteSet.has(host)).length,
     })),
     primaryDomains,
     targetedPrimaryDomains,
@@ -2089,8 +2120,12 @@ function getV34Core176QueryCoverageAudit(parsed: ParsedQuery) {
     routedDomains,
     routedDirectAdapterDomains: routedDomains.filter((host) => directAdapterSet.has(host)),
     routedProductScopedDomains: routedDomains.filter((host) => productScopedSet.has(host)),
+    routedIdentifierRouteDomains: routedDomains.filter((host) => identifierRouteSet.has(host)),
     routedDirectoryIndexOnlyDomains: routedDomains.filter(
-      (host) => !directAdapterSet.has(host) && !productScopedSet.has(host)
+      (host) =>
+        !directAdapterSet.has(host) &&
+        !productScopedSet.has(host) &&
+        !identifierRouteSet.has(host)
     ),
   };
 }
@@ -17889,6 +17924,136 @@ const V34_CORE164_EXACT_TECH_FALLBACK_DIRECT_HOSTS: readonly string[] = [
   "delkom.pl",
 ];
 
+type V34Core181IdentifierRoute = {
+  host: string;
+  verticals: readonly string[];
+  buildUrl: (identifier: string) => string;
+};
+
+const V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTES: readonly V34Core181IdentifierRoute[] = [
+  {
+    host: "senetic.pl",
+    verticals: ["electronics_tech"],
+    buildUrl: (identifier) =>
+      `https://www.senetic.pl/product/${encodeURIComponent(identifier)}`,
+  },
+];
+
+function extractV34Core181StrongManufacturerIdentifiers(
+  result: SearchResult
+): string[] {
+  const raw = `${result.name} ${result.snippet}`;
+  const values: string[] = [];
+
+  const add = (candidateRaw: string) => {
+    const candidate = candidateRaw
+      .toUpperCase()
+      .replace(/^[^A-Z0-9]+|[^A-Z0-9._\/-]+$/g, "")
+      .trim();
+    const compact = candidate.replace(/[^A-Z0-9]+/g, "");
+    const digitCount = (compact.match(/\d/g) ?? []).length;
+
+    // Manufacturer identifiers can be all-numeric with separators (for
+    // example vendor part numbers) or alpha-numeric. Require enough entropy
+    // that dimensions, years, capacities and short model generations do not
+    // become route hypotheses.
+    if (compact.length < 7 || compact.length > 32) return;
+    if (digitCount < 4) return;
+    if (/^(?:19|20)\d{2}$/.test(compact)) return;
+    if (/^\d+(?:GB|TB|MB|MAH|W|HZ|MM|CM)$/i.test(compact)) return;
+    if (!/[A-Z]/.test(compact) && !/[-._\/]/.test(candidate)) return;
+
+    values.push(candidate);
+  };
+
+  for (const match of raw.matchAll(/\(([A-Z0-9][A-Z0-9._\/-]{4,31})\)/giu)) {
+    add(match[1]);
+  }
+  for (const match of raw.matchAll(/\b([A-Z0-9]{2,10}-[A-Z0-9][A-Z0-9._\/-]{3,24})\b/giu)) {
+    add(match[1]);
+  }
+
+  return Array.from(new Set(values)).slice(0, 3);
+}
+
+function buildV34Core181DeterministicIdentifierBridgeCandidates(
+  firstPartyResults: SearchResult[],
+  parsed: ParsedQuery
+): SearchResult[] {
+  const matchedVerticals = new Set(
+    getRetailVerticalMatches(parsed).map(({ profile }) => profile.id)
+  );
+  const hardRequirements = parsed.intent.required.filter((requirement) => requirement.hard);
+
+  const donors = firstPartyResults
+    .filter((result) =>
+      isConfiguredCommerceDomain(result.url) &&
+      (
+        hardRequirements.length === 0 ||
+        getTrustedPortfolioHardProofKeys(result, parsed).length === hardRequirements.length
+      )
+    )
+    .map((result) => ({
+      result,
+      priority: getSearchResultPriority(result, parsed),
+      identifiers: extractV34Core181StrongManufacturerIdentifiers(result),
+    }))
+    .filter((item) => item.identifiers.length > 0)
+    .sort((a, b) => b.priority - a.priority);
+
+  if (donors.length === 0) return [];
+
+  const results: SearchResult[] = [];
+  const seen = new Set<string>();
+
+  for (const route of V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTES) {
+    if (!route.verticals.some((vertical) => matchedVerticals.has(vertical))) continue;
+
+    // One hypothesis per target store is enough. The purpose is store
+    // diversity, not duplicating every sibling MPN already present elsewhere.
+    for (const donor of donors) {
+      const identifier = donor.identifiers[0];
+      if (!identifier) continue;
+
+      const url = normalizeUrl(route.buildUrl(identifier));
+      if (!url || seen.has(url)) continue;
+
+      const candidate: SearchResult = {
+        url,
+        name: donor.result.name,
+        snippet: normalizeText(`manufacturer identifier ${identifier}`),
+        source: "RetailerRescue",
+        searchRank: results.length,
+      };
+
+      // This is only a route hypothesis. Do not mark it as retailer-owned card
+      // evidence and do not attach donor price/availability. The normal
+      // discovery matcher may keep it, but final product-page verification
+      // must establish all trusted facts on the target retailer.
+      if (!looksLikeRescuedRetailerProductCandidate(candidate, parsed, route.host)) {
+        continue;
+      }
+
+      seen.add(url);
+      results.push(candidate);
+      break;
+    }
+  }
+
+  if (results.length > 0) {
+    console.log(
+      "[AIShopping] V34.CORE181 deterministic identifier store bridge:",
+      results.map((result) => ({
+        host: getResultHostname(result.url),
+        url: result.url,
+        name: result.name,
+      }))
+    );
+  }
+
+  return results;
+}
+
 function isV34Core164HighConstraintRetailIntent(parsed: ParsedQuery): boolean {
   const hardCount = parsed.intent.required.filter((requirement) => requirement.hard).length;
   return Boolean(
@@ -18490,10 +18655,29 @@ async function searchDirectRetailerCatalogPagesCore164(
     }
   );
 
-  const combined = dedupeSearchResultsByUrl([...firstWave, ...secondWave]);
+  const identifierBridge = externalSignal?.aborted
+    ? []
+    : buildV34Core181DeterministicIdentifierBridgeCandidates(firstWave, parsed);
+  if (identifierBridge.length > 0) {
+    onPartialResults?.(identifierBridge);
+  }
+
+  const combined = dedupeSearchResultsByUrl([
+    ...firstWave,
+    ...secondWave,
+    ...identifierBridge,
+  ]);
   console.log(
     "[AIShopping] V34.CORE164 exact-tech direct mesh final:",
-    { firstWave: firstWave.length, secondWave: secondWave.length, uniqueHosts: new Set(combined.map((result) => getResultHostname(result.url)).filter(Boolean)).size, elapsedMs: Date.now() - startedAt }
+    {
+      firstWave: firstWave.length,
+      secondWave: secondWave.length,
+      identifierBridge: identifierBridge.length,
+      uniqueHosts: new Set(
+        combined.map((result) => getResultHostname(result.url)).filter(Boolean)
+      ).size,
+      elapsedMs: Date.now() - startedAt,
+    }
   );
   return combined;
 }
@@ -40688,7 +40872,46 @@ function getStagedVerificationBudgetProfile(
   };
 }
 
+type V34Core181CanonicalStoreIdentity = {
+  key: string;
+  display: string;
+};
+
+function getV34Core181CanonicalStoreIdentity(
+  rawStore: string
+): V34Core181CanonicalStoreIdentity | null {
+  const normalized = normalizeMatchText(rawStore)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\b(?:www|sklep|store)\b/g, " ")
+    .replace(/\bpl\b$/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const aliases: Record<string, V34Core181CanonicalStoreIdentity> = {
+    "mediamarkt": { key: "mediamarkt", display: "MediaMarkt" },
+    "media markt": { key: "mediamarkt", display: "MediaMarkt" },
+    "mediaexpert": { key: "media expert", display: "Media Expert" },
+    "media expert": { key: "media expert", display: "Media Expert" },
+    "euro com": { key: "rtv euro agd", display: "RTV EURO AGD" },
+    "rtv euro agd": { key: "rtv euro agd", display: "RTV EURO AGD" },
+    "oleole": { key: "oleole", display: "OleOle!" },
+    "neonet": { key: "neonet", display: "Neonet" },
+    "morele": { key: "morele", display: "Morele" },
+    "morele net": { key: "morele", display: "Morele" },
+    "delkom": { key: "delkom", display: "Delkom" },
+    "senetic": { key: "senetic", display: "Senetic" },
+    "x kom": { key: "x kom", display: "x-kom" },
+    "kr system": { key: "kr system", display: "KR System" },
+    "krsystem": { key: "kr system", display: "KR System" },
+  };
+
+  return aliases[normalized] ?? null;
+}
+
 function normalizeOfferStoreKey(offer: Offer): string {
+  const canonical = getV34Core181CanonicalStoreIdentity(offer.store);
+  if (canonical) return canonical.key;
+
   const normalizedStore = normalizeMatchText(offer.store)
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .replace(/\b(?:www|sklep|store)\b/g, " ")
@@ -40698,6 +40921,15 @@ function normalizeOfferStoreKey(offer: Offer): string {
 
   if (normalizedStore) return normalizedStore;
   return getResultHostname(offer.url) || "unknown";
+}
+
+function canonicalizeOfferStoreDisplayV34Core181(offer: Offer): Offer {
+  const canonical = getV34Core181CanonicalStoreIdentity(offer.store);
+  if (!canonical || canonical.display === offer.store) return offer;
+  return {
+    ...offer,
+    store: canonical.display,
+  };
 }
 
 function isPeerMarketplaceOffer(offer: Offer): boolean {
@@ -44468,7 +44700,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE179 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE181 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -44545,7 +44777,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE179");
+    console.log("[AIShopping] NEW SEARCH V34.CORE181");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -45065,6 +45297,9 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     offers = deduplicateOffers(offers, parsed);
     offers = scoreAndRankOffers(offers, parsed);
+    // CORE181: canonicalize only the merchant display after verification and
+    // ranking. This merges cosmetic aliases without creating/trusting offers.
+    offers = offers.map(canonicalizeOfferStoreDisplayV34Core181);
 
     console.log("[AIShopping] V34.CORE120 coverage final:", {
       verifiedOffers: offers.length,
