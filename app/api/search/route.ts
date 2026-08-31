@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 /**
+ * V34.CORE189 — SATURATED SAME-PAYLOAD CENEO DEPTH
+ * - V34.CORE189: precise-tech Ceneo merchant parsing first keeps the stable CORE187 depth of 12; only when that SAME already-fetched payload actually saturates all 12 eligible rows, 3+ independent first-party retailer hosts exist, and at least 2.8s of verifier headroom remains, the same payload is reparsed locally up to 16 rows.
+ * - V34.CORE189: the 13–16 merchant window adds zero network requests and zero reader retries; it is post-fetch, saturation-gated and deadline-aware, so transport/first-party verification budget is unchanged.
+ * - V34.CORE189: every deeper row still passes the unchanged row-local product identity, brand, HARD, condition, price, shipping and canonical-store dedupe gates; non-tech searches keep their existing depth.
  * V34.CORE187 — PARALLEL DIRECT CENEO RECOVERY + READER LATENCY CONTAINMENT
  * - V34.CORE187: precise-tech Ceneo pages may expose up to 12 independently parsed merchant rows; every row still passes the unchanged standalone identity, brand, HARD, condition and price gates.
  * - V34.CORE187: when precise-tech already has 3+ first-party retailer hosts and a second concrete Ceneo product card exists, that second card gets one direct-HTML-only merchant attempt in parallel with the primary card, before a slow primary reader can consume verifier budget.
@@ -21257,7 +21261,8 @@ function parseCeneoMerchantOffersFromHtml(
   productNameRaw: string,
   productPageUrl: string,
   parsed: ParsedQuery,
-  searchRankBase: number
+  searchRankBase: number,
+  merchantRowLimitOverride?: number
 ): CeneoMerchantExpansion {
   if (!html || isBlockedOrChallengePage(html)) {
     return { foundMerchantCards: false, results: [] };
@@ -21327,7 +21332,11 @@ function parseCeneoMerchantOffersFromHtml(
   const ordered = Array.from(groups.values()).sort(
     (a, b) => a.firstIndex - b.firstIndex
   );
-  const merchantRowLimit = isV34Core164PreciseTechIntent(parsed) ? 12 : 8;
+  const defaultMerchantRowLimit = isV34Core164PreciseTechIntent(parsed) ? 12 : 8;
+  const merchantRowLimit = Math.max(
+    1,
+    Math.min(16, merchantRowLimitOverride ?? defaultMerchantRowLimit)
+  );
   if (ordered.length === 0) {
     return { foundMerchantCards: false, results: [] };
   }
@@ -36394,6 +36403,60 @@ async function expandCeneoMerchantVerificationCandidates(
         0,
         candidateRemaining - core173VerifierReserveMs
       );
+
+      const parseCeneoMerchantPayload = (
+        payloadHtml: string,
+        payloadUrl: string
+      ): CeneoMerchantExpansion => {
+        const stableExpansion = parseCeneoMerchantOffersFromHtml(
+          payloadHtml,
+          candidate.name,
+          payloadUrl,
+          parsed,
+          candidate.searchRank * 10
+        );
+
+        if (
+          !preciseTechIntent ||
+          preciseTechRetailerHosts.size < 3 ||
+          stableExpansion.results.length < 12
+        ) {
+          return stableExpansion;
+        }
+
+        const samePayloadRemaining = Math.max(
+          0,
+          hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS - core173VerifierReserveMs
+        );
+        if (samePayloadRemaining < 2_800) {
+          return stableExpansion;
+        }
+
+        const deeperExpansion = parseCeneoMerchantOffersFromHtml(
+          payloadHtml,
+          candidate.name,
+          payloadUrl,
+          parsed,
+          candidate.searchRank * 10,
+          16
+        );
+
+        console.log(
+          "[AIShopping] V34.CORE189 saturated same-payload Ceneo depth:",
+          {
+            baseEligible: stableExpansion.results.length,
+            deeperEligible: deeperExpansion.results.length,
+            retailerHosts: preciseTechRetailerHosts.size,
+            remainingMs: samePayloadRemaining,
+            candidate: candidate.name,
+          }
+        );
+
+        return deeperExpansion.results.length > stableExpansion.results.length
+          ? deeperExpansion
+          : stableExpansion;
+      };
+
       const timeoutMs = Math.max(
         options.directTimeoutCapMs ? Math.min(700, options.directTimeoutCapMs) : 1_200,
         Math.min(
@@ -36411,12 +36474,9 @@ async function expandCeneoMerchantVerificationCandidates(
         return;
       }
 
-      let expansion = parseCeneoMerchantOffersFromHtml(
+      let expansion = parseCeneoMerchantPayload(
         page.html,
-        candidate.name,
-        page.finalUrl || candidate.url,
-        parsed,
-        candidate.searchRank * 10
+        page.finalUrl || candidate.url
       );
 
       // V34.CORE151: Ceneo's direct HTML can be a shell with no merchant
@@ -36454,12 +36514,9 @@ async function expandCeneoMerchantVerificationCandidates(
 
           let readerExpansion =
             readerText && !isBlockedOrChallengePage(readerText)
-              ? parseCeneoMerchantOffersFromHtml(
+              ? parseCeneoMerchantPayload(
                   convertCeneoReaderMarkdownToMerchantHtml(readerText),
-                  candidate.name,
-                  page.finalUrl || candidate.url,
-                  parsed,
-                  candidate.searchRank * 10
+                  page.finalUrl || candidate.url
                 )
               : null;
 
@@ -36491,12 +36548,9 @@ async function expandCeneoMerchantVerificationCandidates(
               !isBlockedOrChallengePage(freshReaderText) &&
               freshReaderText.length > readerText.length
             ) {
-              const freshExpansion = parseCeneoMerchantOffersFromHtml(
+              const freshExpansion = parseCeneoMerchantPayload(
                 convertCeneoReaderMarkdownToMerchantHtml(freshReaderText),
-                candidate.name,
-                page.finalUrl || candidate.url,
-                parsed,
-                candidate.searchRank * 10
+                page.finalUrl || candidate.url
               );
 
               console.log(
@@ -45187,7 +45241,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE187 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE189 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -45264,7 +45318,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE187");
+    console.log("[AIShopping] NEW SEARCH V34.CORE189");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
