@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE181 — DETERMINISTIC IDENTIFIER STORE BRIDGE + STORE IDENTITY NORMALIZATION
+ * V34.CORE185 — VERIFIED JINA SPECIFICATION HARD EVIDENCE
+ * - V34.CORE185: canonicalizes HARD requirements only from a concrete verified retailer page's explicit markdown specification section, stopping before recommendations/related products. This lets listing-bound facts such as colour/size/storage survive Jina transport without trusting broad page text.
+ * - V34.CORE185: keeps CORE184 sibling first-wave scheduling and all existing identity/HARD/condition/availability/price fail-closed gates; no donor facts, new discovery requests, or deadline increase are introduced.
+ * V34.CORE183 — VERIFIED SIBLING-ROUTE PORTFOLIO RESERVE
+ * - V34.CORE183: keeps CORE181 stable verification/orchestration and retains only the zero-search-request x-kom -> al.to concrete-path sibling route that produced a valid live candidate. Blocked TERG siblings are intentionally excluded from active routing until transport is reliable.
+ * - V34.CORE183: reserves at most one deterministic sibling-route candidate in the verification portfolio. This changes scheduling only: donor price, availability, condition and HARD proof are never inherited, and the unchanged target-page verifier remains authoritative.
  * - V34.CORE181: keeps CORE179 as the transport baseline and adds zero-search-request deterministic product-route hypotheses for stores whose concrete product URL is derived from a strong manufacturer identifier already exposed by verified-shape first-party discovery. Senetic is the first route family (/product/<MPN>); final page verification remains mandatory.
  * - V34.CORE181: canonicalizes common retailer aliases for unique-store counting/display without changing identity/HARD/condition/availability/listing-bound-price acceptance or the strict 20 second orchestration budget.
  * - V34.CORE179: adds a generic embedded-product-route fallback for opted-in SSR/SPA retailer catalogs whose transport HTML serializes concrete product URLs outside ordinary <a href> nodes.
@@ -1973,6 +1978,14 @@ const V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTE_HOSTS: readonly string[] = [
   "senetic.pl",
 ];
 
+// CORE183: stores reachable by a deterministic concrete-product pathname copied
+// from a sibling storefront. These are not search adapters and therefore do not
+// consume a catalog-search request. The normal target-page verifier remains the
+// only authority for price, availability, variant and HARD requirements.
+const V34_CORE183_DETERMINISTIC_SIBLING_ROUTE_HOSTS: readonly string[] = [
+  "al.to",
+];
+
 type V34Core176VerticalCoverageAudit = {
   id: string;
   configuredDomains: number;
@@ -1981,6 +1994,7 @@ type V34Core176VerticalCoverageAudit = {
   primaryDirectAdapterDomains: number;
   productScopedDomains: number;
   identifierRouteDomains: number;
+  siblingRouteDomains: number;
   directoryIndexOnlyDomains: number;
 };
 
@@ -1990,6 +2004,7 @@ type V34Core176StaticCoverageAudit = {
   productScopedDomains: number;
   productScopedWithoutDirectAdapter: number;
   identifierRouteDomains: number;
+  siblingRouteDomains: number;
   structuredRetailerRouteDomains: number;
   verticalDirectoryDomains: number;
   verticalDirectoryWithoutDirectAdapter: number;
@@ -2024,10 +2039,15 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
     V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTE_HOSTS
       .filter((host) => configuredSet.has(host))
   );
+  const siblingRouteSet = new Set(
+    V34_CORE183_DETERMINISTIC_SIBLING_ROUTE_HOSTS
+      .filter((host) => configuredSet.has(host))
+  );
   const structuredRetailerRouteSet = new Set([
     ...directAdapterSet,
     ...productScopedSet,
     ...identifierRouteSet,
+    ...siblingRouteSet,
   ]);
 
   const verticals = V28_RETAIL_VERTICAL_PROFILES.map((profile) => {
@@ -2039,11 +2059,13 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
     const primaryDirectAdapterDomains = primaryDomains.filter((host) => directAdapterSet.has(host));
     const productScopedDomains = domains.filter((host) => productScopedSet.has(host));
     const identifierRouteDomains = domains.filter((host) => identifierRouteSet.has(host));
+    const siblingRouteDomains = domains.filter((host) => siblingRouteSet.has(host));
     const directoryIndexOnlyDomains = domains.filter(
       (host) =>
         !directAdapterSet.has(host) &&
         !productScopedSet.has(host) &&
-        !identifierRouteSet.has(host)
+        !identifierRouteSet.has(host) &&
+        !siblingRouteSet.has(host)
     );
 
     return {
@@ -2054,6 +2076,7 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
       primaryDirectAdapterDomains: primaryDirectAdapterDomains.length,
       productScopedDomains: productScopedDomains.length,
       identifierRouteDomains: identifierRouteDomains.length,
+      siblingRouteDomains: siblingRouteDomains.length,
       directoryIndexOnlyDomains: directoryIndexOnlyDomains.length,
     };
   });
@@ -2065,6 +2088,7 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
     productScopedWithoutDirectAdapter: [...productScopedSet]
       .filter((host) => !directAdapterSet.has(host)).length,
     identifierRouteDomains: identifierRouteSet.size,
+    siblingRouteDomains: siblingRouteSet.size,
     structuredRetailerRouteDomains: structuredRetailerRouteSet.size,
     verticalDirectoryDomains: verticalDirectorySet.size,
     verticalDirectoryWithoutDirectAdapter: [...verticalDirectorySet]
@@ -2074,7 +2098,8 @@ function getV34Core176StaticCoverageAudit(): V34Core176StaticCoverageAudit {
         (host) =>
           !directAdapterSet.has(host) &&
           !productScopedSet.has(host) &&
-          !identifierRouteSet.has(host)
+          !identifierRouteSet.has(host) &&
+          !siblingRouteSet.has(host)
       ).length,
     outsideVerticalDomains: configured.filter((host) => !verticalDirectorySet.has(host)).length,
     universalMarketplaceDomains: V28_UNIVERSAL_MARKETPLACE_DOMAINS.length,
@@ -2092,6 +2117,7 @@ function getV34Core176QueryCoverageAudit(parsed: ParsedQuery) {
   );
   const productScopedSet = new Set(Object.keys(V28_RETAILER_PRODUCT_SITE_SCOPES));
   const identifierRouteSet = new Set(V34_CORE181_DETERMINISTIC_IDENTIFIER_ROUTE_HOSTS);
+  const siblingRouteSet = new Set(V34_CORE183_DETERMINISTIC_SIBLING_ROUTE_HOSTS);
   const primaryDomains = getIntentPrimaryRetailerDomains(parsed);
   const targetedPrimaryDomains = getTargetedPrimaryRetailerDiscoveryDomains(parsed);
   const secondaryLimit = getIntentSecondaryRetailerCoverageLimit(parsed);
@@ -2112,6 +2138,7 @@ function getV34Core176QueryCoverageAudit(parsed: ParsedQuery) {
       directAdapterDomains: profile.domains.filter((host) => directAdapterSet.has(host)).length,
       productScopedDomains: profile.domains.filter((host) => productScopedSet.has(host)).length,
       identifierRouteDomains: profile.domains.filter((host) => identifierRouteSet.has(host)).length,
+      siblingRouteDomains: profile.domains.filter((host) => siblingRouteSet.has(host)).length,
     })),
     primaryDomains,
     targetedPrimaryDomains,
@@ -2121,11 +2148,13 @@ function getV34Core176QueryCoverageAudit(parsed: ParsedQuery) {
     routedDirectAdapterDomains: routedDomains.filter((host) => directAdapterSet.has(host)),
     routedProductScopedDomains: routedDomains.filter((host) => productScopedSet.has(host)),
     routedIdentifierRouteDomains: routedDomains.filter((host) => identifierRouteSet.has(host)),
+    routedSiblingRouteDomains: routedDomains.filter((host) => siblingRouteSet.has(host)),
     routedDirectoryIndexOnlyDomains: routedDomains.filter(
       (host) =>
         !directAdapterSet.has(host) &&
         !productScopedSet.has(host) &&
-        !identifierRouteSet.has(host)
+        !identifierRouteSet.has(host) &&
+        !siblingRouteSet.has(host)
     ),
   };
 }
@@ -15185,6 +15214,38 @@ function selectDiverseSearchResults(
     pushResult(result, 1);
   }
 
+  // V34.CORE183 DETERMINISTIC SIBLING-ROUTE PORTFOLIO RESERVE: a concrete
+  // sibling URL can be structurally strong but lack a HARD attribute in its
+  // discovery title (for example a color exposed only in target-page specs).
+  // Preserve at most one such candidate so the target storefront gets a chance
+  // to prove itself. This is scheduling only: no donor facts are propagated and
+  // verifySearchResult() still enforces identity, every HARD requirement,
+  // condition, availability and listing-bound price on the target page.
+  if (isV34Core164PreciseTechIntent(parsed) && selected.length < limit) {
+    const siblingRouteCandidate = sorted.find((result) => {
+      const host = getResultHostname(result.url);
+      if (!host || !V34_CORE183_DETERMINISTIC_SIBLING_ROUTE_HOSTS.includes(host)) {
+        return false;
+      }
+      return normalizeMatchText(result.snippet).includes(
+        "deterministic sibling catalog route"
+      );
+    });
+
+    if (siblingRouteCandidate) {
+      const reserved = pushResult(siblingRouteCandidate, 1);
+      if (reserved) {
+        console.log(
+          "[AIShopping] V34.CORE183 sibling-route portfolio reserve:",
+          {
+            host: getResultHostname(siblingRouteCandidate.url),
+            name: siblingRouteCandidate.name,
+          }
+        );
+      }
+    }
+  }
+
   // V34.CORE120 HARD-PROOF PORTFOLIO RESERVE: source/host diversity is useful,
   // but it must not crowd out the only candidate that already exposes every
   // hard requested attribute in its own title/URL. Reserve at most one extra
@@ -18054,6 +18115,101 @@ function buildV34Core181DeterministicIdentifierBridgeCandidates(
   return results;
 }
 
+
+type V34Core183SiblingCatalogRoute = {
+  sourceHosts: readonly string[];
+  targetHost: string;
+  verticals: readonly string[];
+  buildUrl: (sourceUrl: URL) => string | null;
+};
+
+const V34_CORE183_DETERMINISTIC_SIBLING_CATALOG_ROUTES: readonly V34Core183SiblingCatalogRoute[] = [
+  {
+    // x-kom and al.to expose the same /p/<catalog-id>-<slug>.html product path.
+    // The copied pathname is only a hypothesis; al.to must independently prove
+    // the product, variant/HARD requirements, availability and current price.
+    sourceHosts: ["x-kom.pl"],
+    targetHost: "al.to",
+    verticals: ["electronics_tech"],
+    buildUrl: (sourceUrl) =>
+      /^\/p\/\d+-[^/]+\.html$/i.test(sourceUrl.pathname)
+        ? `https://www.al.to${sourceUrl.pathname}`
+        : null,
+  },
+];
+
+function buildV34Core183DeterministicSiblingCatalogBridgeCandidates(
+  sourceResults: SearchResult[],
+  parsed: ParsedQuery
+): SearchResult[] {
+  if (!isV34Core164PreciseTechIntent(parsed)) return [];
+
+  const matchedVerticals = new Set(
+    getRetailVerticalMatches(parsed).map(({ profile }) => profile.id)
+  );
+  const existingHosts = new Set(
+    sourceResults.map((result) => getResultHostname(result.url)).filter(Boolean)
+  );
+  const results: SearchResult[] = [];
+  const seenUrls = new Set<string>();
+  const emittedHosts = new Set<string>();
+
+  for (const route of V34_CORE183_DETERMINISTIC_SIBLING_CATALOG_ROUTES) {
+    if (!route.verticals.some((vertical) => matchedVerticals.has(vertical))) continue;
+    if (existingHosts.has(route.targetHost) || emittedHosts.has(route.targetHost)) continue;
+
+    for (const source of sourceResults) {
+      const sourceHost = getResultHostname(source.url);
+      if (!sourceHost || !route.sourceHosts.includes(sourceHost)) continue;
+      if (!looksLikeRescuedRetailerProductCandidate(source, parsed, sourceHost)) continue;
+
+      let sourceUrl: URL;
+      try {
+        sourceUrl = new URL(source.url);
+      } catch {
+        continue;
+      }
+
+      const built = route.buildUrl(sourceUrl);
+      const url = built ? normalizeUrl(built) : "";
+      if (!url || seenUrls.has(url)) continue;
+
+      const candidate: SearchResult = {
+        url,
+        name: source.name,
+        snippet: normalizeText(`deterministic sibling catalog route from ${sourceHost}`),
+        source: "RetailerRescue",
+        searchRank: results.length,
+      };
+
+      // Route hypotheses inherit no donor facts. The product-shaped URL and
+      // identity must be plausible here, then the ordinary verifier must bind
+      // target-store price, availability, condition and HARD requirements.
+      if (!looksLikeRescuedRetailerProductCandidate(candidate, parsed, route.targetHost)) {
+        continue;
+      }
+
+      seenUrls.add(url);
+      emittedHosts.add(route.targetHost);
+      results.push(candidate);
+      break;
+    }
+  }
+
+  if (results.length > 0) {
+    console.log(
+      "[AIShopping] V34.CORE183 deterministic sibling catalog bridge:",
+      results.map((result) => ({
+        host: getResultHostname(result.url),
+        url: result.url,
+        name: result.name,
+      }))
+    );
+  }
+
+  return results;
+}
+
 function isV34Core164HighConstraintRetailIntent(parsed: ParsedQuery): boolean {
   const hardCount = parsed.intent.required.filter((requirement) => requirement.hard).length;
   return Boolean(
@@ -18662,10 +18818,21 @@ async function searchDirectRetailerCatalogPagesCore164(
     onPartialResults?.(identifierBridge);
   }
 
+  const siblingBridge = externalSignal?.aborted
+    ? []
+    : buildV34Core183DeterministicSiblingCatalogBridgeCandidates(
+        [...firstWave, ...secondWave],
+        parsed
+      );
+  if (siblingBridge.length > 0) {
+    onPartialResults?.(siblingBridge);
+  }
+
   const combined = dedupeSearchResultsByUrl([
     ...firstWave,
     ...secondWave,
     ...identifierBridge,
+    ...siblingBridge,
   ]);
   console.log(
     "[AIShopping] V34.CORE164 exact-tech direct mesh final:",
@@ -18673,6 +18840,7 @@ async function searchDirectRetailerCatalogPagesCore164(
       firstWave: firstWave.length,
       secondWave: secondWave.length,
       identifierBridge: identifierBridge.length,
+      siblingBridge: siblingBridge.length,
       uniqueHosts: new Set(
         combined.map((result) => getResultHostname(result.url)).filter(Boolean)
       ).size,
@@ -34499,6 +34667,114 @@ function extractUniversalFeatureEvidenceFromJina(
   ).slice(0, 14_000);
 }
 
+
+// V34.CORE185: Jina often preserves the concrete retailer's full specification
+// section even when the ordinary feature-evidence helper intentionally stops at
+// an early navigation/recommendation marker. HARD facts may be canonicalized
+// from that specification only when the reader page itself is bound to the same
+// product identity. Recommendation/related-product sections are cut away before
+// any requirement matcher runs, so strict listing-bound gates stay fail-closed.
+function extractCanonicalHardRequirementEvidenceFromConcreteJina(
+  textRaw: string,
+  productNameRaw: string,
+  productUrlRaw: string,
+  parsed: ParsedQuery
+): string {
+  const hardRequirements = parsed.intent.required.filter(
+    (requirement) => requirement.hard
+  );
+  if (
+    !textRaw ||
+    hardRequirements.length === 0 ||
+    isBlockedOrChallengePage(textRaw)
+  ) {
+    return "";
+  }
+
+  const productName = normalizeText(productNameRaw);
+  const pageTitle = normalizeText(extractJinaPageTitle(textRaw));
+  if (!productName || !pageTitle) return "";
+
+  const sameProductIdentity =
+    universalProofMatchesProductIdentity(productName, pageTitle) ||
+    universalProofMatchesProductIdentity(pageTitle, productName) ||
+    Boolean(
+      extractUniversalSharedConcreteModelCode(
+        `${productName} ${pageTitle}`,
+        productUrlRaw,
+        parsed
+      )
+    );
+  if (!sameProductIdentity) return "";
+
+  const markdownMarker = /Markdown Content:\s*/iu.exec(textRaw);
+  const markdown = markdownMarker
+    ? textRaw.slice((markdownMarker.index ?? 0) + markdownMarker[0].length)
+    : textRaw;
+
+  // Require an actual markdown heading, not a navigation tab named
+  // "Specyfikacja". This keeps the scope tied to the page's product detail
+  // block and avoids generic menus near the top of retailer pages.
+  const specificationHeading =
+    /^\s*#{1,4}\s*(?:specyfikacja|dane\s+techniczne|parametry(?:\s+techniczne)?|szczeg[oó][łl]y(?:\s+produktu)?|specification|technical\s+specifications?|product\s+details)\s*$/gimu;
+
+  const sectionScopes: string[] = [];
+  let headingMatch: RegExpExecArray | null;
+  let sectionCount = 0;
+
+  while (
+    (headingMatch = specificationHeading.exec(markdown)) !== null &&
+    sectionCount < 4
+  ) {
+    if (typeof headingMatch.index !== "number") continue;
+
+    const sectionStart = headingMatch.index;
+    const afterHeading = markdown.slice(sectionStart + headingMatch[0].length);
+    const boundaryMatch = /\n\s*#{1,4}\s*(?:rekomendowane(?:\s+akcesoria|\s+produkty)?|polecane(?:\s+produkty)?|akcesoria|produkty\s+podobne|podobne\s+produkty|podobne\s+oferty|produkty\s+powi[aą]zane|opinie|recenzje|pytania(?:\s+i\s+odpowiedzi)?|related\s+products?|similar\s+products?|recommended\s+products?|reviews?|questions?)\b/iu.exec(
+      afterHeading
+    );
+
+    const rawSection = boundaryMatch
+      ? markdown.slice(
+          sectionStart,
+          sectionStart + headingMatch[0].length + boundaryMatch.index
+        )
+      : markdown.slice(sectionStart, Math.min(markdown.length, sectionStart + 28_000));
+
+    const cleaned = normalizeText(
+      rawSection
+        .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        .replace(/[#*_`|]/g, " ")
+    ).slice(0, 20_000);
+
+    if (cleaned) sectionScopes.push(cleaned);
+    sectionCount += 1;
+  }
+
+  if (sectionScopes.length === 0) return "";
+
+  const canonicalEvidence: string[] = [];
+  for (const requirement of hardRequirements) {
+    const proven = sectionScopes.some((scope) =>
+      requirementHasEvidenceInContext(
+        requirement,
+        scope,
+        parsed.intent.required
+      )
+    );
+    if (!proven) continue;
+
+    canonicalEvidence.push(
+      normalizeText(
+        `${requirement.label} ${requirement.aliases[0] || requirement.value}`
+      )
+    );
+  }
+
+  return normalizeText(canonicalEvidence.join(" ")).slice(0, 8_000);
+}
+
 function isReferenceDocumentOfferResult(result: SearchResult): boolean {
   const title = normalizeMatchText(result.name);
   const snippet = normalizeMatchText(result.snippet);
@@ -38610,6 +38886,35 @@ async function verifySearchResult(
               finalName
             )}`
           ).slice(0, 26_000);
+
+          const jinaCanonicalConcreteRequirementEvidence =
+            !isCeneoResult &&
+            !["olx.pl", "allegro.pl", "allegrolokalnie.pl"].includes(
+              getResultHostname(finalUrl)
+            )
+              ? extractCanonicalHardRequirementEvidenceFromConcreteJina(
+                  jinaText.slice(0, 180_000),
+                  finalName || result.name,
+                  finalUrl,
+                  parsed
+                )
+              : "";
+
+          if (jinaCanonicalConcreteRequirementEvidence) {
+            trustedCanonicalConcreteRequirementEvidence = normalizeText(
+              `${trustedCanonicalConcreteRequirementEvidence} ${jinaCanonicalConcreteRequirementEvidence}`
+            ).slice(0, 8_000);
+            universalFeatureEvidence = normalizeText(
+              `${universalFeatureEvidence} ${jinaCanonicalConcreteRequirementEvidence}`
+            ).slice(0, 26_000);
+
+            console.log(
+              "[AIShopping] V34.CORE185 Jina concrete-spec HARD propagation:",
+              getResultHostname(finalUrl),
+              finalName,
+              jinaCanonicalConcreteRequirementEvidence
+            );
+          }
         }
 
         const requestedJinaPackageVariantUrl =
@@ -40358,6 +40663,21 @@ async function verifyOffers(
   const costTier = (result: SearchResult): number => {
     const host = getResultHostname(result.url);
 
+    // V34.CORE184 DETERMINISTIC SIBLING FIRST-WAVE: once a concrete sibling
+    // route has already earned the single CORE183 portfolio reserve, do not
+    // let duplicate same-host retailer pages consume all initial workers ahead
+    // of it. This changes scheduling only: no donor price/HARD/availability is
+    // inherited and verifySearchResult() remains fully fail-closed.
+    const isDeterministicSiblingRoute =
+      isV34Core164PreciseTechIntent(parsed) &&
+      Boolean(host) &&
+      V34_CORE183_DETERMINISTIC_SIBLING_ROUTE_HOSTS.includes(host) &&
+      normalizeMatchText(result.snippet).includes(
+        "deterministic sibling catalog route"
+      );
+
+    if (isDeterministicSiblingRoute) return -1;
+
     if (host === "allegrolokalnie.pl") {
       const discoveryPrice = getSilentDiscoveryPrice(result, parsed);
       const boundedCard =
@@ -40900,6 +41220,7 @@ function getV34Core181CanonicalStoreIdentity(
     "morele net": { key: "morele", display: "Morele" },
     "delkom": { key: "delkom", display: "Delkom" },
     "senetic": { key: "senetic", display: "Senetic" },
+    "al to": { key: "al to", display: "al.to" },
     "x kom": { key: "x kom", display: "x-kom" },
     "kr system": { key: "kr system", display: "KR System" },
     "krsystem": { key: "kr system", display: "KR System" },
@@ -44700,7 +45021,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE181 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE185 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -44777,7 +45098,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE181");
+    console.log("[AIShopping] NEW SEARCH V34.CORE185");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -44933,6 +45254,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       if (!discoveryController.signal.aborted) {
         discoveryController.abort();
       }
+    }
+
+    const postDiscoverySiblingBridge =
+      buildV34Core183DeterministicSiblingCatalogBridgeCandidates(searchResults, parsed);
+    if (postDiscoverySiblingBridge.length > 0) {
+      searchResults = dedupeSearchResultsByUrl([
+        ...searchResults,
+        ...postDiscoverySiblingBridge,
+      ]);
+      console.log(
+        "[AIShopping] V34.CORE183 search results after sibling bridge:",
+        searchResults.length
+      );
     }
 
     console.log(
