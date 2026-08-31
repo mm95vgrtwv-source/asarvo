@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 
 /**
- * V34.CORE189 — SATURATED SAME-PAYLOAD CENEO DEPTH
+ * V34.CORE196 — MODEL-LED TIRE GRAMMAR HARDENING
+ * - V34.CORE196: canonical tire-size notation plus either load/speed index or tire season classifies a model-led query as `tire` even when the noun "opona"/"tire" is omitted.
+ * - V34.CORE196: this category decision happens before the generic voltage pass, so a compact speed index such as `91V` becomes `tire_load_speed` instead of electrical `voltage`.
+ * - V34.CORE196: no product, manufacturer, SKU, price or retailer is hard-coded; all CORE189 discovery, Ceneo depth and final verification gates remain unchanged.
  * - V34.CORE189: precise-tech Ceneo merchant parsing first keeps the stable CORE187 depth of 12; only when that SAME already-fetched payload actually saturates all 12 eligible rows, 3+ independent first-party retailer hosts exist, and at least 2.8s of verifier headroom remains, the same payload is reparsed locally up to 16 rows.
  * - V34.CORE189: the 13–16 merchant window adds zero network requests and zero reader retries; it is post-fetch, saturation-gated and deadline-aware, so transport/first-party verification budget is unchanged.
  * - V34.CORE189: every deeper row still passes the unchanged row-local product identity, brand, HARD, condition, price, shipping and canonical-store dedupe gates; non-tech searches keep their existing depth.
@@ -3515,6 +3518,18 @@ function detectCategory(query: string): string | null {
     /\b(?:akumulator\w*\s+(?:samochodow\w*|rozruchow\w*)|car\s+battery)\b/i.test(text) ||
     (/\bakumulator\w*\b/i.test(text) && /\b\d{2,3}(?:[.,]\d+)?\s*ah\b/i.test(text) && /\b\d{3,4}\s*a\b/i.test(text));
   if (looksLikeAutomotiveBattery) return "auto_battery";
+
+  // V34.CORE196: tire searches are frequently model/spec-led and omit the
+  // generic noun entirely (brand + line + 205/55 R16 91V + season). Require
+  // canonical tire-size grammar plus either load/speed or season evidence so
+  // arbitrary dimensional strings do not become automotive searches. Once
+  // classified as tire, the existing tire parser binds size/load-speed/season
+  // before the generic voltage pass can misread the trailing speed letter.
+  const hasModelLedTireSize = /\b\d{3}\s*\/\s*\d{2}\s*r\s*\d{2}\b/iu.test(text);
+  const hasModelLedTireLoadSpeed = /\b\d{3}\s*\/\s*\d{2}\s*r\s*\d{2}\s+\d{2,3}\s*[a-z]\b/iu.test(text);
+  const hasModelLedTireSeason = /\b(?:zimow\w*|letni\w*|caloroczn\w*|całoroczn\w*|winter|summer|all[\s-]*season)\b/iu.test(text);
+  if (hasModelLedTireSize && (hasModelLedTireLoadSpeed || hasModelLedTireSeason)) return "tire";
+
   if (/\b(opon\w*|tire\w*|tyre\w*)\b/i.test(text)) return "tire";
 
   // Automotive part nouns must win over generic words such as "klocki".
@@ -45241,7 +45256,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE189 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE196 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -45318,7 +45333,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE189");
+    console.log("[AIShopping] NEW SEARCH V34.CORE196");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
