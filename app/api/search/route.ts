@@ -2623,6 +2623,88 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
     },
   },
   {
+    // V34.CORE206 GENERIC FURNITURE DIRECT MESH:
+    // Stable retailer-owned category surfaces give model-less furniture intents
+    // a deterministic first-party discovery path before rare-HARD verification.
+    // These pages are discovery-only: concrete children still pass the unchanged
+    // identity/HARD/color/condition/availability/price verifier.
+    host: "jysk.pl",
+    categories: ["chair", "desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "empty-fallback",
+    readerCatalogTimeoutMs: 3_200,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "chair") {
+        return ["https://jysk.pl/biuro/krzesla-biurowe"];
+      }
+      if (category === "desk") {
+        return ["https://jysk.pl/biuro/biurka"];
+      }
+      return [];
+    },
+  },
+  {
+    // CORE206: IKEA exposes durable category surfaces with concrete product
+    // links/card data. No IKEA model, SKU or benchmark product is encoded here.
+    host: "ikea.com",
+    categories: ["chair", "desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "empty-fallback",
+    readerCatalogTimeoutMs: 3_200,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "chair") {
+        return ["https://www.ikea.com/pl/pl/cat/krzesla-i-fotele-biurowe-20652/"];
+      }
+      if (category === "desk") {
+        return ["https://www.ikea.com/pl/pl/cat/biurka-20649/"];
+      }
+      return [];
+    },
+  },
+  {
+    // CORE206: BRW category grids are a first-party discovery surface only.
+    host: "brw.pl",
+    categories: ["chair", "desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "empty-fallback",
+    readerCatalogTimeoutMs: 3_200,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "chair") {
+        return ["https://www.brw.pl/meble/meble-biurowe/fotele-i-krzesla-biurowe/biuro/"];
+      }
+      if (category === "desk") {
+        return ["https://www.brw.pl/meble/meble-biurowe/biurka/biuro/"];
+      }
+      return [];
+    },
+  },
+  {
+    // CORE206: Agata is an independent first-party furniture discovery source.
+    // `limit=99` is source pagination metadata, never an acceptance rule.
+    host: "agatameble.pl",
+    categories: ["chair", "desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "empty-fallback",
+    readerCatalogTimeoutMs: 3_200,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "chair") {
+        return ["https://www.agatameble.pl/meble/biurowe/fotele-biurowe?limit=99"];
+      }
+      if (category === "desk") {
+        return ["https://www.agatameble.pl/meble/biurowe/biurka?limit=99"];
+      }
+      return [];
+    },
+  },
+  {
     host: "castorama.pl",
     categories: ["power_tool", "faucet"],
     verticals: ["home_diy_garden"],
@@ -44340,6 +44422,50 @@ function getRareHardRecoveryReservationScore(
   return score;
 }
 
+// V34.CORE207 RARE-HARD SCHEDULING HINT:
+// Public-index snippets are NEVER product proof, but a concrete product URL whose
+// own index snippet contains the exact currently-missing HARD value is a much
+// better verification candidate than an arbitrary category-card sibling that
+// does not mention that value at all. Use that text only to schedule the scarce
+// verifier slots; verifySearchResult() remains the sole authority for acceptance.
+function getRareHardRecoverySchedulingScore(
+  result: SearchResult,
+  parsed: ParsedQuery
+): number {
+  const trustedScore = getRareHardRecoveryReservationScore(result, parsed);
+  if (!Number.isFinite(trustedScore)) return trustedScore;
+
+  const targetKey = result.rareHardRecoveryTargetKey;
+  const target = targetKey
+    ? parsed.intent.required.find(
+        (requirement) => requirement.hard && requirement.key === targetKey
+      )
+    : null;
+  if (!target) return trustedScore;
+
+  const trustedProofKeys = getTrustedPortfolioHardProofKeys(result, parsed);
+  if (trustedProofKeys.includes(target.key)) return trustedScore;
+
+  const indexOnlyOrigin =
+    result.rareHardRecoveryOrigin === "indexed" ||
+    result.rareHardRecoveryOrigin === "google-jina";
+  if (!indexOnlyOrigin) return trustedScore;
+
+  const schedulingOnlyContext = normalizeText(
+    `${result.name} ${result.snippet} ${result.url}`
+  );
+  const hasTargetHint = requirementHasEvidenceInContext(
+    target,
+    schedulingOnlyContext,
+    parsed.intent.required
+  );
+
+  // Deliberately below trusted bounded-card proof (80k) but far above a replay
+  // hit that merely came from the right host/query. This cannot influence final
+  // evidence resolution; it only decides which concrete URL gets read first.
+  return trustedScore + (hasTargetHint ? 60_000 : 0);
+}
+
 function buildZeroResultExactFeatureRecoveryQuery(
   parsed: ParsedQuery,
   coverageCore: string | null
@@ -44673,18 +44799,104 @@ async function searchPreVerificationRareHardGap(
     `${quoteSearchTerm(directIdentity)} ${quoteSearchTerm(compactRareAnchor)} ${quoteSearchTerm(supportLiteralSearchTerm || supportSearchTerm)} ${budgetHint} cena sklep`
   );
 
+  // V34.CORE205 GENERIC PRODUCT DISCOVERY V1:
+  // Model-less category searches with multiple HARD constraints need a different
+  // discovery shape than exact named-model searches. A single broad web query
+  // can be dominated by marketplaces/category pages even though several trusted
+  // first-party retailers in the matched vertical have suitable concrete items.
+  //
+  // Reuse the SAME one indexed rare-HARD slot as CORE119, but make that slot a
+  // bounded multi-retailer first-party portfolio query. This is not a new
+  // request and it does not trust index snippets as proof: every recovered URL
+  // still enters the unchanged concrete product-page verifier.
+  const genericCategoryHardIntent =
+    Boolean(parsed.category) &&
+    !parsed.brand &&
+    parsed.intent.required.filter((requirement) => requirement.hard).length >= 2;
+
+  // V34.CORE207: when primary discovery already produced a healthy portfolio of
+  // concrete retailer-owned category cards, replaying the SAME static category
+  // surfaces for a missing HARD axis only duplicates large snippets and burns the
+  // verification reserve. In that case the rare-HARD phase becomes index-focused:
+  // use public indexes to nominate a more specific product URL, then let the normal
+  // concrete-page verifier prove the feature. Sparse categories keep the mature
+  // direct replay unchanged.
+  const genericExistingFirstPartyCardCount = genericCategoryHardIntent
+    ? existingResults.filter((result) =>
+        result.retailerOwnedCardEvidence === true &&
+        isConcreteVerificationCandidate(result, parsed)
+      ).length
+    : 0;
+  const skipGenericRedundantDirectReplay =
+    genericCategoryHardIntent && genericExistingFirstPartyCardCount >= 8;
+
+  // V34.CORE206 GENERIC FIRST-PARTY ENGINE SHARDS:
+  // CORE205 placed up to eight `site:` clauses in one OR expression. Live smoke
+  // showed that this single expression is volatile across Bing HTML/RSS/DDG.
+  // Keep the SAME three engine calls, but give each engine one retailer-owned
+  // host. Adapter-backed/category-specific stores are ranked first; the vertical
+  // primary directory remains the generic fallback. No extra indexed request is
+  // created and no indexed snippet can bypass final verification.
+  const genericAdapterBackedHosts = genericCategoryHardIntent
+    ? buildDirectRetailerCatalogRequests(parsed, { maxAdapters: 8 })
+        .map(({ adapter }) => adapter.host)
+    : [];
+  const genericFirstPartyPortfolioHosts = genericCategoryHardIntent
+    ? Array.from(new Set([
+        // CORE207: the rare-HARD recovery router already ranks stores by the
+        // current missing axis + request-local source health. Preserve that
+        // ordering ahead of generic adapter/directory order.
+        ...directHosts,
+        ...genericAdapterBackedHosts,
+        ...getIntentPrimaryRetailerDomains(parsed),
+      ]))
+        .map((host) => host.replace(/^www\./i, "").trim().toLowerCase())
+        .filter(Boolean)
+        .filter((host) =>
+          !V28_UNIVERSAL_MARKETPLACE_DOMAINS.some((domain) =>
+            host === domain || host.endsWith(`.${domain}`)
+          )
+        )
+        .slice(0, 8)
+    : [];
+
+  const genericFirstPartyPortfolioCore = normalizeText(
+    `${quoteSearchTerm(directIdentity)} ${quoteSearchTerm(compactRareAnchor)} ` +
+    `${quoteSearchTerm(supportLiteralSearchTerm || supportSearchTerm)} ${budgetHint} cena`
+  );
+  const genericFirstPartyEngineQueries =
+    genericFirstPartyPortfolioHosts.length >= 3 && genericFirstPartyPortfolioCore
+      ? genericFirstPartyPortfolioHosts.slice(0, 3).map((host) =>
+          normalizeText(`site:${host} ${genericFirstPartyPortfolioCore}`)
+        )
+      : [];
+  const genericFirstPartyPortfolioQuery = genericFirstPartyEngineQueries[0] || "";
+
   // CORE119: when the fallback retailer mesh is active, first-party direct
   // cards are the highest-value lane. Keep at most one tiny indexed pulse in
   // parallel; do not let broad search compete with the verification reserve.
   const indexedQueries = lateCompactMode
     ? []
     : usedFallbackMesh
-      ? Array.from(new Set([targetedOpenWebQuery, ...queries].filter(Boolean))).slice(0, 1)
+      ? Array.from(new Set([
+          genericFirstPartyPortfolioQuery || targetedOpenWebQuery,
+          ...queries,
+        ].filter(Boolean))).slice(0, 1)
       : directHosts.length > 0
         ? Array.from(new Set([targetedOpenWebQuery, ...queries].filter(Boolean))).slice(0, 2)
         : Array.from(new Set([targetedOpenWebQuery, ...queries].filter(Boolean))).slice(0, 3);
   const shouldRunTargetedGoogle =
     !lateCompactMode && Boolean(targetedOpenWebQuery);
+
+  if (genericFirstPartyPortfolioQuery && indexedQueries.includes(genericFirstPartyPortfolioQuery)) {
+    console.log("[AIShopping] V34.CORE207 generic first-party engine shards:", {
+      category: parsed.category,
+      hosts: genericFirstPartyPortfolioHosts,
+      engineQueries: genericFirstPartyEngineQueries,
+      existingFirstPartyCards: genericExistingFirstPartyCardCount,
+      skipRedundantDirectReplay: skipGenericRedundantDirectReplay,
+    });
+  }
 
   const directPartialProducts: SearchResult[] = [];
   const directPartialSeen = new Set<string>();
@@ -44708,10 +44920,27 @@ async function searchPreVerificationRareHardGap(
       const [indexed, direct, google] = await Promise.all([
         Promise.all(
           indexedQueries.map(async (query) => {
+            const useGenericEngineShards =
+              genericFirstPartyPortfolioQuery.length > 0 &&
+              query === genericFirstPartyPortfolioQuery &&
+              genericFirstPartyEngineQueries.length >= 3;
+            // CORE207: RSS has the most stable site-fidelity behavior in the live
+            // trace, so give it the dynamically strongest recovery host. Bing
+            // HTML gets the second host and DDG the third; request count stays 3.
+            const rssQuery = useGenericEngineShards
+              ? genericFirstPartyEngineQueries[0]
+              : query;
+            const bingQuery = useGenericEngineShards
+              ? genericFirstPartyEngineQueries[1]
+              : query;
+            const duckQuery = useGenericEngineShards
+              ? genericFirstPartyEngineQueries[2]
+              : query;
+
             const [bing, rss, duck] = await Promise.all([
               withAbortableDeadline(
                 (innerSignal) => searchBing(
-                  query,
+                  bingQuery,
                   AbortSignal.any([phaseSignal, innerSignal])
                 ),
                 budgetMs,
@@ -44720,7 +44949,7 @@ async function searchPreVerificationRareHardGap(
               ),
               withAbortableDeadline(
                 (innerSignal) => searchBingRss(
-                  query,
+                  rssQuery,
                   AbortSignal.any([phaseSignal, innerSignal])
                 ),
                 budgetMs,
@@ -44729,7 +44958,7 @@ async function searchPreVerificationRareHardGap(
               ),
               withAbortableDeadline(
                 (innerSignal) => searchDuckDuckGo(
-                  query,
+                  duckQuery,
                   AbortSignal.any([phaseSignal, innerSignal])
                 ),
                 budgetMs,
@@ -44744,6 +44973,7 @@ async function searchPreVerificationRareHardGap(
             }));
           })
         ),
+        !skipGenericRedundantDirectReplay &&
         directHosts.length > 0 && directRareSearchTexts.length > 0
           ? searchDirectRetailerCatalogPages(
               parsed,
@@ -44813,6 +45043,7 @@ async function searchPreVerificationRareHardGap(
     phaseBudgetMs,
     verificationReserveMs,
     adapterBudgetMs: directAdapterBudgetMs,
+    skipGenericRedundantDirectReplay,
     recovered: directRetailerGapResults.length,
     partialRecovered: directPartialProducts.length,
     targetedOpenWebQuery,
@@ -44827,8 +45058,8 @@ async function searchPreVerificationRareHardGap(
   )
     .filter((item) => !seen.has(normalizeUrl(item.url)))
     .sort((a, b) =>
-      getRareHardRecoveryReservationScore(b, parsed) -
-        getRareHardRecoveryReservationScore(a, parsed) ||
+      getRareHardRecoverySchedulingScore(b, parsed) -
+        getRareHardRecoverySchedulingScore(a, parsed) ||
       getSearchResultPriority(b, parsed) - getSearchResultPriority(a, parsed) ||
       a.searchRank - b.searchRank
     )
@@ -45256,7 +45487,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     if (alternativeQueries.length >= 2) {
       console.log("================================================");
-      console.log("[AIShopping] NEW SEARCH V34.CORE196 alternatives:", alternativeQueries);
+      console.log("[AIShopping] NEW SEARCH V34.CORE207 alternatives:", alternativeQueries);
 
       // Alternatives run independently and in parallel. This preserves the
       // same wall-clock target as one search while preventing cross-product
@@ -45333,7 +45564,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE196");
+    console.log("[AIShopping] NEW SEARCH V34.CORE207");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -45579,20 +45810,30 @@ export async function POST(request: Request): Promise<NextResponse> {
         getRareHardRecoveryReservationScore(b, parsed) -
         getRareHardRecoveryReservationScore(a, parsed)
       );
+    const rareHardGapSchedulingHints = rareHardGapResults
+      .filter((result) =>
+        getRareHardRecoverySchedulingScore(result, parsed) >= 60_000
+      )
+      .sort((a, b) =>
+        getRareHardRecoverySchedulingScore(b, parsed) -
+        getRareHardRecoverySchedulingScore(a, parsed)
+      );
     const rareHardGapFallback = rareHardGapResults
       .filter((result) => Boolean(result.rareHardRecoveryTargetKey))
       .sort((a, b) =>
-        getRareHardRecoveryReservationScore(b, parsed) -
-        getRareHardRecoveryReservationScore(a, parsed)
+        getRareHardRecoverySchedulingScore(b, parsed) -
+        getRareHardRecoverySchedulingScore(a, parsed)
       );
-    // V34.CORE120: if a recovered card already exposes the missing HARD in its
-    // OWN/bounded evidence, reserve up to two such candidates. Otherwise keep
-    // only the single strongest targeted recovery candidate. CORE115 reserved
-    // two arbitrary replay hits even when neither showed the missing feature,
-    // wasting scarce verifier slots on candidates known to be weak.
+    // CORE207: trusted OWN/bounded proof still wins. If no such card exists,
+    // reserve concrete index hits whose UNTRUSTED snippet contains the missing
+    // HARD only as a scheduling hint. The final page verifier still must prove
+    // that value. Only if even that hint is absent do we keep the old one-card
+    // targeted fallback.
     const rareHardGapReserveCandidates = rareHardGapExplicitProof.length > 0
       ? rareHardGapExplicitProof.slice(0, 2)
-      : rareHardGapFallback.slice(0, 1);
+      : rareHardGapSchedulingHints.length > 0
+        ? rareHardGapSchedulingHints.slice(0, 2)
+        : rareHardGapFallback.slice(0, 1);
     const rareHardGapReserveUrls = new Set(
       rareHardGapReserveCandidates
         .map((result) => normalizeUrl(result.url))
@@ -45606,14 +45847,66 @@ export async function POST(request: Request): Promise<NextResponse> {
           targetKey: result.rareHardRecoveryTargetKey ?? null,
           origin: result.rareHardRecoveryOrigin ?? null,
           reservationScore: getRareHardRecoveryReservationScore(result, parsed),
+          schedulingScore: getRareHardRecoverySchedulingScore(result, parsed),
           proofKeys: getTrustedPortfolioHardProofKeys(result, parsed),
         }))
       );
     }
 
+    // V34.CORE207 VERIFICATION-RESERVE COMPACT POOL:
+    // When discovery leaves <4s and a dedicated rare-HARD recovery already
+    // nominated concrete URLs, do not run the heavyweight portfolio scorer over
+    // dozens of large category-card snippets. Keep the reserved URLs first, then
+    // a bounded host-diverse tail from the mature pool. The normal selector and
+    // verifier still run on this compact pool, so relevance/HARD rules are not
+    // weakened; this only avoids spending the final verifier window on ranking.
+    let verificationSelectionPool = verificationPool;
+    if (
+      remainingBeforeCandidateSelection < 4_000 &&
+      rareHardGapReserveCandidates.length > 0 &&
+      verificationPool.length > 14
+    ) {
+      const compact: SearchResult[] = [];
+      const compactKeys = new Set<string>();
+      const compactHosts = new Set<string>();
+      const pushCompact = (result: SearchResult) => {
+        const key = normalizeUrl(result.url);
+        if (!key || compactKeys.has(key)) return;
+        compact.push(result);
+        compactKeys.add(key);
+        const host = getResultHostname(result.url);
+        if (host) compactHosts.add(host);
+      };
+
+      rareHardGapReserveCandidates.forEach(pushCompact);
+
+      for (const result of verificationPool) {
+        if (compact.length >= 10) break;
+        const host = getResultHostname(result.url);
+        if (host && compactHosts.has(host) && compact.length < 6) continue;
+        pushCompact(result);
+      }
+      for (const result of verificationPool) {
+        if (compact.length >= 10) break;
+        pushCompact(result);
+      }
+
+      verificationSelectionPool = compact;
+      console.log("[AIShopping] V34.CORE207 compact verification selection pool:", {
+        before: verificationPool.length,
+        after: verificationSelectionPool.length,
+        remainingMs: remainingBeforeCandidateSelection,
+        reserved: rareHardGapReserveCandidates.map((result) => ({
+          host: getResultHostname(result.url),
+          name: result.name,
+          schedulingScore: getRareHardRecoverySchedulingScore(result, parsed),
+        })),
+      });
+    }
+
     const limitedResults = capV34Core164VerificationCandidatesBySourceHealth(
       selectDiverseSearchResults(
-        verificationPool,
+        verificationSelectionPool,
         verificationLimit,
         parsed,
         rareHardGapReserveUrls
