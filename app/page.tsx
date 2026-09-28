@@ -484,6 +484,53 @@ export default function Home() {
     }
   };
 
+  // ASARVO_FAVORITES_HOME_SYNC_V1
+  // Po zapisaniu ulubionej oferty na /search strona główna może wrócić
+  // z cache routera z wcześniejszym stanem. Dla zalogowanego użytkownika
+  // odświeżamy bibliotekę przy powrocie do okna/karty oraz przy otwarciu
+  // panelu Ulubione. Nie dotykamy silnika wyszukiwania.
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      return;
+    }
+
+    const refreshLibraryOnReturn = () => {
+      void refreshSupabaseLibrary();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshLibraryOnReturn();
+      }
+    };
+
+    window.addEventListener("focus", refreshLibraryOnReturn);
+    document.addEventListener(
+      "visibilitychange",
+      onVisibilityChange
+    );
+
+    return () => {
+      window.removeEventListener("focus", refreshLibraryOnReturn);
+      document.removeEventListener(
+        "visibilitychange",
+        onVisibilityChange
+      );
+    };
+  }, [authReady, isAuthenticated]);
+
+  useEffect(() => {
+    if (
+      !authReady ||
+      !isAuthenticated ||
+      libraryPanel !== "favorites"
+    ) {
+      return;
+    }
+
+    void refreshSupabaseLibrary();
+  }, [authReady, isAuthenticated, libraryPanel]);
+
   const reachedPriceWatches = priceWatches.filter((entry) => {
     const currentPrice =
       entry.lastCheckedPrice ?? entry.currentPrice;
