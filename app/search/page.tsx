@@ -1200,9 +1200,11 @@ type SearchApiResponse = {
   error?: string | null;
 };
 
+// ASARVO_SEARCH_CANCEL_V1
 type CachedSearchRequest = {
   createdAt: number;
   promise: Promise<SearchApiResponse>;
+  controller: AbortController;
 };
 
 const SEARCH_REQUEST_CACHE = new Map<string, CachedSearchRequest>();
@@ -1355,15 +1357,26 @@ function getSearchRequest(query: string): Promise<SearchApiResponse> {
   const now = Date.now();
   const cached = SEARCH_REQUEST_CACHE.get(key);
 
-  if (cached && now - cached.createdAt < SEARCH_REQUEST_TTL_MS) {
+  if (
+    cached &&
+    !cached.controller.signal.aborted &&
+    now - cached.createdAt < SEARCH_REQUEST_TTL_MS
+  ) {
     return cached.promise;
   }
+
+  if (cached?.controller.signal.aborted) {
+    SEARCH_REQUEST_CACHE.delete(key);
+  }
+
+  const controller = new AbortController();
 
   const promise = fetch("/api/search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
+    signal: controller.signal,
     body: JSON.stringify({
       query,
     }),
@@ -1380,6 +1393,7 @@ function getSearchRequest(query: string): Promise<SearchApiResponse> {
   SEARCH_REQUEST_CACHE.set(key, {
     createdAt: now,
     promise,
+    controller,
   });
 
   setTimeout(() => {
@@ -1391,6 +1405,32 @@ function getSearchRequest(query: string): Promise<SearchApiResponse> {
   }, SEARCH_REQUEST_TTL_MS);
 
   return promise;
+}
+
+function cancelSearchRequest(query: string): boolean {
+  const key = query.trim().toLowerCase();
+
+  if (!key) {
+    return false;
+  }
+
+  const cached = SEARCH_REQUEST_CACHE.get(key);
+
+  if (!cached) {
+    return false;
+  }
+
+  SEARCH_REQUEST_CACHE.delete(key);
+
+  if (!cached.controller.signal.aborted) {
+    cached.controller.abort();
+  }
+
+  return true;
+}
+
+function isSearchAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 const products: Product[] = [
@@ -1536,6 +1576,10 @@ function SearchPageContent() {
   const [products, setProducts] = useState<Product[]>([]);
 
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // ASARVO_SEARCH_CANCEL_V1_FIX1
+  const searchWasCancelled =
+    searchError === "Wyszukiwanie anulowane.";
 
   const [conditionFilter, setConditionFilter] =
     useState("Wszystkie");
@@ -2159,6 +2203,13 @@ function SearchPageContent() {
           return;
         }
 
+        if (isSearchAbortError(error)) {
+          setInterpretation(null);
+          setProducts([]);
+          setSearchError("Wyszukiwanie anulowane.");
+          return;
+        }
+
         console.error("Błąd analizy zapytania:", error);
 
         setInterpretation(null);
@@ -2181,6 +2232,27 @@ function SearchPageContent() {
       cancelled = true;
     };
   }, [query]);
+
+  const handleCancelSearch = () => {
+    const trimmedQuery = query.trim();
+
+    if (!trimmedQuery || !loading) {
+      return;
+    }
+
+    /*
+     * Unieważniamy bieżący searchId PRZED abort(),
+     * dzięki czemu nawet spóźnione rozstrzygnięcie Promise
+     * nie może już nadpisać UI po anulowaniu.
+     */
+    activeSearchIdRef.current += 1;
+    cancelSearchRequest(trimmedQuery);
+
+    setInterpretation(null);
+    setProducts([]);
+    setSearchError("Wyszukiwanie anulowane.");
+    setLoading(false);
+  };
 
 
   // FILTROWANIE PRODUKTÓW
@@ -2548,7 +2620,35 @@ function SearchPageContent() {
     }
   };
   if (loading) {
-    return <AsarvoSearchLoader query={query} />;
+    return (
+      <>
+        <AsarvoSearchLoader query={query} />
+
+        <div className="fixed inset-x-0 bottom-8 z-[100] flex justify-center px-4">
+          <button
+            type="button"
+            onClick={handleCancelSearch}
+            className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-red-400/25 bg-[#0b0b0d]/95 px-5 py-3 text-sm font-semibold text-red-200 shadow-[0_12px_50px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-300/45 hover:bg-red-500/[0.10] hover:text-red-100 focus:outline-none focus:ring-2 focus:ring-red-400/40"
+            aria-label="Anuluj wyszukiwanie"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
+              className="h-4 w-4"
+            >
+              <path
+                d="M6 6l12 12M18 6 6 18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+              />
+            </svg>
+            Anuluj wyszukiwanie
+          </button>
+        </div>
+      </>
+    );
   }
 
   return (
@@ -3092,7 +3192,7 @@ function SearchPageContent() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : searchWasCancelled ? null : (
             <div className="mt-7 overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-b from-blue-500/[0.06] via-[#080c14] to-[#06080d] shadow-[0_24px_90px_rgba(37,99,235,0.08)]">
               <div className="border-b border-white/[0.06] px-6 py-7 sm:px-9 sm:py-8">
                 <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
@@ -4269,20 +4369,23 @@ function SearchPageContent() {
           )}
 
           {/* LICZNIK */}
-          <div className="mt-7 text-center text-sm text-gray-600">
-            Znaleziono {productFamilies.length}{" "}
-            {productFamilies.length === 1 ? "produkt" : "produktów"}
-            {" "}w {filteredProducts.length}{" "}
-            {filteredProducts.length === 1 ? "ofercie" : "ofertach"}
-            {totalStoreCount > 0 && (
-              <>
-                {" "}z {totalStoreCount}{" "}
-                {totalStoreCount === 1
-                  ? "źródła"
-                  : "źródeł / sklepów"}
-              </>
-            )}
-          </div>
+                    {/* ASARVO_SEARCH_CANCEL_V1_FIX2 */}
+          {!searchWasCancelled && (
+            <div className="mt-7 text-center text-sm text-gray-600">
+                        Znaleziono {productFamilies.length}{" "}
+                        {productFamilies.length === 1 ? "produkt" : "produktów"}
+                        {" "}w {filteredProducts.length}{" "}
+                        {filteredProducts.length === 1 ? "ofercie" : "ofertach"}
+                        {totalStoreCount > 0 && (
+                          <>
+                            {" "}z {totalStoreCount}{" "}
+                            {totalStoreCount === 1
+                              ? "źródła"
+                              : "źródeł / sklepów"}
+                          </>
+                        )}
+                      </div>
+          )}
 
         </section>
 
