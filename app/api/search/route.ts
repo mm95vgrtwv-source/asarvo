@@ -781,6 +781,28 @@ type SearchResult = {
   retailerCatalogCardPrice?: PriceInfo;
   retailerCatalogCardAvailability?: "available" | "unknown" | "unavailable";
 
+  // V34.CORE234: request-local first-party product hydration can read the
+  // exact concrete page before portfolio selection. Keep that SAME page bound
+  // to the candidate so final verification can reuse it instead of spending a
+  // second network round-trip. This is transport reuse only; every ordinary
+  // verifier/HARD/price/condition/availability/originality gate still runs.
+  prefetchedConcretePage?: {
+    status: number;
+    html: string;
+    finalUrl: string;
+  };
+
+  // V34.CORE241: request-local marketplace reader scheduling/cache state.
+  // This is transport reuse only. Structured OLX API proof keys, exact
+  // identity, price, condition, availability and every ordinary final gate
+  // remain independently enforced.
+  prefetchedConcreteReaderPromise?: Promise<string>;
+  prefetchedConcreteReaderText?: string;
+  // CORE256: distinguish a still-running prefetch from a completed empty read
+  // so power-tool verification does not launch a duplicate Jina request while
+  // the original reader is still in flight.
+  prefetchedConcreteReaderSettled?: boolean;
+
   // V34.CORE120: request-local scheduling metadata for the bounded rare-HARD
   // recovery lane. It records WHY a candidate was rediscovered so portfolio
   // selection can keep the best rare-feature candidates without treating the
@@ -2575,10 +2597,18 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
     readerCatalogTimeoutMs: 3_200,
     retryTransientDirectOnce: true,
     maxSearchUrls: 1,
-    buildSearchUrls: ({ productPhrase, exactSearchText, preciseSearchText }) => {
+    buildSearchUrls: ({ productPhrase, exactSearchText, preciseSearchText, brand }) => {
       const scope = normalizeMatchText(
         `${productPhrase} ${exactSearchText} ${preciseSearchText}`
       );
+      const brandSlug = normalizeMatchText(brand)
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+
+      if (brandSlug.length >= 2) {
+        return [`https://www.ofix.pl/marka/${brandSlug}`];
+      }
       if (/(?:^|[^a-z0-9])a4(?=$|[^a-z0-9])/iu.test(scope)) {
         return ["https://www.ofix.pl/kategoria/papier-ksero-a4-711798"];
       }
@@ -2670,8 +2700,17 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
     host: "brw.pl",
     categories: ["chair", "desk"],
     verticals: ["home_furniture"],
-    readerCatalogStrategy: "empty-fallback",
+    // V34.CORE228: BRW reader starts in parallel with direct HTML. This is a
+    // transport-stability change only; parsed cards still pass every existing
+    // universal identity/HARD/condition/availability/price gate.
+    readerCatalogStrategy: "parallel",
     readerCatalogTimeoutMs: 3_200,
+    readerCatalogMaxPages: 1,
+    // V34.CORE228: CORE218 CHAIR_1 lost the initial BRW direct fetch to a
+    // transient network failure, while the later recovery call returned the
+    // same 24-product catalog quickly. Reuse the existing one-shot bounded
+    // transport retry; matching and verification semantics stay unchanged.
+    retryTransientDirectOnce: true,
     maxSearchUrls: 1,
     allowEmbeddedProductRouteFallback: true,
     buildSearchUrls: ({ category }) => {
@@ -2865,7 +2904,7 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
     // configuration, not a product/model/SKU rule. Every card still passes the
     // universal product/spec/availability/price verifier.
     host: "komputronik.pl",
-    categories: ["laptop"],
+    categories: ["laptop", "monitor"],
     verticals: [],
     maxSearchUrls: 3,
     allowDeferredModelIdentityBridge: true,
@@ -2874,7 +2913,59 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
     readerCatalogMaxPages: 3,
     directPageStartGapMs: 180,
     retryRateLimitedDirectOnce: true,
-    buildSearchUrls: ({ brand, requirements }) => {
+    buildSearchUrls: ({ brand, requirements, category }) => {
+      // V34.CORE228: stable first-party monitor filter collections. The route
+      // narrows discovery only; child cards still pass the unchanged universal
+      // resolution/color/condition/price/availability verifier.
+      if (category === "monitor") {
+        const screenRequirement = requirements.find(
+          (requirement) => requirement.key === "screen_size" && requirement.hard
+        );
+        const refreshRequirement = requirements.find(
+          (requirement) => requirement.key === "refresh_rate" && requirement.hard
+        );
+
+        const screenNumber = Number(
+          String(screenRequirement?.value ?? "")
+            .replace(",", ".")
+            .match(/\d{1,3}(?:\.\d+)?/)?.[0] ?? "NaN"
+        );
+        const refreshNumber = Number(
+          String(refreshRequirement?.value ?? "")
+            .replace(",", ".")
+            .match(/\d{2,4}(?:\.\d+)?/)?.[0] ?? "NaN"
+        );
+
+        const exactScreen =
+          Boolean(screenRequirement) &&
+          universalRequirementComparison(screenRequirement!) === "eq" &&
+          Number.isInteger(screenNumber) &&
+          screenNumber >= 10 &&
+          screenNumber <= 100;
+
+        const exactRefresh =
+          Boolean(refreshRequirement) &&
+          universalRequirementComparison(refreshRequirement!) === "eq" &&
+          Number.isInteger(refreshNumber) &&
+          refreshNumber >= 30 &&
+          refreshNumber <= 1000;
+
+        const combinedFilter =
+          exactScreen && exactRefresh
+            ? `https://www.komputronik.pl/search-filter/1251/monitory-${screenNumber}-cali-${refreshNumber}-hz`
+            : "";
+        const refreshFilter =
+          exactRefresh
+            ? `https://www.komputronik.pl/search-filter/1251/monitory-${refreshNumber}hz`
+            : "";
+
+        return Array.from(new Set([
+          combinedFilter,
+          refreshFilter,
+          "https://www.komputronik.pl/category/1251/monitory.html",
+        ].filter(Boolean))).slice(0, 3);
+      }
+
       const brandSlug = normalizeMatchText(brand)
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")
@@ -3503,7 +3594,15 @@ function detectCategory(query: string): string | null {
   if (/\b(monitor)\b/i.test(text)) return "monitor";
   if (/\b(karta graficzna|gpu|geforce|rtx|radeon|rx\s*\d{3,4})\b/i.test(text)) return "gpu";
   if (/\b(procesor|cpu|ryzen|core\s+i[3579])\b/i.test(text)) return "cpu";
-  if (/\b(słuchawki|sluchawki|headset|headphones|airpods|wh-?\d{3,4}xm\d?)\b/i.test(text)) {
+
+  // V34.CORE228: model-led headphone family inference. This routes only the
+  // product class; exact identity/HARD/condition/price verification is unchanged.
+  const hasModelLedHeadphoneFamily =
+    /\bjbl\s+(?:tune|live|tour)\b/i.test(text);
+  if (
+    hasModelLedHeadphoneFamily ||
+    /\b(słuchawki|sluchawki|headset|headphones|airpods|wh-?\d{3,4}xm\d?)\b/i.test(text)
+  ) {
     return "headphones";
   }
   if (/\b(mysz|mouse)\b/i.test(text)) return "mouse";
@@ -4680,6 +4779,64 @@ function storageMediumCanonicalValue(requirement: UniversalRequirement | null): 
   if (value === "nvme") return "nvme";
   if (value === "ssd") return "ssd";
   return null;
+}
+
+// STORE-B24: verified composite-device titles often encode RAM and storage
+// as slash-delimited capacities without repeating RAM/SSD, e.g.
+// "CPU / 32 GB / 1 TB / OS / GPU". This helper is VERIFIED-TITLE-ONLY.
+//
+// Safety:
+// - the candidate RAM segment must be slash-delimited,
+// - a later slash-delimited capacity must be storage-sized (>=128 GB),
+// - candidate RAM must be <=128 GB,
+// - the candidate must satisfy the requested RAM comparison.
+//
+// This does not affect discovery, generic page evidence or the global RAM parser.
+function verifiedTitleHasCompositeRamCapacityEvidence(
+  requirement: UniversalRequirement,
+  titleRaw: string
+): boolean {
+  if (requirement.key !== "ram") return false;
+
+  const requestedGb = parseUniversalCapacityToGb(requirement.value);
+  if (requestedGb === null) return false;
+
+  const title = normalizeMatchText(titleRaw);
+  const slashCapacityRegex =
+    /(?:^|\s[\/|]\s)(\d+(?:[.,]\d+)?)\s*(gb|tb)(?=\s[\/|]\s)/giu;
+  const segments: number[] = [];
+
+  for (const match of title.matchAll(slashCapacityRegex)) {
+    const numeric = Number(match[1].replace(",", "."));
+    if (!Number.isFinite(numeric) || numeric <= 0) continue;
+    segments.push(match[2].toLowerCase() === "tb" ? numeric * 1024 : numeric);
+  }
+
+  if (segments.length < 2) return false;
+
+  for (let i = 0; i < segments.length - 1; i += 1) {
+    const candidateRamGb = segments[i];
+
+    if (candidateRamGb > 128) continue;
+
+    const hasLaterStorageSizedCapacity = segments
+      .slice(i + 1)
+      .some((valueGb) => valueGb >= 128);
+
+    if (!hasLaterStorageSizedCapacity) continue;
+
+    if (
+      universalNumericComparisonSatisfied(
+        candidateRamGb,
+        requestedGb,
+        universalRequirementComparison(requirement)
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function requirementHasEvidenceInContext(
@@ -6648,6 +6805,19 @@ function detectAccessoryIntent(query: string, category: string | null = null): b
 
 function requirementPrimarySearchTerm(requirement: UniversalRequirement): string {
   const aliases = requirement.aliases;
+
+  // V34.CORE228: runtime remains canonical minutes for strict comparison, but
+  // public product specs/search indexes normally express long runtimes in hours.
+  if (requirement.key === "runtime_minutes") {
+    const minutes = parseUniversalRuntimeDurationMinutes(requirement.value);
+    if (minutes !== null && minutes > 0) {
+      if (Number.isInteger(minutes) && minutes % 60 === 0) {
+        return `${canonicalNumber(minutes / 60)} h`;
+      }
+      return `${canonicalNumber(minutes)} min`;
+    }
+  }
+
   if (aliases.length === 0) return requirement.value;
 
   // Alias order is deliberate: the first form is the most natural shopping
@@ -7139,6 +7309,13 @@ function stripRequirementGrammarLabelsFromProductPhrase(
   }
   if (keys.has("read_speed_mbps")) {
     phrase = phrase.replace(/\b(?:predkosc\s+odczytu|prędkość\s+odczytu|odczyt\w*|read\s+speed)\b/giu, " ");
+  }
+  if (keys.has("runtime_minutes")) {
+    // V34.CORE228: strip runtime grammar only after runtime_minutes was parsed.
+    phrase = phrase.replace(
+      /\b(?:czas\s+(?:pracy|dzialania|działania)|runtime|battery\s+life|playtime|operating\s+time|working\s+time|work\s+time)\b/giu,
+      " "
+    );
   }
 
   if (["component_count", "load_capacity_kg", "drum_capacity_kg", "spin_speed_rpm", "read_speed_mbps"].some((key) => keys.has(key))) {
@@ -9133,7 +9310,15 @@ function requirementHasEvidence(
   }
 
   if (requirement.key === "tool_type") {
-    return /\b(?:wiertarko[\s-]*wkr[eę]tark\w*|drill[\s-]*driver|driver[\s-]*drill|combi\s+drill)\b/iu.test(evidence);
+    const directCompound =
+      /\b(?:wiertarko[\s-]*wkr[eę]tark\w*|drill[\s-]*driver|driver[\s-]*drill|combi\s+drill)\b/iu.test(evidence);
+    if (directCompound) return true;
+
+    // CORE258: retailer-owned cards sometimes write the Polish compound class
+    // as two adjacent noun forms ("wkrętarka wiertarka" / reverse order).
+    // Require direct adjacency with no conjunction so a loose bundle list such
+    // as "wiertarka i wkrętarka" does not become equivalent automatically.
+    return /\b(?:wiertark\w*\s+wkr[eę]tark\w*|wkr[eę]tark\w*\s+wiertark\w*)\b/iu.test(evidence);
   }
 
   if (requirement.key === "armrests_4d") return hasUniversal4dArmrestEvidence(evidence);
@@ -14890,19 +15075,33 @@ function getTrustedPreVerificationBudgetPrice(
     const trustedCard = getTrustedRetailerCatalogCardEvidence(result, parsed);
     if (trustedCard) {
       bound = { price: trustedCard.price, currency: trustedCard.currency };
-    } else if (
-      isConfiguredCommerceDomain(result.url) &&
-      hasTrustedRetailerOwnedCardCheckoutEvidence(result)
-    ) {
+    } else {
+      const schedulingOnlyStructuredPrice =
+        getSchedulingOnlyStructuredRetailerCardPrice(
+          result,
+          parsed
+        );
+
+      if (
+        schedulingOnlyStructuredPrice.price !== null &&
+        schedulingOnlyStructuredPrice.currency
+      ) {
+        bound =
+          schedulingOnlyStructuredPrice;
+      } else if (
+        isConfiguredCommerceDomain(result.url) &&
+        hasTrustedRetailerOwnedCardCheckoutEvidence(result)
+      ) {
       // Backward-compatible path for older retailer-card parsers that expose
       // checkout-bound text but do not yet emit structured CORE74 evidence.
-      bound = extractPriceNearProductName(
-        `${result.name} ${result.snippet}`,
-        result.name,
-        parsed.condition
-      );
-    } else {
-      return null;
+        bound = extractPriceNearProductName(
+          `${result.name} ${result.snippet}`,
+          result.name,
+          parsed.condition
+        );
+      } else {
+        return null;
+      }
     }
   } else {
     return null;
@@ -14974,6 +15173,346 @@ function pruneKnownOverBudgetBeforeVerification(
   return kept;
 }
 
+
+// V34.CORE596 generic scheduling trust bridges
+const core596TraceIds = new WeakMap<object, string>();
+const core596CapacityTraceKeys = new Set<string>();
+const core596PriceTraceKeys = new Set<string>();
+
+function getCore596TraceId(parsed: ParsedQuery): string {
+  const key = parsed as unknown as object;
+  const existing = core596TraceIds.get(key);
+  if (existing) return existing;
+
+  const created =
+    `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  core596TraceIds.set(key, created);
+  return created;
+}
+
+function getTrustedBoundedRetailerCompactCapacityProofKeys(
+  result: SearchResult,
+  parsed: ParsedQuery
+): string[] {
+  if (
+    result.source !== "RetailerRescue" ||
+    result.retailerOwnedCardEvidence !== true ||
+    !isConfiguredCommerceDomain(result.url) ||
+    !isProbablyRealOfferUrl(result.url) ||
+    isClearlyNonOfferAssetUrl(result.url) ||
+    isLikelyOpenWorldCategoryOrCollectionResult(
+      result,
+      parsed
+    ) ||
+    !hasStrongIdentityDiscoveryCandidate(
+      [result],
+      parsed
+    )
+  ) {
+    return [];
+  }
+
+  const hardRequirements =
+    parsed.intent.required.filter(
+      (requirement) => requirement.hard
+    );
+
+  const ramRequirement =
+    hardRequirements.find(
+      (requirement) =>
+        requirement.key === "ram"
+    );
+
+  const storageRequirement =
+    hardRequirements.find(
+      (requirement) =>
+        requirement.key === "storage"
+    );
+
+  if (!ramRequirement || !storageRequirement) {
+    return [];
+  }
+
+  const requestedRam =
+    parseUniversalCapacityToGb(
+      ramRequirement.value
+    );
+
+  const requestedStorage =
+    parseUniversalCapacityToGb(
+      storageRequirement.value
+    );
+
+  if (
+    requestedRam === null ||
+    requestedStorage === null ||
+    requestedStorage <= requestedRam ||
+    requestedRam > 256 ||
+    requestedStorage < 64
+  ) {
+    return [];
+  }
+
+  const title = normalizeText(result.name);
+  if (!title) return [];
+
+  type CapacityHit = {
+    valueGb: number;
+    start: number;
+    end: number;
+  };
+
+  const hits: CapacityHit[] = [];
+
+  for (
+    const match of title.matchAll(
+      /\b(\d+(?:[.,]\d+)?)\s*(tb|gb)\b/giu
+    )
+  ) {
+    if (typeof match.index !== "number") continue;
+
+    const numeric =
+      Number(match[1].replace(",", "."));
+
+    if (
+      !Number.isFinite(numeric) ||
+      numeric <= 0
+    ) {
+      continue;
+    }
+
+    const valueGb =
+      match[2].toLowerCase() === "tb"
+        ? numeric * 1024
+        : numeric;
+
+    hits.push({
+      valueGb,
+      start: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+
+  const ramHits =
+    hits.filter((hit) =>
+      universalNumericComparisonSatisfied(
+        hit.valueGb,
+        requestedRam,
+        universalRequirementComparison(
+          ramRequirement
+        )
+      )
+    );
+
+  const storageHits =
+    hits.filter((hit) =>
+      universalNumericComparisonSatisfied(
+        hit.valueGb,
+        requestedStorage,
+        universalRequirementComparison(
+          storageRequirement
+        )
+      )
+    );
+
+  let trustedPair = false;
+
+  for (const ramHit of ramHits) {
+    const ramWindow =
+      normalizeMatchText(
+        title.slice(
+          Math.max(0, ramHit.start - 18),
+          Math.min(
+            title.length,
+            ramHit.end + 18
+          )
+        )
+      );
+
+    if (
+      /\b(?:vram|gddr\d*)\b/iu.test(
+        ramWindow
+      )
+    ) {
+      continue;
+    }
+
+    for (const storageHit of storageHits) {
+      if (storageHit.start <= ramHit.end) {
+        continue;
+      }
+
+      if (
+        storageHit.start - ramHit.end > 72
+      ) {
+        continue;
+      }
+
+      const between =
+        title.slice(
+          ramHit.end,
+          storageHit.start
+        );
+
+      if (!/[\/|+;,\-]/u.test(between)) {
+        continue;
+      }
+
+      const storageWindow =
+        normalizeMatchText(
+          title.slice(
+            Math.max(
+              0,
+              storageHit.start - 18
+            ),
+            Math.min(
+              title.length,
+              storageHit.end + 18
+            )
+          )
+        );
+
+      if (
+        /\b(?:ram|vram|gddr\d*|ddr[345])\b/iu.test(
+          storageWindow
+        )
+      ) {
+        continue;
+      }
+
+      trustedPair = true;
+      break;
+    }
+
+    if (trustedPair) break;
+  }
+
+  if (!trustedPair) return [];
+
+  const keys = ["ram", "storage"];
+
+  const traceId =
+    getCore596TraceId(parsed);
+
+  const traceKey =
+    `${traceId}|${normalizeUrl(result.url)}`;
+
+  if (!core596CapacityTraceKeys.has(traceKey)) {
+    core596CapacityTraceKeys.add(traceKey);
+
+    console.log(
+      "[AIShopping] V34.CORE596_CAPACITY_BRIDGE_JSON " +
+        JSON.stringify({
+          traceId,
+          maxPrice: parsed.maxPrice,
+          source: result.source,
+          host:
+            getResultHostname(result.url),
+          keys,
+        })
+    );
+  }
+
+  return keys;
+}
+
+function getSchedulingOnlyStructuredRetailerCardPrice(
+  result: SearchResult,
+  parsed: ParsedQuery
+): PriceInfo {
+  if (
+    result.source !== "RetailerRescue" ||
+    result.retailerOwnedCardEvidence !== true ||
+    !isConfiguredCommerceDomain(result.url) ||
+    !isProbablyRealOfferUrl(result.url) ||
+    isClearlyNonOfferAssetUrl(result.url) ||
+    isLikelyOpenWorldCategoryOrCollectionResult(
+      result,
+      parsed
+    ) ||
+    result.retailerCatalogCardAvailability !==
+      "available" ||
+    !hasStrongIdentityDiscoveryCandidate(
+      [result],
+      parsed
+    )
+  ) {
+    return {
+      price: null,
+      currency: null,
+    };
+  }
+
+  const structured =
+    result.retailerCatalogCardPrice;
+
+  if (
+    structured?.price === null ||
+    structured?.price === undefined ||
+    !Number.isFinite(structured.price) ||
+    structured.price <= 0 ||
+    !structured.currency ||
+    normalizeMatchText(
+      structured.currency
+    ) !== "pln"
+  ) {
+    return {
+      price: null,
+      currency: null,
+    };
+  }
+
+  const evidence =
+    normalizeText(
+      `${result.name} ${result.snippet}`
+    ).slice(0, 8_000);
+
+  const explicitCondition =
+    extractTrustedConditionFromText(
+      evidence
+    );
+
+  if (
+    parsed.condition &&
+    explicitCondition &&
+    explicitCondition !== parsed.condition
+  ) {
+    return {
+      price: null,
+      currency: null,
+    };
+  }
+
+  const traceId =
+    getCore596TraceId(parsed);
+
+  const traceKey =
+    `${traceId}|${normalizeUrl(result.url)}`;
+
+  if (!core596PriceTraceKeys.has(traceKey)) {
+    core596PriceTraceKeys.add(traceKey);
+
+    console.log(
+      "[AIShopping] V34.CORE596_PRICE_BRIDGE_JSON " +
+        JSON.stringify({
+          traceId,
+          maxPrice: parsed.maxPrice,
+          source: result.source,
+          host:
+            getResultHostname(result.url),
+          availability:
+            result.retailerCatalogCardAvailability,
+        })
+    );
+  }
+
+  return {
+    price: structured.price,
+    currency: structured.currency,
+  };
+}
+
 function getTrustedPortfolioHardProofKeys(
   result: SearchResult,
   parsed: ParsedQuery
@@ -14990,6 +15529,13 @@ function getTrustedPortfolioHardProofKeys(
     ? normalizeText(`${ownEvidence} ${result.snippet}`)
     : ownEvidence;
   const catalogProofKeys = new Set(result.catalogRequirementProofKeys ?? []);
+  const compactCapacityProofKeys =
+    new Set(
+      getTrustedBoundedRetailerCompactCapacityProofKeys(
+        result,
+        parsed
+      )
+    );
 
   return hardRequirements
     .filter((requirement) => {
@@ -14998,6 +15544,9 @@ function getTrustedPortfolioHardProofKeys(
       );
       return own ||
         catalogProofKeys.has(requirement.key) ||
+        compactCapacityProofKeys.has(
+          requirement.key
+        ) ||
         (result.retailerOwnedCardEvidence === true &&
           requirementHasEvidenceInContext(
             requirement, boundedEvidence, parsed.intent.required
@@ -17421,9 +17970,27 @@ function parseRescuedRetailerLandingMarkdown(
     );
     const retailerCatalogCardAvailability = getAvailabilityFromHtml(boundEvidence);
 
+    const v34Core228TrustedKomputronikMonitorCategoryEvidence =
+      expectedHost === "komputronik.pl" &&
+      parsed.category === "monitor" &&
+      /komputronik\.pl\/(?:search-filter\/1251\/monitory|category\/1251\/monitory)/i.test(pageUrl)
+        ? "monitor"
+        : "";
+
+    // V34.CORE228: RetailerRescue category identity is intentionally
+    // title-bound. Carry ONLY the trusted configured collection noun into the
+    // discovery title. Local card text still supplies "dla graczy" as the soft
+    // gaming qualifier; HARD specs/price/condition remain untouched.
+    const v34Core228CandidateName =
+      v34Core228TrustedKomputronikMonitorCategoryEvidence
+        ? normalizeText(
+            `${v34Core228TrustedKomputronikMonitorCategoryEvidence} ${name}`
+          )
+        : name;
+
     const candidate: SearchResult = {
       url: cluster.url,
-      name,
+      name: v34Core228CandidateName,
       snippet: normalizeText(`${name} ${snippet}`).slice(0, 2_400),
       source: "RetailerRescue",
       searchRank: candidates.length,
@@ -17438,13 +18005,43 @@ function parseRescuedRetailerLandingMarkdown(
       expectedHost
     );
 
-    if (!looksLikeRescuedRetailerProductCandidate(
+    const v34Core228StrongKomputronikMonitorCardRequirements =
+      v34Core228TrustedKomputronikMonitorCategoryEvidence
+        ? parsed.intent.required.filter(
+            (requirement) => requirement.hard && requirement.key !== "color"
+          )
+        : [];
+
+    const v34Core228StrongKomputronikMonitorCard = Boolean(
+      v34Core228TrustedKomputronikMonitorCategoryEvidence &&
+      v34Core228StrongKomputronikMonitorCardRequirements.length >= 2 &&
+      v34Core228StrongKomputronikMonitorCardRequirements.every((requirement) =>
+        requirementHasEvidence(requirement, boundEvidence)
+      ) &&
+      parsed.intent.qualifierTerms.every((term) =>
+        openWorldQualifierTermMatches(term, boundEvidence, parsed)
+      ) &&
+      retailerCatalogCardPrice &&
+      retailerCatalogCardAvailability !== "unavailable"
+    );
+
+    const v34Core228UniversalRetailerMatch = looksLikeRescuedRetailerProductCandidate(
       candidate,
       parsed,
       expectedHost,
       allowDeferredModelIdentityBridge
-    )) {
+    );
+
+    if (!v34Core228UniversalRetailerMatch && !v34Core228StrongKomputronikMonitorCard) {
       continue;
+    }
+
+    if (v34Core228StrongKomputronikMonitorCard && !v34Core228UniversalRetailerMatch) {
+      console.log(
+        "[AIShopping] V34.CORE228 trusted Komputronik monitor card rescue:",
+        candidate.name,
+        v34Core228StrongKomputronikMonitorCardRequirements.map((requirement) => requirement.key)
+      );
     }
 
     seen.add(cluster.url);
@@ -18416,7 +19013,15 @@ function buildDirectRetailerCatalogRequests(
       .filter(Boolean)
   );
 
-  return V28_DIRECT_RETAILER_CATALOG_ADAPTERS
+  
+  // STORE-B21_FIX5: brand-owned first-party directory adapters.
+  // If parsed.brand exists, rank these after category-specific stores but
+  // before generic vertical-only stores. No brand/model/SKU/price hardcode.
+  const brandOwnedDirectoryHosts = new Set<string>([
+    "delkom.pl",
+  ]);
+
+return V28_DIRECT_RETAILER_CATALOG_ADAPTERS
     .filter((adapter) =>
       (hostAllowlist.size === 0 || hostAllowlist.has(adapter.host)) &&
       (
@@ -18429,11 +19034,17 @@ function buildDirectRetailerCatalogRequests(
       adapter,
       index,
       categorySpecific: adapter.categories.includes(parsed.category ?? ""),
+
+      brandDirectorySpecific:
+
+        Boolean(context.brand) && brandOwnedDirectoryHosts.has(adapter.host),
       verticalSpecific: adapter.verticals.some((vertical) => matchedVerticals.has(vertical)),
       directoryMatched: matchedVerticalDirectoryHosts.has(adapter.host),
     }))
     .sort((a, b) =>
       Number(b.categorySpecific) - Number(a.categorySpecific) ||
+
+      Number(b.brandDirectorySpecific) - Number(a.brandDirectorySpecific) ||
       Number(b.verticalSpecific) - Number(a.verticalSpecific) ||
       Number(b.directoryMatched) - Number(a.directoryMatched) ||
       a.index - b.index
@@ -18459,6 +19070,19 @@ async function searchDirectRetailerCatalogPages(
   options: DirectRetailerCatalogSearchOptions = {}
 ): Promise<SearchResult[]> {
   const requests = buildDirectRetailerCatalogRequests(parsed, options);
+
+
+  console.log("[AIShopping] STORE-B21_FIX5 ordinary retailer selection JSON:", JSON.stringify({
+
+    category: parsed.category,
+
+    brand: parsed.brand ?? null,
+
+    maxAdapters: options.maxAdapters ?? 7,
+
+    hosts: requests.map(({ adapter }) => adapter.host),
+
+  }));
   if (requests.length === 0) return [];
 
   const chunks = await Promise.all(
@@ -18515,10 +19139,27 @@ async function searchDirectRetailerCatalogPages(
                 adapter.readerCatalogTimeoutMs ?? 3_200;
               const parallelReaderPageLimit =
                 adapter.readerCatalogMaxPages ?? 1;
-              const runReaderInParallel =
+              // V34.STORE-B64 FIX4 DIRECT-FIRST READER POLICY
+              const storeB64Fix4WouldRunReaderInParallel =
                 options.disableReaderFallback !== true &&
                 readerStrategy === "parallel" &&
                 pageIndex < parallelReaderPageLimit;
+              const runReaderInParallel = false;
+
+              if (storeB64Fix4WouldRunReaderInParallel) {
+                console.log(
+                  "[AIShopping] V34.STORE_B64_FIX4_JSON " +
+                    JSON.stringify({
+                      stage: "eager-parallel-suppressed",
+                      host: adapter.host,
+                      pageIndex,
+                      url,
+                      readerStrategy,
+                      readerTimeoutMs,
+                      parallelReaderPageLimit,
+                    })
+                );
+              }
 
               // Hydrated/blocked catalogs may need a reader. Only the bounded
               // source-declared page set starts immediately, preventing generic
@@ -18681,6 +19322,23 @@ async function searchDirectRetailerCatalogPages(
                 }
               }
 
+              if (
+                storeB64Fix4WouldRunReaderInParallel &&
+                parsedCatalogProducts.length > 0
+              ) {
+                console.log(
+                  "[AIShopping] V34.STORE_B64_FIX4_JSON " +
+                    JSON.stringify({
+                      stage: "suppressed-reader-proven-redundant",
+                      host: adapter.host,
+                      pageIndex,
+                      url,
+                      directParsedProducts:
+                        parsedCatalogProducts.length,
+                    })
+                );
+              }
+
               let jinaCatalogText = "";
 
               if (
@@ -18705,6 +19363,21 @@ async function searchDirectRetailerCatalogPages(
                   // when direct HTML was unusable, while keeping one bounded
                   // reader request and the unchanged universal product gates.
                   if (usableHtml || directTransportBlocked) {
+                    if (storeB64Fix4WouldRunReaderInParallel) {
+                      console.log(
+                        "[AIShopping] V34.STORE_B64_FIX4_JSON " +
+                          JSON.stringify({
+                            stage: "reader-admitted-after-direct-empty",
+                            host: adapter.host,
+                            pageIndex,
+                            url: finalUrl,
+                            directStatus:
+                              fetched?.status ?? null,
+                            usableHtml,
+                          })
+                      );
+                    }
+
                     jinaCatalogText = await fetchViaJina(
                       finalUrl,
                       readerTimeoutMs,
@@ -20318,6 +20991,30 @@ function extractRetailerCheckoutBoundEvidenceFromJina(
         )
     )
   );
+  const v34Core228BoundMpn =
+    extractProductBoundRetailerManufacturerCodeFromJina(
+      textRaw,
+      productNamesRaw,
+      urlRaw
+    );
+
+  if (
+    v34Core228BoundMpn &&
+    isConfiguredCommerceDomain(urlRaw) &&
+    isProbablyRealOfferUrl(urlRaw) &&
+    titleContainsUniversalModelCode(urlRaw, v34Core228BoundMpn) &&
+    !references.some((value) =>
+      titleContainsUniversalModelCode(value, v34Core228BoundMpn)
+    )
+  ) {
+    references.push(v34Core228BoundMpn);
+    console.log(
+      "[AIShopping] V34.CORE228 checkout binder added product-bound MPN anchor:",
+      getResultHostname(urlRaw),
+      v34Core228BoundMpn
+    );
+  }
+
   if (references.length === 0) return empty;
 
   const lines = textRaw.replace(/\u00a0|\u202f/g, " ").split(/\r?\n/);
@@ -25147,10 +25844,52 @@ async function searchIndexedMarketplaceProductRescue(
   return accepted;
 }
 
+const V34_CORE228_DDG_FAILURE_WINDOW_MS = 15_000;
+const V34_CORE228_DDG_COOLDOWN_MS = 60_000;
+let v34Core228DdgFailureStreak = 0;
+let v34Core228DdgLastFailureAt = 0;
+let v34Core228DdgUnavailableUntil = 0;
+let v34Core228DdgLastSkipLogAt = 0;
+
+function noteV34Core219DuckDuckGoFailure(): void {
+  const now = Date.now();
+
+  if (now - v34Core228DdgLastFailureAt > V34_CORE228_DDG_FAILURE_WINDOW_MS) {
+    v34Core228DdgFailureStreak = 0;
+  }
+
+  v34Core228DdgLastFailureAt = now;
+  v34Core228DdgFailureStreak += 1;
+
+  if (v34Core228DdgFailureStreak >= 2) {
+    v34Core228DdgUnavailableUntil = Math.max(
+      v34Core228DdgUnavailableUntil,
+      now + V34_CORE228_DDG_COOLDOWN_MS
+    );
+  }
+}
+
+function noteV34Core219DuckDuckGoSuccess(): void {
+  v34Core228DdgFailureStreak = 0;
+  v34Core228DdgLastFailureAt = 0;
+  v34Core228DdgUnavailableUntil = 0;
+}
+
 async function searchDuckDuckGo(
   query: string,
   externalSignal?: AbortSignal
 ): Promise<SearchResult[]> {
+  const now = Date.now();
+
+  if (now < v34Core228DdgUnavailableUntil) {
+    if (now - v34Core228DdgLastSkipLogAt >= 5_000) {
+      v34Core228DdgLastSkipLogAt = now;
+      console.log("[AIShopping] V34.CORE228 DuckDuckGo circuit open: skip", {
+        remainingMs: v34Core228DdgUnavailableUntil - now,
+      });
+    }
+    return [];
+  }
   try {
     const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(
       query
@@ -25159,6 +25898,7 @@ async function searchDuckDuckGo(
     const result = await fetchHtml(url, SEARCH_TIMEOUT_MS, externalSignal);
 
     if (!result || result.status >= 400) {
+      noteV34Core219DuckDuckGoFailure();
       console.error(
         "[AIShopping] DuckDuckGo HTTP error:",
         result?.status ?? "network"
@@ -25166,8 +25906,10 @@ async function searchDuckDuckGo(
       return [];
     }
 
+    noteV34Core219DuckDuckGoSuccess();
     return parseDuckDuckGo(result.html);
   } catch (error) {
+    noteV34Core219DuckDuckGoFailure();
     console.error("[AIShopping] DuckDuckGo error:", error);
     return [];
   }
@@ -28905,6 +29647,338 @@ async function searchOlxPublicJsonApi(
   return results;
 }
 
+// V34.CORE254 POWER-TOOL REQUEST-LOCAL OLX MULTI-PROBE
+// CORE243 confirmed that one identical OLX API request can return zero while a
+// second request in the same search returns a concrete offer. Keep this
+// resilience completely isolated to power_tool. No global retailer adapter is
+// registered and no product/model/SKU is encoded here.
+type V34Core244PowerToolOlxPrefetch = {
+  results: SearchResult[];
+  promise: Promise<void>;
+};
+
+function startV34Core244PowerToolOlxPrefetch(
+  parsed: ParsedQuery
+): V34Core244PowerToolOlxPrefetch | null {
+  const hardRequirements = parsed.intent.required.filter(
+    (requirement) => requirement.hard
+  );
+  const hardKeys = new Set(hardRequirements.map((requirement) => requirement.key));
+
+  if (
+    parsed.country !== "PL" ||
+    parsed.category !== "power_tool" ||
+    !hardKeys.has("voltage") ||
+    !hardKeys.has("tool_type")
+  ) {
+    return null;
+  }
+
+  const state: V34Core244PowerToolOlxPrefetch = {
+    results: [],
+    promise: Promise.resolve(),
+  };
+
+  state.promise = (async () => {
+    const surfaceQueries = buildSurfacePreservingProductQueries(parsed);
+    const queryCandidates = Array.from(new Set([
+      buildOlxPublicApiSearchQuery(parsed),
+      surfaceQueries[1] ?? "",
+      buildUniversalPreciseDiscoveryCore(parsed),
+    ].map((value) => normalizeText(value)).filter(Boolean))).slice(0, 3);
+
+    const firstWave = await Promise.all(
+      queryCandidates.map((query) =>
+        searchOlxPublicJsonApi(parsed, query).catch(() => [])
+      )
+    );
+
+    let allCandidates = dedupeSearchResultsByUrl(firstWave.flat());
+
+    // CORE240 contained a concrete example where two same-query calls inside
+    // one request returned 0 then 1. Retry one exact surface only when the
+    // complete first wave is empty. This is bounded and power_tool-only.
+    if (allCandidates.length === 0 && queryCandidates[0]) {
+      await sleep(180);
+      const retry = await searchOlxPublicJsonApi(
+        parsed,
+        queryCandidates[0]
+      ).catch(() => []);
+      allCandidates = dedupeSearchResultsByUrl(retry);
+    }
+
+    // V34.CORE262: repeated live traces showed the request-local OLX API
+    // multi-probe completing successfully but returning ZERO concrete cards
+    // (POWER_TOOL 0/6, candidate-evaluation/title-bound counters both 0).
+    // When that exact condition occurs, spend one bounded reserve in parallel:
+    // 1) OLX-only Bing reference indexes for a concrete /d/oferta URL, and
+    // 2) the existing first-party OLX landing reader via Jina.
+    //
+    // This is discovery-only resilience. Search-index text never becomes HARD
+    // proof or retailer-owned card evidence; indexed URLs must still be read
+    // and pass the unchanged concrete-page verifier. First-party reader cards
+    // keep their existing bounded-card semantics. No product/model/SKU is
+    // hard-coded and no global marketplace lane is widened.
+    if (allCandidates.length === 0) {
+      const reserveCore = normalizeText(
+        buildUniversalPreciseDiscoveryCore(parsed) ||
+        queryCandidates[0] ||
+        parsed.intent.productPhrase ||
+        parsed.intent.searchBase ||
+        parsed.queryText
+      );
+      const indexedQuery = reserveCore
+        ? normalizeText(`site:olx.pl/d/oferta ${reserveCore}`)
+        : "";
+
+      const [indexedReserveRaw, firstPartyReaderReserveRaw] = await Promise.all([
+        indexedQuery
+          ? searchHostLabelIndexCoverage(
+              indexedQuery,
+              "olx.pl",
+              1_650,
+              undefined,
+              true
+            ).catch(() => [])
+          : Promise.resolve([] as SearchResult[]),
+        searchLateOlxRecoveryViaJina(
+          parsed,
+          2_900
+        ).catch(() => []),
+      ]);
+
+      const indexedReserve = indexedReserveRaw.filter(
+        (result) =>
+          getResultHostname(result.url) === "olx.pl" &&
+          isProbablyRealOfferUrl(result.url)
+      );
+      const firstPartyReaderReserve = firstPartyReaderReserveRaw.filter(
+        (result) =>
+          getResultHostname(result.url) === "olx.pl" &&
+          isProbablyRealOfferUrl(result.url)
+      );
+
+      allCandidates = dedupeSearchResultsByUrl([
+        ...firstPartyReaderReserve,
+        ...indexedReserve,
+      ]);
+
+      console.log("[AIShopping] V34.CORE262 power-tool OLX empty-API reserve:", {
+        indexedQuery,
+        indexed: indexedReserve.length,
+        firstPartyReader: firstPartyReaderReserve.length,
+        merged: allCandidates.length,
+      });
+    }
+
+    // CORE260: the public OLX search card is a discovery surface, not the
+    // final voltage proof. Live CORE259 returned one concrete power-tool card
+    // in every run, but the card omitted the voltage field and was therefore
+    // discarded before its concrete listing page could be read. Relax ONLY
+    // voltage at this request-local discovery admission step. Tool class,
+    // product identity, condition, URL shape and the full final verifier remain
+    // unchanged. The concrete page must still prove the requested voltage.
+    const v34Core260PowerToolDiscoveryParsed: ParsedQuery = {
+      ...parsed,
+      intent: {
+        ...parsed.intent,
+        required: parsed.intent.required.filter(
+          (requirement) => requirement.key !== "voltage"
+        ),
+      },
+    };
+
+    const ranked = allCandidates
+      .filter((result) => {
+        if (getResultHostname(result.url) !== "olx.pl") return false;
+        if (!isProbablyRealOfferUrl(result.url)) return false;
+
+        const boundCondition = extractOlxDirectBoundCondition(
+          result.snippet,
+          result.name
+        );
+        if (
+          parsed.condition &&
+          boundCondition &&
+          boundCondition !== parsed.condition
+        ) {
+          return false;
+        }
+
+        const discoveryMatch = evaluateUniversalProductMatch(
+          result.name,
+          result.snippet,
+          result.url,
+          v34Core260PowerToolDiscoveryParsed,
+          "discovery",
+          result.source
+        );
+
+        if (discoveryMatch.pass) {
+          console.log(
+            "[AIShopping] V34.CORE260 power-tool OLX discovery-admitted:",
+            {
+              url: result.url,
+              name: result.name,
+              cardProofKeys: result.catalogRequirementProofKeys ?? [],
+            }
+          );
+        }
+
+        return discoveryMatch.pass;
+      })
+      .sort((a, b) => {
+        const aKeys = new Set(a.catalogRequirementProofKeys ?? []);
+        const bKeys = new Set(b.catalogRequirementProofKeys ?? []);
+        const aStructured = hardRequirements.filter((r) => aKeys.has(r.key)).length;
+        const bStructured = hardRequirements.filter((r) => bKeys.has(r.key)).length;
+
+        if (bStructured !== aStructured) return bStructured - aStructured;
+
+        const aCoverage = resultProvesHardCoverageRequirements(a, parsed);
+        const bCoverage = resultProvesHardCoverageRequirements(b, parsed);
+        if (bCoverage !== aCoverage) return Number(bCoverage) - Number(aCoverage);
+
+        return (
+          getSearchResultPriority(b, parsed) -
+            getSearchResultPriority(a, parsed) ||
+          a.searchRank - b.searchRank
+        );
+      })
+      .slice(0, 3);
+
+    for (const candidate of ranked) {
+      const isFirstPartyBoundOlxCard = candidate.source === "OLXDirect";
+      const result: SearchResult = {
+        ...candidate,
+        // Only OLX-owned API/reader cards are bounded first-party evidence.
+        // Bing/index reserve results are discovery pointers only and therefore
+        // must NOT inherit this flag.
+        ...(isFirstPartyBoundOlxCard
+          ? { retailerOwnedCardEvidence: true }
+          : {}),
+      };
+
+      // V34.CORE254: promote title-bounded HARD only for a first-party OLX
+      // card. CORE262 may also feed indexed discovery pointers through this
+      // lane; their titles/snippets are never allowed to become product proof.
+      const titleBoundHardKeys = isFirstPartyBoundOlxCard
+        ? hardRequirements
+            .filter((requirement) =>
+              requirementHasEvidenceInContext(
+                requirement,
+                normalizeText(result.name),
+                parsed.intent.required
+              )
+            )
+            .map((requirement) => requirement.key)
+        : [];
+
+      if (titleBoundHardKeys.length > 0) {
+        result.catalogRequirementProofKeys = Array.from(new Set([
+          ...(result.catalogRequirementProofKeys ?? []),
+          ...titleBoundHardKeys,
+        ]));
+
+        console.log(
+          "[AIShopping] V34.CORE260 power-tool title-bound card HARD:",
+          {
+            url: result.url,
+            keys: titleBoundHardKeys,
+            allProofKeys: result.catalogRequirementProofKeys,
+          }
+        );
+      }
+
+      const structuredKeys = new Set(result.catalogRequirementProofKeys ?? []);
+      const structuredComplete = hardRequirements.every((requirement) =>
+        structuredKeys.has(requirement.key)
+      );
+      const boundedCardEvidence = normalizeText(`${result.name} ${result.snippet}`);
+      const boundedCardHardKeys = isFirstPartyBoundOlxCard
+        ? hardRequirements
+            .filter((requirement) =>
+              requirementHasEvidenceInContext(
+                requirement,
+                boundedCardEvidence,
+                parsed.intent.required
+              )
+            )
+            .map((requirement) => requirement.key)
+        : [];
+      const boundedCardComplete =
+        isFirstPartyBoundOlxCard &&
+        hardRequirements.every((requirement) =>
+          boundedCardHardKeys.includes(requirement.key)
+        );
+
+      // CORE258: the final verifier already trusts this exact first-party OLX
+      // card as bounded evidence. If that SAME card proves the whole HARD
+      // footprint, do not consume a Jina slot merely to repeat the evidence.
+      // No requirement is promoted from generic search text.
+      if (!structuredComplete && !boundedCardComplete) {
+        result.prefetchedConcreteReaderSettled = false;
+
+        const readerPromise = fetchViaJina(
+          result.url,
+          7_000,
+          false
+        )
+          .then((readerText) => {
+            result.prefetchedConcreteReaderText = readerText;
+            result.prefetchedConcreteReaderSettled = true;
+            return readerText;
+          })
+          .catch(() => {
+            result.prefetchedConcreteReaderSettled = true;
+            return "";
+          });
+
+        result.prefetchedConcreteReaderPromise = readerPromise;
+      }
+
+      state.results.push(result);
+    }
+
+    console.log("[AIShopping] V34.CORE260 power-tool OLX multi-probe:", {
+      queries: queryCandidates,
+      candidates: allCandidates.length,
+      selected: state.results.map((result) => ({
+        url: result.url,
+        name: result.name,
+        proofKeys: result.catalogRequirementProofKeys ?? [],
+        boundedCardKeys: hardRequirements
+          .filter((requirement) =>
+            requirementHasEvidenceInContext(
+              requirement,
+              normalizeText(`${result.name} ${result.snippet}`),
+              parsed.intent.required
+            )
+          )
+          .map((requirement) => requirement.key),
+        structuredComplete: hardRequirements.every((requirement) =>
+          (result.catalogRequirementProofKeys ?? []).includes(requirement.key)
+        ),
+        boundedCardComplete: hardRequirements.every((requirement) =>
+          requirementHasEvidenceInContext(
+            requirement,
+            normalizeText(`${result.name} ${result.snippet}`),
+            parsed.intent.required
+          )
+        ),
+        readerStarted: Boolean(result.prefetchedConcreteReaderPromise),
+      })),
+    });
+  })().catch((error) => {
+    console.log(
+      "[AIShopping] V34.CORE260 power-tool OLX multi-probe failed:",
+      error instanceof Error ? error.message : String(error)
+    );
+  });
+
+  return state;
+}
+
 const OLX_CATEGORY_SEARCH_BASES: Readonly<Record<string, string>> = {
   // Category-level routes only. These are not model/SKU shortcuts: OLX itself
   // indexes the same query much more reliably inside the correct taxonomy.
@@ -29118,6 +30192,64 @@ async function searchDirectMarketplacePages(
   onPartialResults?: (results: SearchResult[]) => void
 ): Promise<SearchResult[]> {
   if (parsed.country !== "PL") return [];
+
+  // V34.CORE592 OLX early model-identity prune
+  const core592OlxSeenUrls = new Set<string>();
+  const core592OlxDroppedUrls = new Set<string>();
+  const core592OlxKeptUrls = new Set<string>();
+  const core592OlxDropWitnesses: Array<{
+    url: string;
+    name: string;
+    reasons: string[];
+  }> = [];
+
+  const core592FilterOlxIdentityDoomed = (
+    rows: SearchResult[]
+  ): SearchResult[] => {
+    if (rows.length === 0) return rows;
+
+    const filtered: SearchResult[] = [];
+
+    for (const result of rows) {
+      if (result.source !== "OLXDirect") {
+        filtered.push(result);
+        continue;
+      }
+
+      const normalizedUrl = normalizeUrl(result.url);
+      if (normalizedUrl) core592OlxSeenUrls.add(normalizedUrl);
+
+      const match = evaluateUniversalProductMatch(
+        result.name,
+        result.snippet,
+        result.url,
+        parsed,
+        "discovery",
+        result.source
+      );
+
+      const modelIdentityDoomed =
+        !match.pass &&
+        match.reasons.includes("model-identity-mismatch");
+
+      if (modelIdentityDoomed) {
+        if (normalizedUrl) core592OlxDroppedUrls.add(normalizedUrl);
+        if (core592OlxDropWitnesses.length < 8) {
+          core592OlxDropWitnesses.push({
+            url: normalizedUrl || result.url,
+            name: result.name,
+            reasons: match.reasons,
+          });
+        }
+        continue;
+      }
+
+      if (normalizedUrl) core592OlxKeptUrls.add(normalizedUrl);
+      filtered.push(result);
+    }
+
+    return filtered;
+  };
 
   const relaxedProductQuery = buildMarketplaceDiscoveryQuery(parsed);
   const preciseProductQuery = buildUniversalPreciseDiscoveryCore(parsed);
@@ -30002,8 +31134,12 @@ async function searchDirectMarketplacePages(
       [] as SearchResult[],
       `direct source ${entry.source}`
     ).then((chunk) => {
-      if (chunk.length > 0) onPartialResults?.(chunk);
-      return chunk;
+      const core592FilteredChunk =
+        core592FilterOlxIdentityDoomed(chunk);
+      if (core592FilteredChunk.length > 0) {
+        onPartialResults?.(core592FilteredChunk);
+      }
+      return core592FilteredChunk;
     });
 
   const olxEntries = urls.filter((entry) => entry.source === "OLXDirect");
@@ -30031,8 +31167,12 @@ async function searchDirectMarketplacePages(
     [] as SearchResult[],
     "OLX public JSON discovery"
   ).then((chunk) => {
-    if (chunk.length > 0) onPartialResults?.(chunk);
-    return chunk;
+    const core592FilteredChunk =
+      core592FilterOlxIdentityDoomed(chunk);
+    if (core592FilteredChunk.length > 0) {
+      onPartialResults?.(core592FilteredChunk);
+    }
+    return core592FilteredChunk;
   });
 
   const olxChunkPromise: Promise<SearchResult[]> = (async () => {
@@ -30137,6 +31277,23 @@ async function searchDirectMarketplacePages(
       });
     }
   }
+
+  console.log(
+    "[AIShopping] V34.CORE592_OLX_PRUNE_JSON " +
+      JSON.stringify({
+        maxPrice: parsed.maxPrice,
+        seenUnique: core592OlxSeenUrls.size,
+        droppedModelIdentityUnique:
+          core592OlxDroppedUrls.size,
+        keptUnique: core592OlxKeptUrls.size,
+        dropRate:
+          core592OlxSeenUrls.size > 0
+            ? core592OlxDroppedUrls.size /
+              core592OlxSeenUrls.size
+            : 0,
+        witnesses: core592OlxDropWitnesses,
+      })
+  );
 
   console.log(
     "[AIShopping] V34.CORE120 direct marketplace source mix:",
@@ -30371,7 +31528,7 @@ async function runSearch(
   const ceneoPriorityPreflightAttempted =
     V34_CENEO_PRIORITY_PREFLIGHT.get(parsed)?.attempted === true;
 
-  const targetedQueries = Array.from(
+  let targetedQueries = Array.from(
     new Set([
       ...buildAutomotiveTargetedRetailerQueries(parsed),
       ...semanticIdentityTargetedQueries,
@@ -30388,6 +31545,107 @@ async function runSearch(
       )
     )
     .slice(0, targetedQueryLimit);
+
+  const v34Core228GenericChairHardIntent =
+    parsed.category === "chair" &&
+    !normalizeMatchText(parsed.brand ?? "") &&
+    !discoveryModelCore &&
+    parsed.intent.required.filter((item) => item.hard).length >= 2;
+
+  const v34Core228ExactModelHeadphonesStaticHardIntent =
+    parsed.category === "headphones" &&
+    Boolean(discoveryModelCore) &&
+    parsed.intent.required.some(
+      (item) => item.hard && canUseExternalProofForRequirement(item)
+    );
+
+  if (v34Core228GenericChairHardIntent) {
+    const v34Core228ChairRetailerScopes: Readonly<
+      Record<string, { scope: string; rank: number }>
+    > = {
+      "brw.pl": { scope: "brw.pl/fotel", rank: 0 },
+      "agatameble.pl": {
+        scope: "agatameble.pl/meble/biurowe/fotele-biurowe/",
+        rank: 1,
+      },
+    };
+    const v34Core228DirectAdapterHosts = new Set(
+      V28_DIRECT_RETAILER_CATALOG_ADAPTERS.map((adapter) => adapter.host)
+    );
+
+    const v34Core228Routed = targetedQueries.map((query, index) => {
+      const host = getSiteQueryRequestedHost(query);
+      const scoped = host ? v34Core228ChairRetailerScopes[host] : undefined;
+      const firstSpace = query.indexOf(" ");
+      const routed =
+        host && scoped && firstSpace > 0
+          ? `site:${scoped.scope}${query.slice(firstSpace)}`
+          : query;
+
+      const marketplace = Boolean(
+        host &&
+        V28_UNIVERSAL_MARKETPLACE_DOMAINS.some((domain) =>
+          retailerHostMatchesDomain(host, String(domain))
+        )
+      );
+      const directRetailer = Boolean(
+        host && v34Core228DirectAdapterHosts.has(host)
+      );
+
+      const priority = scoped
+        ? scoped.rank
+        : directRetailer && !marketplace
+          ? 2
+          : !marketplace
+            ? 3
+            : 4;
+
+      return { query: routed, priority, index };
+    });
+
+    targetedQueries = v34Core228Routed
+      .sort((a, b) => a.priority - b.priority || a.index - b.index)
+      .map((item) => item.query)
+      .filter((query, index, array) => array.indexOf(query) === index)
+      .slice(0, 6);
+
+    console.log(
+      "[AIShopping] V34.CORE228 chair targeted retailer priority:",
+      targetedQueries
+    );
+  }
+
+  if (v34Core228ExactModelHeadphonesStaticHardIntent) {
+    const v34Core228RetailerOnlyTargeted = targetedQueries
+      .map((query, index) => {
+        const host = getSiteQueryRequestedHost(query);
+        const marketplace = Boolean(
+          host &&
+          V28_UNIVERSAL_MARKETPLACE_DOMAINS.some((domain) =>
+            retailerHostMatchesDomain(host, String(domain))
+          )
+        );
+        const configuredRetailer = Boolean(
+          host &&
+          host !== "ceneo.pl" &&
+          isConfiguredCommerceDomain(`https://${host}/`)
+        );
+        return { query, host, marketplace, configuredRetailer, index };
+      })
+      .filter((item) => item.host && item.configuredRetailer && !item.marketplace)
+      .sort((a, b) => a.index - b.index)
+      .map((item) => item.query)
+      .filter((query, index, array) => array.indexOf(query) === index)
+      .slice(0, 6);
+
+    if (v34Core228RetailerOnlyTargeted.length > 0) {
+      targetedQueries = v34Core228RetailerOnlyTargeted;
+      console.log(
+        "[AIShopping] V34.CORE228 exact-model headphones retailer-first targeted wave:",
+        targetedQueries
+      );
+    }
+  }
 
   console.log(
     "[AIShopping] V34.CORE120 generic search queries:",
@@ -30595,8 +31853,12 @@ async function runSearch(
       // concrete product URL.
       const siteHost = getSiteQueryRequestedHost(query);
       const useHtml =
-        index < 8 ||
-        Boolean(siteHost && targetedHtmlRetailerHosts.has(siteHost));
+        v34Core228GenericChairHardIntent
+          ? index < 2
+          : v34Core228ExactModelHeadphonesStaticHardIntent
+            ? index < 4
+            : index < 8 ||
+              Boolean(siteHost && targetedHtmlRetailerHosts.has(siteHost));
 
       if (useHtml) {
         const [bing, bingRss] = await Promise.all([
@@ -30649,6 +31911,56 @@ async function runSearch(
     targetedPromise,
   ]);
 
+  // STORE-B31: reconcile the settled direct-retailer return with the already
+  // published cross-adapter partial snapshot. B29/B30 proved that a retailer
+  // adapter can finish and publish concrete cards before primary settle while
+  // the final mesh return still omits those same cards. This is orchestration
+  // only: no new network work, no new trust, no price/HARD acceptance change.
+  const storeB31ReturnedRetailerUrls = new Set(
+    directRetailerCatalog.map((result) => normalizeUrl(result.url)).filter(Boolean)
+  );
+  const storeB31SnapshotOnlyRetailerResults = partialDirectRetailerCatalog.filter(
+    (result) => {
+      const key = normalizeUrl(result.url);
+      return Boolean(key && !storeB31ReturnedRetailerUrls.has(key));
+    }
+  );
+  const storeB31MergedDirectRetailerCatalog = dedupeSearchResultsByUrl([
+    ...directRetailerCatalog,
+    ...partialDirectRetailerCatalog,
+  ]);
+
+  console.log(
+    "[AIShopping] STORE-B31 direct retailer snapshot reconciliation JSON:",
+    JSON.stringify({
+      returned: directRetailerCatalog.length,
+      snapshot: partialDirectRetailerCatalog.length,
+      snapshotOnly: storeB31SnapshotOnlyRetailerResults.length,
+      merged: storeB31MergedDirectRetailerCatalog.length,
+      returnedHosts: Object.fromEntries(
+        directRetailerCatalog.reduce((map, result) => {
+          const host = getResultHostname(result.url) || "unknown";
+          map.set(host, (map.get(host) ?? 0) + 1);
+          return map;
+        }, new Map<string, number>())
+      ),
+      snapshotOnlyHosts: Object.fromEntries(
+        storeB31SnapshotOnlyRetailerResults.reduce((map, result) => {
+          const host = getResultHostname(result.url) || "unknown";
+          map.set(host, (map.get(host) ?? 0) + 1);
+          return map;
+        }, new Map<string, number>())
+      ),
+      mergedHosts: Object.fromEntries(
+        storeB31MergedDirectRetailerCatalog.reduce((map, result) => {
+          const host = getResultHostname(result.url) || "unknown";
+          map.set(host, (map.get(host) ?? 0) + 1);
+          return map;
+        }, new Map<string, number>())
+      ),
+    })
+  );
+
   console.log(
     "[AIShopping] V34.CORE120 primary discovery settled ms:",
     Date.now() - discoveryStartedAt,
@@ -30662,7 +31974,7 @@ async function runSearch(
 
   let all = [
     ...directMarketplace,
-    ...directRetailerCatalog,
+    ...storeB31MergedDirectRetailerCatalog,
     ...genericChunks.flat(),
     ...targetedChunks.flat(),
   ];
@@ -31814,13 +33126,75 @@ async function runSearch(
   const allowedDomainCounts = new Map<string, number>();
   const rejectedDomainCounts = new Map<string, number>();
 
-  const validationStartedAt = Date.now();
-  const prioritizedResults = [...all].sort(
+  // STORE-B44 validation clock after prioritization.
+  // The bounded validation budget must measure validation work, not the CPU/event-loop
+  // cost of sorting the discovery pool before the first candidate can be inspected.
+  // Global request deadline and DISCOVERY_VALIDATION_SOFT/HARD budgets are unchanged.
+  // STORE-B45 host-fair first-party validation seeds.
+  // Prevent one retailer host from being starved behind a large same-priority pool.
+  // This only changes validation order. Every seeded row still passes the unchanged
+  // domain / identity / requested-product gates and all later HARD / price / availability
+  // verification. Local validation budgets and the global 20 s deadline are unchanged.
+  const storeB45BasePrioritizedResults = [...all].sort(
     (a, b) =>
       getDiscoveryValidationPriority(b, parsed) -
         getDiscoveryValidationPriority(a, parsed) ||
       a.searchRank - b.searchRank
   );
+  const storeB45HostSeedByHost = new Map<string, SearchResult>();
+  if (isV34Core164HighConstraintRetailIntent(parsed)) {
+    for (const result of storeB45BasePrioritizedResults) {
+      if (result.source !== "RetailerRescue" || result.retailerOwnedCardEvidence !== true) continue;
+      const host = getResultHostname(result.url);
+      if (!host) continue;
+      if (!looksLikeRescuedRetailerProductCandidate(result, parsed, host)) continue;
+      if (!hasCheapDiscoveryIdentitySignal(result, parsed)) continue;
+      if (!looksLikeRequestedProduct(result, parsed)) continue;
+      const previous = storeB45HostSeedByHost.get(host);
+      if (!previous) {
+        storeB45HostSeedByHost.set(host, result);
+        continue;
+      }
+      const previousProof = getTrustedPortfolioHardProofKeys(previous, parsed).length;
+      const currentProof = getTrustedPortfolioHardProofKeys(result, parsed).length;
+      if (currentProof > previousProof) storeB45HostSeedByHost.set(host, result);
+    }
+  }
+  const storeB45HostSeeds = Array.from(storeB45HostSeedByHost.values())
+    .sort((a, b) =>
+      getTrustedPortfolioHardProofKeys(b, parsed).length -
+        getTrustedPortfolioHardProofKeys(a, parsed).length ||
+      getDiscoveryValidationPriority(b, parsed) - getDiscoveryValidationPriority(a, parsed) ||
+      a.searchRank - b.searchRank
+    )
+    .slice(0, 8);
+  const storeB45SeedUrls = new Set(
+    storeB45HostSeeds.map((result) => normalizeUrl(result.url)).filter(Boolean)
+  );
+  const prioritizedResults = storeB45HostSeeds.length > 0
+    ? [
+        ...storeB45HostSeeds,
+        ...storeB45BasePrioritizedResults.filter(
+          (result) => !storeB45SeedUrls.has(normalizeUrl(result.url))
+        ),
+      ]
+    : storeB45BasePrioritizedResults;
+  console.log(
+    "[AIShopping] STORE-B45 host-fair validation seeds JSON:",
+    JSON.stringify({
+      enabled: isV34Core164HighConstraintRetailIntent(parsed),
+      seedCount: storeB45HostSeeds.length,
+      seedHosts: storeB45HostSeeds.map((result) => getResultHostname(result.url)),
+      seeds: storeB45HostSeeds.map((result) => ({
+        host: getResultHostname(result.url),
+        source: result.source,
+        retailerOwned: result.retailerOwnedCardEvidence === true,
+        proofCount: getTrustedPortfolioHardProofKeys(result, parsed).length,
+        url: normalizeUrl(result.url),
+      })),
+    })
+  );
+  const validationStartedAt = Date.now();
   let cheapIdentityRejected = 0;
   let validationBudgetStopped = false;
   const validationAcceptedHosts = new Set<string>();
@@ -33683,6 +35057,25 @@ async function findUniversalRequirementProofViaSearch(
       ? `"${proofIdentityCore}" ${normalizeText(parsed.brand ?? "")} ceneo`.trim()
       : "";
 
+    const v34Core228OfficialBrandStem = normalizeMatchText(parsed.brand ?? "")
+      .replace(/[^a-z0-9]+/g, "")
+      .slice(0, 32);
+    const v34Core228OfficialRequirementTerm = primaryUnique
+      .slice(0, 2)
+      .join(" ")
+      .trim();
+    const v34Core228OfficialDomainQueries =
+      exactModelAnchor &&
+      v34Core228OfficialBrandStem.length >= 3 &&
+      v34Core228OfficialRequirementTerm
+        ? [
+            `${v34Core228OfficialBrandStem}.com.pl`,
+            `${v34Core228OfficialBrandStem}.com`,
+          ].map((domain) =>
+            `site:${domain} "${proofIdentityCore}" ${normalizeText(parsed.brand ?? "")} ${v34Core228OfficialRequirementTerm}`.trim()
+          )
+        : [];
+
     const proofSearchTasks: Array<Promise<SearchResult[]>> = [
       withDeadline(
         searchBingRssReference(exactQuery),
@@ -33705,6 +35098,17 @@ async function findUniversalRequirementProofViaSearch(
           )]
         : []),
     ];
+
+    for (const query of v34Core228OfficialDomainQueries) {
+      proofSearchTasks.push(
+        withDeadline(
+          searchBingRssReference(query),
+          2_350,
+          [] as SearchResult[],
+          `universal proof official-brand RSS: ${query}`
+        )
+      );
+    }
 
     if (modelOnlyQuery) {
       proofSearchTasks.push(
@@ -33753,6 +35157,9 @@ async function findUniversalRequirementProofViaSearch(
         `"${proofIdentityCore}" ${brandTerm} manual pdf`,
         `"${proofIdentityCore}" ${brandTerm} datasheet specifications`,
       ];
+      const v34Core235HeadphoneRuntimeDocumentRss =
+        parsed.category === "headphones" &&
+        requirements.some((requirement) => requirement.key === "runtime_minutes");
       for (const query of documentQueries) {
         proofSearchTasks.push(
           withDeadline(
@@ -33762,6 +35169,16 @@ async function findUniversalRequirementProofViaSearch(
             `universal proof document HTML: ${query}`
           )
         );
+        if (v34Core235HeadphoneRuntimeDocumentRss) {
+          proofSearchTasks.push(
+            withDeadline(
+              searchBingRssReference(query),
+              2_450,
+              [] as SearchResult[],
+              `CORE235 headphone static document RSS: ${query}`
+            )
+          );
+        }
       }
     }
 
@@ -34998,7 +36415,22 @@ function isReferenceDocumentOfferResult(result: SearchResult): boolean {
 
   const referenceTitle = /\b(?:karta\s+(?:informacyjna|towarowa|produktu|produktu\s+informacyjna)|product\s+(?:information\s+sheet|information\s+card|fiche|datasheet|data\s+sheet)|karta\s+energetyczna|etykieta\s+energetyczna|energy\s+label|energy\s+fiche|instrukcja\s+(?:obslugi|uzytkownika)|user\s+manual|instruction\s+manual|specyfikacja\s+(?:pdf|techniczna)|technical\s+(?:specification|datasheet))\b/i;
 
-  if (result.source === "RetailerRescue" && referenceTitle.test(`${title} ${snippet}`)) {
+  const v34Core228TrustedBoundedRetailerProductCard =
+    result.source === "RetailerRescue" &&
+    result.retailerOwnedCardEvidence === true &&
+    Boolean(result.retailerCatalogCardPrice) &&
+    result.retailerCatalogCardAvailability !== "unavailable" &&
+    isConfiguredCommerceDomain(result.url);
+
+  const v34Core228ReferenceTitleEvidence =
+    v34Core228TrustedBoundedRetailerProductCard
+      ? title
+      : `${title} ${snippet}`;
+
+  if (
+    result.source === "RetailerRescue" &&
+    referenceTitle.test(v34Core228ReferenceTitleEvidence)
+  ) {
     return true;
   }
 
@@ -36376,9 +37808,144 @@ async function expandCeneoMerchantVerificationCandidates(
     return discoveryPrice.price !== null && Boolean(discoveryPrice.currency);
   });
 
+  // STORE-B41: mature first-party verifier reserve.
+  // B40 proved that high-constraint branded retailer cards can enter final
+  // selection with >5 s still available, then lose 4-5 s inside pre-worker
+  // Ceneo merchant expansion. CORE173 protected only a stricter/full-coverage
+  // first-party anchor. Extend the SAME scheduling-only protection to a
+  // mature retailer-owned concrete card that already carries its own price
+  // and at least two trusted HARD proof keys. This does not accept the card,
+  // borrow evidence or weaken any final gate; it only prevents optional Ceneo
+  // expansion from consuming the concrete retailer verifier window.
+  const storeB41MatureFirstPartyVerifierCandidates = results.filter((result) => {
+    if (!highConstraintRetailIntent) return false;
+    if (result.source === "CeneoDirect" || result.source === "CeneoMerchant") return false;
+    if (result.retailerOwnedCardEvidence !== true) return false;
+
+    const host = getResultHostname(result.url);
+    if (!host || host === "ceneo.pl") return false;
+    if (
+      V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+        (marketplaceHost) => String(marketplaceHost) === host
+      )
+    ) {
+      return false;
+    }
+
+    const title = normalizeMatchText(result.name);
+    const brandExplicit =
+      requestedBrandAliases.length === 0 ||
+      requestedBrandAliases.some((alias) =>
+        phraseMorphologicallyMatches(alias, title) ||
+        automotiveLexicalTermMatches(alias, title)
+      );
+    if (!brandExplicit) return false;
+    if (isGenericAccessoryResult(result.name, result.url, parsed)) return false;
+
+    const match = evaluateUniversalProductMatch(
+      result.name,
+      result.snippet,
+      result.url,
+      parsed,
+      "discovery",
+      result.source
+    );
+    if (!match.pass) return false;
+    if (!isConcreteVerificationCandidate(result, parsed)) return false;
+    if (getTrustedPortfolioHardProofKeys(result, parsed).length < 2) return false;
+
+    const discoveryPrice = getSilentDiscoveryPrice(result, parsed);
+    return discoveryPrice.price !== null && Boolean(discoveryPrice.currency);
+  });
+
+  const storeB41ProtectMatureFirstPartyVerifierBudget =
+    highConstraintRetailIntent &&
+    storeB41MatureFirstPartyVerifierCandidates.length > 0;
   const protectHighConstraintRetailerVerifierBudget =
-    highConstraintRetailIntent && protectedHighConstraintRetailerCandidates.length > 0;
-  const core173VerifierReserveMs = protectHighConstraintRetailerVerifierBudget ? 4_200 : 0;
+    highConstraintRetailIntent &&
+    (protectedHighConstraintRetailerCandidates.length > 0 ||
+      storeB41ProtectMatureFirstPartyVerifierBudget);
+  const core173VerifierReserveMs = storeB41ProtectMatureFirstPartyVerifierBudget
+    ? 4_650
+    : protectHighConstraintRetailerVerifierBudget
+      ? 4_200
+      : 0;
+
+  if (storeB41ProtectMatureFirstPartyVerifierBudget) {
+    console.log("[AIShopping] STORE-B41 mature first-party verifier reserve JSON:",
+      JSON.stringify({
+        reserveMs: core173VerifierReserveMs,
+        candidates: storeB41MatureFirstPartyVerifierCandidates.length,
+        hosts: Array.from(new Set(
+          storeB41MatureFirstPartyVerifierCandidates
+            .map((result) => getResultHostname(result.url))
+            .filter(Boolean)
+        )),
+        rows: storeB41MatureFirstPartyVerifierCandidates.slice(0, 4).map((result) => ({
+          host: getResultHostname(result.url),
+          name: result.name,
+          proofKeys: getTrustedPortfolioHardProofKeys(result, parsed),
+          cardPrice: result.retailerCatalogCardPrice?.price ??
+            getSilentDiscoveryPrice(result, parsed).price ?? null,
+        })),
+      })
+    );
+  }
+
+  // CORE260: generic constrained retail queries can also arrive here with
+  // multiple already-priced first-party cards even when they do not match the
+  // specialised CORE173 predicate. In CORE259 the washing-machine regression
+  // had several Morele cards ready, but speculative Ceneo reader timeouts used
+  // the whole remaining window before any retailer verifier worker started.
+  //
+  // Protect a compact verifier floor only when at least two non-marketplace,
+  // retailer-owned, priced cards already have some trusted HARD coverage.
+  // Ceneo is not removed; only its optional expansion must leave this floor.
+  const v34Core260GenericRetailerVerifierAnchors = results.filter((result) => {
+    if (result.source === "CeneoDirect" || result.source === "CeneoMerchant") {
+      return false;
+    }
+    if (result.retailerOwnedCardEvidence !== true) return false;
+
+    const host = getResultHostname(result.url);
+    if (!host || host === "ceneo.pl") return false;
+    if (
+      V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+        (marketplaceHost) => String(marketplaceHost) === host
+      )
+    ) {
+      return false;
+    }
+    if (!isConcreteVerificationCandidate(result, parsed)) return false;
+
+    const discoveryPrice = getSilentDiscoveryPrice(result, parsed);
+    if (discoveryPrice.price === null || !discoveryPrice.currency) return false;
+
+    return getTrustedPortfolioHardCoverageScore(result, parsed) >= 100;
+  });
+
+  const v34Core260GenericVerifierReserveMs =
+    !preciseTechIntent &&
+    parsed.intent.required.filter((requirement) => requirement.hard).length >= 2 &&
+    v34Core260GenericRetailerVerifierAnchors.length >= 2
+      ? 3_500
+      : 0;
+
+  const effectiveCeneoVerifierReserveMs = Math.max(
+    core173VerifierReserveMs,
+    v34Core260GenericVerifierReserveMs
+  );
+
+  if (v34Core260GenericVerifierReserveMs > 0) {
+    console.log("[AIShopping] V34.CORE260 generic first-party verifier reserve:", {
+      reserveMs: v34Core260GenericVerifierReserveMs,
+      anchors: v34Core260GenericRetailerVerifierAnchors.slice(0, 4).map((result) => ({
+        host: getResultHostname(result.url),
+        name: result.name,
+        coverageScore: getTrustedPortfolioHardCoverageScore(result, parsed),
+      })),
+    });
+  }
 
   const rawCeneoCandidatePool = dedupeSearchResultsByUrl(
     results.filter(
@@ -36460,11 +38027,125 @@ async function expandCeneoMerchantVerificationCandidates(
   const protectPreciseTechVerifierBudget =
     preciseTechIntent && preciseTechRetailerHosts.size >= 3;
 
+  // V34.CORE237 MONITOR VERIFIER RESERVE.
+  // CORE236 live acceptance proved that monitor discovery already produces
+  // several concrete retailer-owned cards whose own bounded title/card covers
+  // every requested HARD attribute and carries a listing-bound price. In the
+  // two failed monitor runs, speculative Ceneo merchant/Jina expansion consumed
+  // most of the first verification window before those retailer pages started.
+  // Scheduling only: when at least two concrete non-marketplace retailer cards
+  // already provide complete trusted HARD coverage plus a bound discovery price,
+  // skip Ceneo merchant expansion and let the unchanged verifier start earlier.
+  // No Ceneo result becomes easier to accept and no retailer evidence is promoted
+  // to final proof by this branch.
+  const v34Core237MonitorVerifierAnchors = parsed.category === "monitor"
+    ? results.filter((result) => {
+        if (result.source === "CeneoDirect" || result.source === "CeneoMerchant") {
+          return false;
+        }
+        if (isReferenceDocumentOfferResult(result)) return false;
+        if (isLikelyOpenWorldCategoryOrCollectionResult(result, parsed)) return false;
+        if (!isConcreteVerificationCandidate(result, parsed)) return false;
+
+        const host = getResultHostname(result.url);
+        if (!host || host === "ceneo.pl") return false;
+        if (
+          V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+            (marketplaceHost) => String(marketplaceHost) === host
+          )
+        ) {
+          return false;
+        }
+
+        const match = evaluateUniversalProductMatch(
+          result.name,
+          result.snippet,
+          result.url,
+          parsed,
+          "discovery",
+          result.source
+        );
+        if (!match.pass) return false;
+        if (getTrustedPortfolioHardCoverageScore(result, parsed) < 10_000) {
+          return false;
+        }
+
+        const discoveryPrice = getSilentDiscoveryPrice(result, parsed);
+        return discoveryPrice.price !== null && Boolean(discoveryPrice.currency);
+      })
+    : [];
+
+  const v34Core237ProtectMonitorVerifier =
+    parsed.category === "monitor" &&
+    parsed.intent.required.filter((requirement) => requirement.hard).length >= 3 &&
+    v34Core237MonitorVerifierAnchors.length >= 2;
+
+  if (v34Core237ProtectMonitorVerifier) {
+    console.log(
+      "[AIShopping] V34.CORE237 monitor Ceneo expansion skipped; complete retailer verifier reserve:",
+      {
+        anchors: v34Core237MonitorVerifierAnchors.slice(0, 4).map((result) => ({
+          host: getResultHostname(result.url),
+          coverageScore: getTrustedPortfolioHardCoverageScore(result, parsed),
+          name: result.name,
+        })),
+        ceneoCards: ceneoCandidatePool.length,
+        remainingMs: hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS,
+      }
+    );
+    return results;
+  }
+
+  const v34Core228StaticRequirements = parsed.intent.required
+    .filter((requirement) => requirement.hard)
+    .filter(canUseExternalProofForRequirement);
+  const v34Core228StaticPhrase = buildUniversalProofPhrase(
+    parsed.intent.productPhrase || parsed.intent.searchBase,
+    parsed
+  );
+  const v34Core228StaticAnchor = getUniversalExactModelAnchor(
+    parsed,
+    v34Core228StaticPhrase
+  );
+  const v34Core228SharedStaticKey =
+    v34Core228StaticAnchor && v34Core228StaticRequirements.length > 0
+      ? getV34Core219SharedStaticCacheKey(
+          v34Core228StaticPhrase,
+          v34Core228StaticRequirements
+        )
+      : "";
+  const v34Core228SharedStaticProof = v34Core228SharedStaticKey
+    ? readV34Core219SharedStaticCache(v34Core228SharedStaticKey)
+    : "";
+  const v34Core228HasCompleteSharedStaticProof =
+    Boolean(v34Core228SharedStaticProof) &&
+    v34Core228StaticRequirements.length > 0 &&
+    v34Core228StaticRequirements.every((requirement) =>
+      requirementHasEvidence(requirement, v34Core228SharedStaticProof)
+    );
+
+  if (
+    parsed.category === "headphones" &&
+    v34Core228HasCompleteSharedStaticProof &&
+    preciseTechRetailerHosts.size >= 1
+  ) {
+    console.log(
+      "[AIShopping] V34.CORE228 Ceneo expansion skipped; shared static proof + retailer candidate ready:",
+      {
+        retailerHosts: preciseTechRetailerHosts.size,
+        anchor: v34Core228StaticAnchor,
+      }
+    );
+    return results;
+  }
+
   const remaining = hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
   if (
     remaining < 2_200 ||
     (protectHighConstraintRetailerVerifierBudget &&
-      remaining < core173VerifierReserveMs + 1_550)
+      remaining < core173VerifierReserveMs + 1_550) ||
+    (v34Core260GenericVerifierReserveMs > 0 &&
+      remaining < effectiveCeneoVerifierReserveMs + 1_250)
   ) {
     if (protectHighConstraintRetailerVerifierBudget) {
       console.log(
@@ -36491,14 +38172,16 @@ async function expandCeneoMerchantVerificationCandidates(
       if (
         candidateRemaining < 1_600 ||
         (protectHighConstraintRetailerVerifierBudget &&
-          candidateRemaining < core173VerifierReserveMs + 1_550)
+          candidateRemaining < core173VerifierReserveMs + 1_550) ||
+        (v34Core260GenericVerifierReserveMs > 0 &&
+          candidateRemaining < effectiveCeneoVerifierReserveMs + 1_250)
       ) {
         return;
       }
 
       const candidateExpansionHeadroom = Math.max(
         0,
-        candidateRemaining - core173VerifierReserveMs
+        candidateRemaining - effectiveCeneoVerifierReserveMs
       );
 
       const parseCeneoMerchantPayload = (
@@ -36523,7 +38206,7 @@ async function expandCeneoMerchantVerificationCandidates(
 
         const samePayloadRemaining = Math.max(
           0,
-          hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS - core173VerifierReserveMs
+          hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS - effectiveCeneoVerifierReserveMs
         );
         if (samePayloadRemaining < 2_800) {
           return stableExpansion;
@@ -36587,7 +38270,7 @@ async function expandCeneoMerchantVerificationCandidates(
           hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS;
         const readerExpansionHeadroom = Math.max(
           0,
-          readerRemaining - core173VerifierReserveMs
+          readerRemaining - effectiveCeneoVerifierReserveMs
         );
         if (readerExpansionHeadroom >= 1_700) {
           const readerTimeoutCapMs =
@@ -36627,13 +38310,16 @@ async function expandCeneoMerchantVerificationCandidates(
             readerText &&
             readerText.length < 1_200 &&
             !readerExpansion?.foundMerchantCards &&
-            freshReaderRemaining >= 2_600 &&
+            freshReaderRemaining - effectiveCeneoVerifierReserveMs >= 2_600 &&
             !protectPreciseTechVerifierBudget &&
             !protectHighConstraintRetailerVerifierBudget
           ) {
             const freshTimeoutMs = Math.max(
               1_500,
-              Math.min(2_300, freshReaderRemaining - 650)
+              Math.min(
+                2_300,
+                freshReaderRemaining - effectiveCeneoVerifierReserveMs - 650
+              )
             );
             const freshReaderText = await fetchViaJinaFresh(
               page.finalUrl || candidate.url,
@@ -36840,7 +38526,7 @@ async function expandCeneoMerchantVerificationCandidates(
     if (
       secondaryCandidate &&
       primaryMerchantStores.size < 3 &&
-      secondaryRemaining >= 1_800
+      secondaryRemaining - effectiveCeneoVerifierReserveMs >= 1_800
     ) {
       console.log(
         "[AIShopping] V34.CORE172 adaptive secondary Ceneo card:",
@@ -37306,6 +38992,265 @@ async function hydrateIndependentMpnProofCandidates(
     "candidates=",
     candidates.map(({ host, score, proof }) => ({ host, score, url: proof.url }))
   );
+
+  // CORE254 HEADPHONES: EXACT-MODEL OFFICIAL PRODUCT PROOF
+  // CORE253 proved that the generic proof mesh already discovers correct
+  // manufacturer product URLs, but Jina hydration is intermittent and can
+  // congest the global reader start queue. For exact-model headphone runtime:
+  // - admit only official non-root pages whose search scope contains the exact
+  //   parsed model code,
+  // - use at most ONE manufacturer page,
+  // - try direct HTML first (no Jina queue),
+  // - fall back to ONE Jina read only when direct HTML did not prove the fact,
+  // - hydrated content must still bind the exact model and prove runtime.
+  // No search snippet becomes HARD evidence and no product/model is hardcoded.
+  const v34Core254RuntimeRequirement = parsed.intent.required.find(
+    (requirement) =>
+      requirement.hard && requirement.key === "runtime_minutes"
+  ) ?? null;
+
+  if (
+    parsed.category === "headphones" &&
+    v34Core254RuntimeRequirement &&
+    !externalSignal?.aborted
+  ) {
+    const normalizedCode = compactUniversalModelCode(code);
+    const officialCandidate = proofResults
+      .map((proof, rank) => {
+        const host = getResultHostname(proof.url);
+        const scope = normalizeMatchText(`${proof.name} ${proof.snippet} ${proof.url}`);
+        const compactScope = compactUniversalModelCode(scope);
+        let nonRootPath = false;
+        try {
+          const path = decodeURIComponent(new URL(proof.url).pathname)
+            .replace(/\/+$/g, "");
+          nonRootPath = path.length > 1;
+        } catch {
+          nonRootPath = false;
+        }
+        return {
+          proof,
+          rank,
+          host,
+          nonRootPath,
+          codeHint: Boolean(normalizedCode && compactScope.includes(normalizedCode)),
+          staticHint: isProbablyExactModelStaticReferenceUrl(proof.url),
+        };
+      })
+      .filter(({ host, nonRootPath, codeHint }) =>
+        Boolean(host) &&
+        nonRootPath &&
+        codeHint &&
+        isOfficialBrandHostForParsed(host, parsed)
+      )
+      .sort((a, b) =>
+        Number(b.staticHint) - Number(a.staticHint) ||
+        a.rank - b.rank
+      )
+      .filter((row, index, rows) =>
+        rows.findIndex((candidate) => normalizeUrl(candidate.proof.url) === normalizeUrl(row.proof.url)) === index
+      )[0] ?? null;
+
+    if (officialCandidate) {
+      const directProofText = await withAbortableDeadline(
+        async (deadlineSignal) => {
+          const signal = externalSignal
+            ? AbortSignal.any([externalSignal, deadlineSignal])
+            : deadlineSignal;
+          const page = await fetchHtml(
+            officialCandidate.proof.url,
+            2_800,
+            signal
+          );
+          if (!page || page.status >= 400 || !page.html) return "";
+          return normalizeText(stripHtml(page.html)).slice(0, 48_000);
+        },
+        3_050,
+        "",
+        `CORE254 official exact-model direct proof ${code}`
+      );
+
+      const directModelBound = Boolean(
+        directProofText &&
+        !isBlockedOrChallengePage(directProofText) &&
+        doesIndependentMpnProofBindRequestedModel(
+          directProofText,
+          code,
+          parsed,
+          modelCore
+        )
+      );
+      const directBoundedScope = directModelBound
+        ? getBoundedUniversalModelReferenceScope(
+            directProofText,
+            modelCore,
+            code
+          )
+        : "";
+      const directRuntimeProved = Boolean(
+        directBoundedScope &&
+        requirementHasEvidence(
+          v34Core254RuntimeRequirement,
+          directBoundedScope
+        )
+      );
+
+      console.log(
+        "[AIShopping] V34.CORE254 official direct runtime proof:",
+        {
+          host: officialCandidate.host,
+          url: officialCandidate.proof.url,
+          received: Boolean(directProofText),
+          length: directProofText.length,
+          modelBound: directModelBound,
+          runtimeProved: directRuntimeProved,
+        }
+      );
+
+      if (directRuntimeProved) {
+        return [{
+          proof: officialCandidate.proof,
+          scope: directProofText,
+          transport: "direct" as const,
+        }];
+      }
+
+      const readerText = await withAbortableDeadline(
+        async (deadlineSignal) => {
+          const signal = externalSignal
+            ? AbortSignal.any([externalSignal, deadlineSignal])
+            : deadlineSignal;
+          return await fetchViaJina(
+            officialCandidate.proof.url,
+            4_400,
+            false,
+            signal
+          );
+        },
+        4_750,
+        "",
+        `CORE254 official exact-model reader fallback ${code}`
+      );
+
+      const readerModelBound = Boolean(
+        readerText &&
+        !isBlockedOrChallengePage(readerText) &&
+        doesIndependentMpnProofBindRequestedModel(
+          readerText,
+          code,
+          parsed,
+          modelCore
+        )
+      );
+      const readerBoundedScope = readerModelBound
+        ? getBoundedUniversalModelReferenceScope(
+            readerText,
+            modelCore,
+            code
+          )
+        : "";
+      const readerRuntimeProved = Boolean(
+        readerBoundedScope &&
+        requirementHasEvidence(
+          v34Core254RuntimeRequirement,
+          readerBoundedScope
+        )
+      );
+
+      console.log(
+        "[AIShopping] V34.CORE254 official reader runtime proof:",
+        {
+          host: officialCandidate.host,
+          url: officialCandidate.proof.url,
+          received: Boolean(readerText),
+          length: readerText.length,
+          modelBound: readerModelBound,
+          runtimeProved: readerRuntimeProved,
+        }
+      );
+
+      if (readerRuntimeProved) {
+        return [{
+          proof: officialCandidate.proof,
+          scope: readerText,
+          transport: "reader" as const,
+        }];
+      }
+    }
+  }
+
+  // V34.CORE235: direct fetchHtml is the wrong first transport for official
+  // PDF/spec documents. If search exposed an exact-model static reference on
+  // the requested brand host, read it through Jina before generic hydration.
+  // Model binding is mandatory here; the caller still applies unchanged HARD
+  // requirement evidence checks before accepting any static fact.
+  const v34Core235OfficialStaticCandidate = proofResults
+    .map((proof, rank) => ({
+      proof,
+      rank,
+      host: getResultHostname(proof.url),
+    }))
+    .filter(({ proof, host }) =>
+      Boolean(host) &&
+      isOfficialBrandHostForParsed(host, parsed) &&
+      isProbablyExactModelStaticReferenceUrl(proof.url) &&
+      doesIndependentMpnProofBindRequestedModel(
+        normalizeText(`${proof.name} ${proof.snippet} ${proof.url}`),
+        code,
+        parsed,
+        modelCore
+      )
+    )
+    .sort((a, b) =>
+      Number(/\.pdf(?:$|[?#])/iu.test(b.proof.url)) -
+        Number(/\.pdf(?:$|[?#])/iu.test(a.proof.url)) ||
+      a.rank - b.rank
+    )[0] ?? null;
+
+  if (v34Core235OfficialStaticCandidate && !externalSignal?.aborted) {
+    const officialReaderText = await withAbortableDeadline(
+      async (deadlineSignal) => {
+        const signal = externalSignal
+          ? AbortSignal.any([externalSignal, deadlineSignal])
+          : deadlineSignal;
+        return await fetchViaJina(
+          v34Core235OfficialStaticCandidate.proof.url,
+          3_050,
+          true,
+          signal
+        );
+      },
+      3_350,
+      "",
+      `CORE235 official static reference reader ${code}`
+    );
+
+    const officialModelBound = Boolean(
+      officialReaderText &&
+      !isBlockedOrChallengePage(officialReaderText) &&
+      doesIndependentMpnProofBindRequestedModel(
+        officialReaderText,
+        code,
+        parsed,
+        modelCore
+      )
+    );
+    console.log("[AIShopping] V34.CORE235 official static reference reader:", {
+      host: v34Core235OfficialStaticCandidate.host,
+      url: v34Core235OfficialStaticCandidate.proof.url,
+      received: Boolean(officialReaderText),
+      length: officialReaderText.length,
+      modelBound: officialModelBound,
+    });
+
+    if (officialModelBound) {
+      return [{
+        proof: v34Core235OfficialStaticCandidate.proof,
+        scope: officialReaderText,
+        transport: "reader" as const,
+      }];
+    }
+  }
 
   if (candidates.length === 0) return [];
 
@@ -38270,12 +40215,34 @@ async function verifySearchResult(
   // user requested a fact that is not already in the current card title/URL,
   // or the card did not prove requested condition/originality, fetch the
   // concrete listing through Jina so the missing fact is actually proven.
+  const v34Core241PowerToolStructuredOlxComplete =
+    parsed.category === "power_tool" &&
+    trustedOlxDirectCard &&
+    unresolvedHardRequirements.length > 0 &&
+    unresolvedHardRequirements.every((requirement) =>
+      result.catalogRequirementProofKeys?.includes(requirement.key)
+    );
+
   const shouldFetchTrustedOlx =
     trustedOlxDirectCard &&
     (
-      unresolvedHardRequirements.length > 0 ||
+      (
+        unresolvedHardRequirements.length > 0 &&
+        !v34Core241PowerToolStructuredOlxComplete
+      ) ||
       !trustedOlxConditionProven
     );
+
+  if (v34Core241PowerToolStructuredOlxComplete) {
+    console.log(
+      "[AIShopping] V34.CORE260 power-tool structured OLX HARD complete:",
+      {
+        url: result.url,
+        proofKeys: result.catalogRequirementProofKeys ?? [],
+        unresolved: unresolvedHardRequirements.map((requirement) => requirement.key),
+      }
+    );
+  }
 
   // V32.12: generic originality intent is intentionally NOT a page-fetch
   // trigger by itself. Re-reading a peer-marketplace listing cannot turn a
@@ -38384,7 +40351,8 @@ async function verifySearchResult(
       discoveryRetailerHealth ?? undefined
     );
   const shouldRaceRetailerVerificationReader =
-    retailerVerificationReaderRaceReason !== null;
+    retailerVerificationReaderRaceReason !== null &&
+    !result.prefetchedConcretePage;
   const racedRetailerReaderPromise: Promise<string> | null =
     shouldRaceRetailerVerificationReader
       ? fetchViaJina(
@@ -38412,13 +40380,22 @@ async function verifySearchResult(
       ? null
       : preferJinaForConcreteOlxOffer
         ? null
-        : await fetchHtml(
-            result.url,
-            hasUniversalHardRequirements
-              ? Math.min(FETCH_TIMEOUT_MS, 3_200)
-              : FETCH_TIMEOUT_MS,
-            verificationSignal
-          );
+        : result.prefetchedConcretePage
+          ? result.prefetchedConcretePage
+          : await fetchHtml(
+              result.url,
+              hasUniversalHardRequirements
+                ? Math.min(FETCH_TIMEOUT_MS, 3_200)
+                : FETCH_TIMEOUT_MS,
+              verificationSignal
+            );
+
+  if (result.prefetchedConcretePage && page) {
+    console.log(
+      "[AIShopping] V34.CORE236 verifier reused prefetched concrete page:",
+      result.url
+    );
+  }
 
   if (verificationSignal?.aborted) return null;
 
@@ -39041,21 +41018,95 @@ async function verifySearchResult(
     // candidate can consume another full reader timeout and starve the rest,
     // so retries stay enabled for discovery but are disabled here.
     const marketplaceReaderStartedAt = Date.now();
-    let jinaText = racedRetailerReaderPromise
-      ? await racedRetailerReaderPromise
-      : await fetchViaJina(
-          finalUrl,
-          jinaTimeoutMs,
-          false,
-          verificationSignal
-        );
 
-    // Jedna kontrolowana ponowna próba tylko dla oferty, której WŁASNY tytuł
-    // potwierdza żądany stan. Nie retry'ujemy całej kolejki i nie wydłużamy
-    // odpowiedzi dla przypadkowych kandydatów. To pomaga przy chwilowych
-    // timeoutach OLX, zachowując twardy limit czasu całego wyszukiwania.
+    let jinaText = result.prefetchedConcreteReaderText ?? "";
+    let v34Core256PowerToolReaderStillPending = false;
+
+    if (!jinaText && result.prefetchedConcreteReaderPromise) {
+      jinaText = await withDeadline(
+        result.prefetchedConcreteReaderPromise,
+        parsed.category === "power_tool" ? 4_800 : 1_250,
+        "",
+        `CORE256 prefetched concrete reader reuse ${finalUrl}`
+      );
+
+      if (jinaText) {
+        result.prefetchedConcreteReaderText = jinaText;
+        result.prefetchedConcreteReaderSettled = true;
+      }
+
+      v34Core256PowerToolReaderStillPending =
+        parsed.category === "power_tool" &&
+        !jinaText &&
+        result.prefetchedConcreteReaderSettled !== true;
+
+      console.log(
+        "[AIShopping] V34.CORE260 verifier prefetched reader reuse:",
+        {
+          url: finalUrl,
+          received: Boolean(jinaText),
+          length: jinaText.length,
+          settled: result.prefetchedConcreteReaderSettled === true,
+          stillPending: v34Core256PowerToolReaderStillPending,
+        }
+      );
+    }
+
+    if (!jinaText && !v34Core256PowerToolReaderStillPending) {
+      jinaText = racedRetailerReaderPromise
+        ? await racedRetailerReaderPromise
+        : await fetchViaJina(
+            finalUrl,
+            jinaTimeoutMs,
+            false,
+            verificationSignal
+          );
+    }
+
+    // CORE257: if the power-tool prefetch is still running after the main
+    // reuse window, do not start a second Jina request for the same OLX URL.
+    // Give the already-started promise one bounded tail window to settle.
+    // This removes the observed parallel same-URL retry -> HTTP 429 race while
+    // preserving all proof / identity / condition / price gates.
     if (
       !jinaText &&
+      v34Core256PowerToolReaderStillPending &&
+      result.prefetchedConcreteReaderPromise
+    ) {
+      jinaText = await withDeadline(
+        result.prefetchedConcreteReaderPromise,
+        2_400,
+        "",
+        `CORE257 power-tool reader tail reuse ${finalUrl}`
+      );
+
+      if (jinaText) {
+        result.prefetchedConcreteReaderText = jinaText;
+        result.prefetchedConcreteReaderSettled = true;
+      }
+
+      v34Core256PowerToolReaderStillPending =
+        !jinaText &&
+        result.prefetchedConcreteReaderSettled !== true;
+
+      console.log(
+        "[AIShopping] V34.CORE260 power-tool reader tail reuse:",
+        {
+          url: finalUrl,
+          received: Boolean(jinaText),
+          length: jinaText.length,
+          settled: result.prefetchedConcreteReaderSettled === true,
+          stillPending: v34Core256PowerToolReaderStillPending,
+        }
+      );
+    }
+
+    // Jedna kontrolowana ponowna próba tylko dla oferty, której WŁASNY tytuł
+    // potwierdza żądany stan. CORE257 additionally forbids this retry while
+    // the original prefetched reader is still in flight.
+    if (
+      !jinaText &&
+      !v34Core256PowerToolReaderStillPending &&
       finalHostForJina === "olx.pl" &&
       parsed.condition &&
       hasExplicitRequestedConditionInTitle(result.name, parsed.condition)
@@ -39069,11 +41120,6 @@ async function verifySearchResult(
       await sleep(250);
       if (verificationSignal?.aborted) return null;
 
-      // V34.CORE120: the primary OLX read now receives almost the whole
-      // per-offer window (6.9 s). A second long 4.2 s retry could never finish
-      // inside the same hard route deadline after a true timeout. Keep only a
-      // short retry for fast transient failures; two separately-ranked OLX
-      // listings already provide the main source redundancy.
       jinaText = await fetchViaJina(
         finalUrl,
         getOlxReaderBudgetProfile(parsed).retryTimeoutMs,
@@ -39755,9 +41801,34 @@ async function verifySearchResult(
         requirement,
         finalName,
         parsed.intent.required
+      ) ||
+      verifiedTitleHasCompositeRamCapacityEvidence(
+        requirement,
+        finalName
       )
     );
   if (verifiedTitleHardRequirements.length > 0) {
+    const storeB24SlashRamProof = verifiedTitleHardRequirements.some(
+      (requirement) =>
+        requirement.key === "ram" &&
+        !requirementHasEvidenceInContext(
+          requirement,
+          finalName,
+          parsed.intent.required
+        ) &&
+        verifiedTitleHasCompositeRamCapacityEvidence(
+          requirement,
+          finalName
+        )
+    );
+
+    if (storeB24SlashRamProof) {
+      console.log(
+        "[AIShopping] STORE-B24 verified-title slash RAM proof:",
+        finalName
+      );
+    }
+
     const verifiedTitleHardEvidence = verifiedTitleHardRequirements
       .map((requirement) => requirement.aliases[0] || requirement.value)
       .filter(Boolean)
@@ -40343,6 +42414,68 @@ function selectExactModelStaticReferenceCandidate(
   return ranked[0] ?? null;
 }
 
+// V34.CORE228: complete exact-model STATIC proof may be reused across requests
+// for a short period. Key contains exact identity + requested static values.
+// Never stores price, availability, condition, shipping or seller facts.
+const V34_CORE228_SHARED_STATIC_TTL_MS = 6 * 60 * 60 * 1000;
+const V34_CORE228_SHARED_STATIC_MAX_ENTRIES = 192;
+const V34_CORE228_SHARED_STATIC_CACHE = new Map<
+  string,
+  { proof: string; expiresAt: number }
+>();
+
+function getV34Core219SharedStaticCacheKey(
+  phraseRaw: string,
+  requirements: UniversalRequirement[]
+): string {
+  const identity = normalizeMatchText(phraseRaw);
+  const fingerprint = requirements
+    .map((requirement) =>
+      `${requirement.key}=${normalizeMatchText(requirement.value)}:${universalRequirementComparison(requirement)}`
+    )
+    .sort()
+    .join("|");
+  return `${identity}::${fingerprint}`;
+}
+
+function readV34Core219SharedStaticCache(key: string): string {
+  const entry = V34_CORE228_SHARED_STATIC_CACHE.get(key);
+  if (!entry) return "";
+  if (entry.expiresAt <= Date.now()) {
+    V34_CORE228_SHARED_STATIC_CACHE.delete(key);
+    return "";
+  }
+  return entry.proof;
+}
+
+function writeV34Core219SharedStaticCache(
+  key: string,
+  proofRaw: string,
+  requirements: UniversalRequirement[]
+): void {
+  const proof = normalizeText(proofRaw).slice(0, 30_000);
+  if (
+    !proof ||
+    !requirements.every((requirement) =>
+      requirementHasEvidence(requirement, proof)
+    )
+  ) {
+    return;
+  }
+
+  if (V34_CORE228_SHARED_STATIC_CACHE.size >= V34_CORE228_SHARED_STATIC_MAX_ENTRIES) {
+    const oldestKey = V34_CORE228_SHARED_STATIC_CACHE.keys().next().value;
+    if (typeof oldestKey === "string") {
+      V34_CORE228_SHARED_STATIC_CACHE.delete(oldestKey);
+    }
+  }
+
+  V34_CORE228_SHARED_STATIC_CACHE.set(key, {
+    proof,
+    expiresAt: Date.now() + V34_CORE228_SHARED_STATIC_TTL_MS,
+  });
+}
+
 async function buildSharedExactModelStaticProofFromVerificationCandidates(
   results: SearchResult[],
   parsed: ParsedQuery,
@@ -40360,6 +42493,26 @@ async function buildSharedExactModelStaticProofFromVerificationCandidates(
   const exactModelAnchor = getUniversalExactModelAnchor(parsed, phrase);
   if (!exactModelAnchor) return "";
 
+  const sharedStaticCacheKey = getV34Core219SharedStaticCacheKey(
+    phrase,
+    requirements
+  );
+  const cachedSharedStaticProof = readV34Core219SharedStaticCache(
+    sharedStaticCacheKey
+  );
+  if (
+    cachedSharedStaticProof &&
+    requirements.every((requirement) =>
+      requirementHasEvidence(requirement, cachedSharedStaticProof)
+    )
+  ) {
+    console.log("[AIShopping] V34.CORE228 shared exact-model static cache hit:", {
+      anchor: exactModelAnchor,
+      keys: requirements.map((requirement) => requirement.key),
+    });
+    return cachedSharedStaticProof;
+  }
+
   const indexedConsensus = collectUniversalRequirementProofFromSearchResults(
     results,
     requirements,
@@ -40373,6 +42526,11 @@ async function buildSharedExactModelStaticProofFromVerificationCandidates(
     requirementHasEvidence(requirement, indexedProof)
   );
   if (indexedComplete) {
+    writeV34Core219SharedStaticCache(
+      sharedStaticCacheKey,
+      indexedProof,
+      requirements
+    );
     console.log("[AIShopping] V34.CORE120 verification-model profile ready from evidence graph:", {
       anchor: exactModelAnchor,
       provedKeys: Array.from(indexedConsensus.provenKeys),
@@ -40412,7 +42570,7 @@ async function buildSharedExactModelStaticProofFromVerificationCandidates(
     (signal) => fetchViaJina(
       selected.result.url,
       Math.min(4_400, referenceBudgetMs),
-      false,
+      true,
       signal
     ),
     referenceBudgetMs,
@@ -40440,15 +42598,35 @@ async function buildSharedExactModelStaticProofFromVerificationCandidates(
     return "";
   }
 
+  const canonicalConcreteRaw =
+    extractCanonicalHardRequirementEvidenceFromConcreteJina(
+      text.slice(0, 180_000),
+      pageTitle || selected.result.name,
+      selected.result.url,
+      parsed
+    );
+
+  const canonicalConcreteStaticEvidence = requirements
+    .filter((requirement) =>
+      requirementHasEvidence(requirement, canonicalConcreteRaw)
+    )
+    .map(buildCanonicalRequirementProofToken)
+    .join(" ");
+
   const boundedScope = getBoundedUniversalModelReferenceScope(
     text,
     phrase,
     exactModelAnchor
   );
-  if (!boundedScope) return "";
+
+  if (!boundedScope && !canonicalConcreteStaticEvidence) return "";
+
+  const sharedStaticScope = normalizeText(
+    `${boundedScope} ${canonicalConcreteStaticEvidence}`
+  ).slice(0, 30_000);
 
   const hydratedRequirements = requirements.filter((requirement) =>
-    requirementHasEvidence(requirement, boundedScope)
+    requirementHasEvidence(requirement, sharedStaticScope)
   );
   const mergedKeys = new Set<string>([
     ...indexedConsensus.provenKeys,
@@ -40456,11 +42634,38 @@ async function buildSharedExactModelStaticProofFromVerificationCandidates(
   ]);
   if (mergedKeys.size === 0) return indexedProof;
 
+  if (canonicalConcreteStaticEvidence) {
+    console.log("[AIShopping] V34.CORE228 shared profile canonical concrete proof:", {
+      host: getResultHostname(selected.result.url),
+      anchor: exactModelAnchor,
+      keys: hydratedRequirements.map((item) => item.key),
+    });
+  }
+
   const canonicalTail = requirements
     .filter((requirement) => mergedKeys.has(requirement.key))
     .map(buildCanonicalRequirementProofToken)
     .join(" ");
-  const proof = normalizeText(`${indexedProof} ${boundedScope} ${canonicalTail}`).slice(0, 30_000);
+  const proof = normalizeText(
+    `${indexedProof} ${sharedStaticScope} ${canonicalTail}`
+  ).slice(0, 30_000);
+
+  if (
+    requirements.every((requirement) =>
+      requirementHasEvidence(requirement, proof)
+    )
+  ) {
+    writeV34Core219SharedStaticCache(
+      sharedStaticCacheKey,
+      proof,
+      requirements
+    );
+    console.log("[AIShopping] V34.CORE228 shared exact-model static proof cached:", {
+      anchor: exactModelAnchor,
+      keys: requirements.map((requirement) => requirement.key),
+    });
+  }
+
   console.log("[AIShopping] V34.CORE120 verification-model profile ready:", {
     host: getResultHostname(selected.result.url),
     anchor: exactModelAnchor,
@@ -40947,7 +43152,8 @@ async function verifyOffers(
   parsed: ParsedQuery,
   hardDeadlineAt: number,
   staticReferenceCandidates: SearchResult[] = [],
-  prefetchedExactModelStaticProofPromise: Promise<string> | null = null
+  prefetchedExactModelStaticProofPromise: Promise<string> | null = null,
+  monitorAnchoredFastPath: boolean = false
 ): Promise<Offer[]> {
   const verified: Offer[] = [];
   let cursor = 0;
@@ -41092,7 +43298,77 @@ async function verifyOffers(
     return isSlowNoPriceOlxDiscoveryResult(result, parsed) ? 3 : 2;
   };
 
+  // V34.CORE581: queue scheduling only. Prefer candidates whose OWN title/URL/
+  // snippet explicitly matches the requested storage capacity, and demote an
+  // explicitly conflicting storage variant. This never changes verifier
+  // acceptance: it only decides which already-selected candidate gets scarce
+  // verifier/reader time first.
+  const core581StorageAlignmentRank = (result: SearchResult): number => {
+    const storageRequirement =
+      parsed.intent.required.find(
+        (requirement) => requirement.hard && requirement.key === "storage"
+      ) ?? null;
+
+    if (!storageRequirement) return 0;
+
+    const ownEvidence =
+      `${result.name} ${result.url} ${result.snippet ?? ""}`;
+
+    if (
+      hasConflictingHardRequirementInTitle(
+        storageRequirement,
+        ownEvidence,
+        parsed.intent.required
+      )
+    ) {
+      return -2;
+    }
+
+    if (
+      requirementHasEvidenceInContext(
+        storageRequirement,
+        ownEvidence,
+        parsed.intent.required
+      )
+    ) {
+      return 2;
+    }
+
+    return 0;
+  };
+
+  // V34.CORE581: known card-bound PLN prices may break a scheduling tie.
+  // Unknown prices stay neutral and still reach the unchanged verifier.
+  const core581BudgetSafetyRank = (result: SearchResult): number => {
+    if (parsed.maxPrice === null) return 0;
+
+    const price = getSilentDiscoveryPrice(result, parsed);
+    if (
+      price.price === null ||
+      normalizeMatchText(price.currency ?? "") !== "pln"
+    ) {
+      return 0;
+    }
+
+    const comparable = budgetComparablePrice(
+      price.price,
+      `${result.name} ${result.snippet ?? ""}`,
+      parsed
+    ).comparable;
+
+    if (comparable === null) return 0;
+    return comparable <= parsed.maxPrice ? 1 : -1;
+  };
+
   const verificationQueueUnbounded = [...merchantExpandedResults].sort((a, b) => {
+    const storageAlignmentDiff =
+      core581StorageAlignmentRank(b) - core581StorageAlignmentRank(a);
+    if (storageAlignmentDiff !== 0) return storageAlignmentDiff;
+
+    const budgetSafetyDiff =
+      core581BudgetSafetyRank(b) - core581BudgetSafetyRank(a);
+    if (budgetSafetyDiff !== 0) return budgetSafetyDiff;
+
     const tierDiff = costTier(a) - costTier(b);
     if (tierDiff !== 0) return tierDiff;
 
@@ -41131,6 +43407,37 @@ async function verifyOffers(
   const verificationQueue = capSlowMarketplaceReaderCandidates(
     verificationQueueUnbounded,
     parsed
+  );
+
+  console.log(
+    "[AIShopping] V34.CORE581_QUEUE_JSON " +
+      JSON.stringify({
+        phase: "V34.CORE581 verifier queue alignment ordering",
+        queue: verificationQueue.map((result, index) => {
+          const discoveryPrice = getSilentDiscoveryPrice(result, parsed);
+          const comparable =
+            discoveryPrice.price !== null &&
+            normalizeMatchText(discoveryPrice.currency ?? "") === "pln"
+              ? budgetComparablePrice(
+                  discoveryPrice.price,
+                  `${result.name} ${result.snippet ?? ""}`,
+                  parsed
+                ).comparable
+              : null;
+
+          return {
+            index,
+            host: getResultHostname(result.url),
+            url: result.url,
+            storageAlignmentRank: core581StorageAlignmentRank(result),
+            budgetSafetyRank: core581BudgetSafetyRank(result),
+            comparable,
+            maxPrice: parsed.maxPrice,
+            costTier: costTier(result),
+            priority: priorityOf(result),
+          };
+        }),
+      })
   );
 
   // V34.CORE120: discovery itself may already have found a concrete retailer
@@ -41207,8 +43514,20 @@ async function verifyOffers(
     verificationHosts.size === 1 &&
     verificationHosts.has("allegrolokalnie.pl");
 
+  // CORE261: carry the already-proven staged monitor anchor pressure into
+  // verifyOffers(). CORE260 recomputed the same predicate only after Ceneo
+  // expansion / queue shaping, where one anchor could disappear and the
+  // 2-worker path never activated even though the staged 6.5 s budget did.
+  // Scheduling only: no candidate is accepted from this signal.
+  const v34Core261MonitorAnchoredFastPath =
+    monitorAnchoredFastPath &&
+    parsed.category === "monitor" &&
+    parsed.intent.required.filter((requirement) => requirement.hard).length >= 3;
+
   const workerCount =
-    allCandidatesAreOlx
+    v34Core261MonitorAnchoredFastPath
+      ? Math.min(2, Math.max(verificationQueue.length, 1))
+      : allCandidatesAreOlx
       // V34.CORE120: the slow-reader cap already keeps at most two expensive
       // OLX fallbacks. Two workers preserve fallback concurrency while the
       // stronger own-card HARD candidate is ordered first.
@@ -41222,11 +43541,153 @@ async function verifyOffers(
             Math.max(verificationQueue.length, 1)
           );
 
+    // V34.CORE600 FIX1 second-wave bridged reservation
+  const core600Fix1BridgeKinds = (
+    result: SearchResult
+  ): string[] => {
+    const kinds: string[] = [];
+
+    if (
+      getTrustedBoundedRetailerCompactCapacityProofKeys(
+        result,
+        parsed
+      ).length > 0
+    ) {
+      kinds.push("capacity");
+    }
+
+    const structuredPrice =
+      getSchedulingOnlyStructuredRetailerCardPrice(
+        result,
+        parsed
+      );
+
+    if (
+      structuredPrice.price !== null &&
+      structuredPrice.currency
+    ) {
+      kinds.push("price");
+    }
+
+    return kinds;
+  };
+
+  const core600Fix1FirstWaveSize =
+    Math.min(
+      workerCount,
+      verificationQueue.length
+    );
+
+  const core600Fix1SecondWaveIndex =
+    core600Fix1FirstWaveSize;
+
+  const core600Fix1PromoteIndex =
+    verificationQueue.findIndex(
+      (result, index) =>
+        index >
+          core600Fix1SecondWaveIndex &&
+        core600Fix1BridgeKinds(result).length > 0
+    );
+
+  if (
+    core600Fix1FirstWaveSize > 0 &&
+    core600Fix1PromoteIndex >
+      core600Fix1SecondWaveIndex
+  ) {
+    const promotedKinds =
+      core600Fix1BridgeKinds(
+        verificationQueue[
+          core600Fix1PromoteIndex
+        ]
+      );
+
+    const firstWaveBefore =
+      verificationQueue
+        .slice(
+          0,
+          core600Fix1FirstWaveSize
+        )
+        .map(
+          (result) =>
+            normalizeUrl(
+              result.url
+            )
+        );
+
+    const [promoted] =
+      verificationQueue.splice(
+        core600Fix1PromoteIndex,
+        1
+      );
+
+    verificationQueue.splice(
+      core600Fix1SecondWaveIndex,
+      0,
+      promoted
+    );
+
+    const firstWaveAfter =
+      verificationQueue
+        .slice(
+          0,
+          core600Fix1FirstWaveSize
+        )
+        .map(
+          (result) =>
+            normalizeUrl(
+              result.url
+            )
+        );
+
+    const firstWaveUntouched =
+      JSON.stringify(
+        firstWaveBefore
+      ) ===
+      JSON.stringify(
+        firstWaveAfter
+      );
+
+    if (!firstWaveUntouched) {
+      throw new Error(
+        "CORE600 FIX1 invariant: first wave changed"
+      );
+    }
+
+    console.log(
+      "[AIShopping] V34.CORE600_FIX1_SECOND_WAVE_JSON " +
+        JSON.stringify({
+          traceId:
+            getCore596TraceId(parsed),
+          maxPrice:
+            parsed.maxPrice,
+          fromIndex:
+            core600Fix1PromoteIndex,
+          toIndex:
+            core600Fix1SecondWaveIndex,
+          firstWaveSize:
+            core600Fix1FirstWaveSize,
+          firstWaveUntouched,
+          workerCount,
+          queueLength:
+            verificationQueue.length,
+          host:
+            getResultHostname(
+              promoted.url
+            ),
+          source:
+            promoted.source,
+          bridgeKinds:
+            promotedKinds,
+        })
+    );
+  }
+
   console.log(
     "[AIShopping] V34.CORE120 verification scheduling:",
     {
       workers: workerCount,
       allCandidatesAreOlx,
+      monitorAnchoredFastPath: v34Core261MonitorAnchoredFastPath,
       preparationMs: Date.now() - preparationStartedAt,
       remainingMs: Math.max(0, hardDeadlineAt - Date.now() - VERIFICATION_RESPONSE_SAFETY_MARGIN_MS),
       hosts: Array.from(verificationHosts),
@@ -41262,6 +43723,23 @@ async function verifyOffers(
         hardDeadlineAt - Date.now() - VERIFICATION_RESPONSE_SAFETY_MARGIN_MS;
 
       if (remaining <= 0) return;
+
+      // CORE261: the staged verifier already proved >=2 complete, priced,
+      // retailer-owned monitor anchors before verifyOffers() started. Once one
+      // concrete offer succeeds, do not START lower-ranked work merely to wait
+      // out the route deadline. The other in-flight worker is not cancelled.
+      // If both current workers fail, verified stays empty and the old queue
+      // continues normally, preserving fallback recall.
+      if (v34Core261MonitorAnchoredFastPath && verified.length > 0) {
+        console.log(
+          "[AIShopping] V34.CORE261 monitor anchored verifier early-stop:",
+          {
+            verifiedOffers: verified.length,
+            remainingMs: remaining,
+          }
+        );
+        return;
+      }
 
       const index = cursor++;
       if (index >= verificationQueue.length) return;
@@ -41473,6 +43951,7 @@ function capV34Core164VerificationCandidatesBySourceHealth(
 type StagedVerificationBudgetProfile = {
   slowMarketplaceVerificationPressure: boolean;
   deferredModelBridgeVerificationPressure: boolean;
+  monitorVerifierAnchorPressure: boolean;
   firstVerificationWindowMs: number;
   recoveryReserveMs: number;
   shouldReserveZeroResultRecovery: boolean;
@@ -41488,20 +43967,45 @@ function getStagedVerificationBudgetProfile(
   const deferredModelBridgeVerificationPressure =
     hasDeferredRetailerModelBridgeVerificationPressure(results);
 
+  const monitorVerifierAnchorPressure =
+    parsed.category === "monitor" &&
+    parsed.intent.required.filter((requirement) => requirement.hard).length >= 3 &&
+    results.filter((result) => {
+      if (result.retailerOwnedCardEvidence !== true) return false;
+      if (result.source === "CeneoDirect" || result.source === "CeneoMerchant") return false;
+      const host = getResultHostname(result.url);
+      if (!host || host === "ceneo.pl") return false;
+      if (
+        V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+          (marketplaceHost) => String(marketplaceHost) === host
+        )
+      ) {
+        return false;
+      }
+      if (getTrustedPortfolioHardCoverageScore(result, parsed) < 10_000) return false;
+      const discoveryPrice = getSilentDiscoveryPrice(result, parsed);
+      return discoveryPrice.price !== null && Boolean(discoveryPrice.currency);
+    }).length >= 2;
+
   const firstVerificationWindowMs = deferredModelBridgeVerificationPressure
     ? DEFERRED_MODEL_BRIDGE_FIRST_VERIFICATION_MS
-    : slowMarketplaceVerificationPressure
-      ? SLOW_MARKETPLACE_FIRST_VERIFICATION_MS
-      : GUARANTEED_FIRST_VERIFICATION_MS;
+    : monitorVerifierAnchorPressure
+      ? 6_500
+      : slowMarketplaceVerificationPressure
+        ? SLOW_MARKETPLACE_FIRST_VERIFICATION_MS
+        : GUARANTEED_FIRST_VERIFICATION_MS;
   const recoveryReserveMs = deferredModelBridgeVerificationPressure
     ? DEFERRED_MODEL_BRIDGE_RECOVERY_RESERVE_MS
-    : slowMarketplaceVerificationPressure
-      ? SLOW_MARKETPLACE_RECOVERY_RESERVE_MS
-      : ZERO_RESULT_RECOVERY_RESERVE_MS;
+    : monitorVerifierAnchorPressure
+      ? 1_000
+      : slowMarketplaceVerificationPressure
+        ? SLOW_MARKETPLACE_RECOVERY_RESERVE_MS
+        : ZERO_RESULT_RECOVERY_RESERVE_MS;
 
   return {
     slowMarketplaceVerificationPressure,
     deferredModelBridgeVerificationPressure,
+    monitorVerifierAnchorPressure,
     firstVerificationWindowMs,
     recoveryReserveMs,
     shouldReserveZeroResultRecovery:
@@ -44703,6 +47207,466 @@ function buildPreVerificationRareHardGapQueries(
   ].map(normalizeText).filter(Boolean))).slice(0, Math.max(1, limit));
 }
 
+type V34Core234BrwChairPrefetchState = {
+  results: SearchResult[];
+  promise: Promise<void>;
+};
+
+type V34Core234BrwProductCandidate = {
+  url: string;
+  colorSlugHit: boolean;
+  targetedHardSearchHit?: boolean;
+};
+
+function extractV34Core234BrwProductCandidates(
+  html: string,
+  pageUrl: string,
+  parsed: ParsedQuery
+): V34Core234BrwProductCandidate[] {
+  if (!html) return [];
+  const colorRequirement = parsed.intent.required.find(
+    (requirement) => requirement.hard && requirement.key === "color"
+  ) ?? null;
+  const seen = new Set<string>();
+  const candidates: V34Core234BrwProductCandidate[] = [];
+  const hrefPattern = /<a\b[^>]*\bhref\s*=\s*["']([^"']+)["'][^>]*>/giu;
+
+  for (const match of html.matchAll(hrefPattern)) {
+    const href = decodeHtml(match[1] ?? "").trim();
+    if (!href) continue;
+
+    let absolute = "";
+    try {
+      absolute = new URL(href, pageUrl).toString();
+    } catch {
+      continue;
+    }
+
+    const normalizedUrl = normalizeUrl(absolute);
+    if (!normalizedUrl || seen.has(normalizedUrl)) continue;
+    const host = getResultHostname(normalizedUrl);
+    if (host !== "brw.pl" && !host.endsWith(".brw.pl")) continue;
+
+    let decodedPath = "";
+    try {
+      decodedPath = decodeURIComponent(new URL(normalizedUrl).pathname);
+    } catch {
+      continue;
+    }
+
+    // BRW concrete product pages use a root product slug ending in ,<id>.
+    // This is a route-shape rule, not a product/model/SKU whitelist.
+    if (!/,\d{5,9}\/?$/u.test(decodedPath)) continue;
+    const slugEvidence = normalizeText(decodedPath.replace(/[-_/]+/g, " "));
+    if (!/\b(?:fotel\w*|krzesl\w*|krzesł\w*)\b/iu.test(slugEvidence)) continue;
+    if (!/\b(?:biurow\w*|obrotow\w*|ergonomiczn\w*|gabinetow\w*)\b/iu.test(slugEvidence)) continue;
+
+    const colorSlugHit = Boolean(
+      colorRequirement &&
+      requirementHasEvidenceInContext(
+        colorRequirement,
+        slugEvidence,
+        parsed.intent.required
+      )
+    );
+
+    seen.add(normalizedUrl);
+    candidates.push({ url: normalizedUrl, colorSlugHit });
+  }
+
+  return candidates.sort((a, b) =>
+    Number(b.colorSlugHit) - Number(a.colorSlugHit) ||
+    a.url.localeCompare(b.url)
+  );
+}
+
+function startV34Core234BrwChairFirstPartyPrefetch(
+  parsed: ParsedQuery
+): V34Core234BrwChairPrefetchState | null {
+  const loadRequirement = parsed.intent.required.find(
+    (requirement) => requirement.hard && requirement.key === "load_capacity_kg"
+  ) ?? null;
+  const colorRequirement = parsed.intent.required.find(
+    (requirement) => requirement.hard && requirement.key === "color"
+  ) ?? null;
+
+  if (parsed.category !== "chair" || !loadRequirement) return null;
+
+  const results: SearchResult[] = [];
+  const promise = withAbortableDeadline(
+    async (signal) => {
+      const categoryBase =
+        "https://www.brw.pl/meble/meble-biurowe/fotele-i-krzesla-biurowe/biuro/";
+      const candidatesByUrl = new Map<string, V34Core234BrwProductCandidate>();
+
+      const absorbCategoryPage = (
+        page: { status: number; html: string; finalUrl: string } | null,
+        requestedUrl: string
+      ) => {
+        if (!page || page.status < 200 || page.status >= 400 || !page.html) return 0;
+        let added = 0;
+        for (const candidate of extractV34Core234BrwProductCandidates(
+          page.html,
+          page.finalUrl || requestedUrl,
+          parsed
+        )) {
+          const existing = candidatesByUrl.get(candidate.url);
+          if (!existing || candidate.colorSlugHit) {
+            if (!existing) added += 1;
+            candidatesByUrl.set(candidate.url, {
+              ...candidate,
+              targetedHardSearchHit:
+                existing?.targetedHardSearchHit === true ||
+                candidate.targetedHardSearchHit === true,
+            });
+          }
+        }
+        return added;
+      };
+
+      // V34.CORE236: CORE235 proved page 1 is stable but insufficient: all four
+      // runs produced 34 page-1 candidates and zero >=150 kg qualification,
+      // while CORE234 only qualified when the three-page pool was available.
+      // Fetch pages 1-3 in parallel so broader catalog coverage does not add
+      // sequential latency. The final verifier and HARD comparator are unchanged.
+      const categoryUrls = [
+        categoryBase,
+        `${categoryBase}?page=2`,
+        `${categoryBase}?page=3`,
+      ];
+      const categoryBudgets = [2_950, 3_050, 3_050];
+
+      // V34.CORE254: run one load-specific BRW reference pulse in PARALLEL
+      // with the normal category fanout. Search results are URL discovery only:
+      // they never prove load or colour. A concrete BRW page must still pass
+      // the unchanged identity + colour + load checks below.
+      const targetedLoadTerm = normalizeText(
+        requirementDiscoveryHintTerm(loadRequirement)
+      );
+      const targetedColorTerm = colorRequirement
+        ? normalizeText(requirementPrimarySearchTerm(colorRequirement))
+        : "";
+      const targetedProductTerm = normalizeText(
+        parsed.intent.productPhrase || parsed.intent.searchBase
+      );
+      const targetedQuery = normalizeText(
+        `site:brw.pl "${targetedProductTerm}" "${targetedLoadTerm}" ${targetedColorTerm}`
+      );
+
+      const targetedReferencePromise = Promise.all([
+        withDeadline(
+          searchBingReference(targetedQuery, signal),
+          2_250,
+          [] as SearchResult[],
+          "CORE244 BRW targeted HTML reference"
+        ),
+        withDeadline(
+          searchBingRssReference(targetedQuery, signal),
+          2_250,
+          [] as SearchResult[],
+          "CORE244 BRW targeted RSS reference"
+        ),
+      ]).then((chunks) => dedupeSearchResultsByUrl(chunks.flat()));
+
+      const categoryPages = await Promise.all(
+        categoryUrls.map((url, index) =>
+          fetchHtml(url, categoryBudgets[index] ?? 3_050, signal).catch(() => null)
+        )
+      );
+      if (signal.aborted) return;
+
+      const pageAdds: number[] = [];
+      const pageStatuses: number[] = [];
+      for (let index = 0; index < categoryPages.length; index += 1) {
+        const page = categoryPages[index];
+        pageStatuses.push(page?.status ?? 0);
+        pageAdds.push(absorbCategoryPage(page, categoryUrls[index]));
+      }
+      console.log("[AIShopping] V34.CORE236 BRW category fanout ready:", {
+        statuses: pageStatuses,
+        added: pageAdds,
+        total: candidatesByUrl.size,
+      });
+
+      const targetedRows = await withDeadline(
+        targetedReferencePromise,
+        500,
+        [] as SearchResult[],
+        "CORE244 BRW targeted reference join"
+      );
+
+      let targetedAdded = 0;
+      for (const row of targetedRows.slice(0, 16)) {
+        const normalizedUrl = normalizeUrl(row.url);
+        if (!normalizedUrl) continue;
+        const host = getResultHostname(normalizedUrl);
+        if (host !== "brw.pl" && !host.endsWith(".brw.pl")) continue;
+
+        let decodedPath = "";
+        try {
+          decodedPath = decodeURIComponent(new URL(normalizedUrl).pathname);
+        } catch {
+          continue;
+        }
+
+        if (!/,\d{5,9}\/?$/u.test(decodedPath)) continue;
+
+        const ownSearchEvidence = normalizeText(
+          `${row.name} ${decodedPath.replace(/[-_/]+/g, " ")}`
+        );
+        const identity = evaluateUniversalProductMatch(
+          row.name,
+          row.snippet,
+          normalizedUrl,
+          parsed,
+          "discovery",
+          row.source
+        );
+        if (!identity.pass) continue;
+
+        const colorSlugHit = Boolean(
+          colorRequirement &&
+          requirementHasEvidenceInContext(
+            colorRequirement,
+            ownSearchEvidence,
+            parsed.intent.required
+          )
+        );
+
+        const existing = candidatesByUrl.get(normalizedUrl);
+        if (!existing) targetedAdded += 1;
+        candidatesByUrl.set(normalizedUrl, {
+          url: normalizedUrl,
+          colorSlugHit: colorSlugHit || existing?.colorSlugHit === true,
+          targetedHardSearchHit: true,
+        });
+      }
+
+      console.log("[AIShopping] V34.CORE254 BRW targeted load URL seed:", {
+        query: targetedQuery,
+        raw: targetedRows.length,
+        added: targetedAdded,
+        targetedTotal: [...candidatesByUrl.values()].filter(
+          (candidate) => candidate.targetedHardSearchHit === true
+        ).length,
+        total: candidatesByUrl.size,
+      });
+
+      const candidates = [...candidatesByUrl.values()]
+        .sort((a, b) =>
+          Number(b.targetedHardSearchHit) - Number(a.targetedHardSearchHit) ||
+          Number(b.colorSlugHit) - Number(a.colorSlugHit) ||
+          a.url.localeCompare(b.url)
+        )
+        .slice(0, 24);
+
+      console.log("[AIShopping] V34.CORE236 BRW first-party candidate URLs:", {
+        count: candidatesByUrl.size,
+        hydrationLimit: candidates.length,
+        colorSlugFirst: candidates.filter((item) => item.colorSlugHit).length,
+      });
+      console.log("[AIShopping] V34.CORE236 BRW hydration shortlist:",
+        candidates.slice(0, 12).map((item) => ({
+          url: item.url,
+          colorSlugHit: item.colorSlugHit,
+          targetedHardSearchHit: item.targetedHardSearchHit === true,
+        }))
+      );
+
+      // Hydrate bounded batches. Stop as soon as two exact first-party pages
+      // prove the requested load + title/URL-bound colour. Normal verification
+      // will still decide price, condition, availability, originality and final
+      // universal HARD acceptance from the SAME concrete page.
+      const batchSize = 6;
+      for (let offset = 0; offset < candidates.length; offset += batchSize) {
+        if (signal.aborted || results.length >= 2) break;
+        const batch = candidates.slice(offset, offset + batchSize);
+        const hydrated = await Promise.all(
+          batch.map(async (candidate) => {
+            const page = await fetchHtml(candidate.url, 1_450, signal).catch(() => null);
+
+            let finalUrl =
+              normalizeUrl(page?.finalUrl || candidate.url) || candidate.url;
+            let title =
+              page &&
+              page.status >= 200 &&
+              page.status < 400 &&
+              page.html &&
+              !isBlockedOrChallengePage(page.html)
+                ? extractTitleFromHtml(page.html)
+                : "";
+            let evidenceText =
+              page &&
+              page.status >= 200 &&
+              page.status < 400 &&
+              page.html &&
+              !isBlockedOrChallengePage(page.html)
+                ? stripHtml(page.html)
+                : "";
+            let readerText = "";
+
+            const directIdentity = title
+              ? evaluateUniversalProductMatch(
+                  title,
+                  "",
+                  finalUrl,
+                  parsed,
+                  "discovery",
+                  "RetailerRescue"
+                ).pass
+              : false;
+
+            const directOwnIdentityEvidence = title
+              ? normalizeText(
+                  `${title} ${finalUrl.replace(/[-_/]+/g, " ")}`
+                )
+              : "";
+            const directColorProven =
+              directIdentity &&
+              (
+                !colorRequirement ||
+                requirementHasEvidenceInContext(
+                  colorRequirement,
+                  directOwnIdentityEvidence,
+                  parsed.intent.required
+                )
+              );
+            const directLoadProven =
+              directColorProven &&
+              requirementHasEvidenceInContext(
+                loadRequirement,
+                getUniversalEvidenceScope(
+                  title,
+                  evidenceText,
+                  finalUrl
+                ),
+                parsed.intent.required
+              );
+
+            if (
+              !directLoadProven &&
+              candidate.targetedHardSearchHit === true &&
+              !signal.aborted
+            ) {
+              readerText = await fetchViaJina(
+                candidate.url,
+                2_450,
+                false,
+                signal
+              ).catch(() => "");
+
+              if (readerText && !isBlockedOrChallengePage(readerText)) {
+                const readerTitle =
+                  normalizeText(
+                    readerText.match(/^\s*Title:\s*([^\r\n]+)/imu)?.[1] ?? ""
+                  ) || title;
+                if (readerTitle) title = readerTitle;
+                evidenceText = readerText;
+                finalUrl = normalizeUrl(candidate.url) || candidate.url;
+
+                console.log(
+                  "[AIShopping] V34.CORE254 BRW targeted reader fallback:",
+                  {
+                    url: candidate.url,
+                    received: true,
+                    length: readerText.length,
+                  }
+                );
+              }
+            }
+
+            if (!title || !evidenceText) return null;
+
+            const identity = evaluateUniversalProductMatch(
+              title,
+              "",
+              finalUrl,
+              parsed,
+              "discovery",
+              "RetailerRescue"
+            );
+            if (!identity.pass) return null;
+
+            // Listing colour is intentionally title/own-URL bound. Search and
+            // page-wide recommendation text may not prove the requested colour.
+            const ownIdentityEvidence = normalizeText(
+              `${title} ${finalUrl.replace(/[-_/]+/g, " ")}`
+            );
+            const colorProven = !colorRequirement || requirementHasEvidenceInContext(
+              colorRequirement,
+              ownIdentityEvidence,
+              parsed.intent.required
+            );
+            if (!colorProven) return null;
+
+            const focusedPageEvidence = getUniversalEvidenceScope(
+              title,
+              evidenceText,
+              finalUrl
+            );
+            const loadProven = requirementHasEvidenceInContext(
+              loadRequirement,
+              focusedPageEvidence,
+              parsed.intent.required
+            );
+            if (!loadProven) return null;
+
+            const proofKeys = [loadRequirement.key];
+            if (colorRequirement) proofKeys.push(colorRequirement.key);
+
+            return {
+              url: finalUrl,
+              name: title,
+              snippet: normalizeText(`${title} ${ownIdentityEvidence}`).slice(0, 1800),
+              source: "RetailerRescue",
+              searchRank: candidate.targetedHardSearchHit ? -2_390 : -2_340,
+              retailerOwnedCardEvidence: true,
+              catalogRequirementProofKeys: Array.from(new Set(proofKeys)),
+              rareHardRecoveryTargetKey: loadRequirement.key,
+              rareHardRecoveryOrigin: "direct-retailer" as const,
+              ...(page &&
+                  page.status >= 200 &&
+                  page.status < 400 &&
+                  page.html &&
+                  !isBlockedOrChallengePage(page.html)
+                ? {
+                    prefetchedConcretePage: {
+                      status: page.status,
+                      html: page.html,
+                      finalUrl: page.finalUrl || finalUrl,
+                    },
+                  }
+                : {}),
+              ...(readerText
+                ? { prefetchedConcreteReaderText: readerText }
+                : {}),
+            } satisfies SearchResult;
+          })
+        );
+
+        for (const result of hydrated) {
+          if (!result) continue;
+          if (results.some((existing) => normalizeUrl(existing.url) === normalizeUrl(result.url))) {
+            continue;
+          }
+          results.push(result);
+          console.log("[AIShopping] V34.CORE236 BRW first-party qualified:", {
+            name: result.name,
+            url: result.url,
+            proofKeys: result.catalogRequirementProofKeys,
+          });
+          if (results.length >= 2) break;
+        }
+      }
+    },
+    7_450,
+    undefined,
+    "CORE244 BRW first-party chair prefetch"
+  ).then(() => undefined);
+
+  return { results, promise };
+}
+
 async function searchPreVerificationRareHardGap(
   parsed: ParsedQuery,
   existingResults: SearchResult[],
@@ -44864,12 +47828,101 @@ async function searchPreVerificationRareHardGap(
     `${quoteSearchTerm(directIdentity)} ${quoteSearchTerm(compactRareAnchor)} ` +
     `${quoteSearchTerm(supportLiteralSearchTerm || supportSearchTerm)} ${budgetHint} cena`
   );
+  const v34Core228ObservedIdentityPathToken = normalizeMatchText(directIdentity)
+    .split(/\s+/)
+    .find((token) => token.length >= 4) ?? "";
+
+  const v34Core228RareHardProductScope = (host: string): string => {
+    if (!v34Core228ObservedIdentityPathToken) return host;
+
+    const observedConcretePrefix = existingResults.some((result) => {
+      if (!retailerHostMatchesDomain(getResultHostname(result.url), host)) {
+        return false;
+      }
+      if (!isConcreteVerificationCandidate(result, parsed)) return false;
+
+      try {
+        const firstPathPart =
+          new URL(result.url).pathname
+            .split("/")
+            .filter(Boolean)[0] ?? "";
+        return normalizeMatchText(firstPathPart).startsWith(
+          v34Core228ObservedIdentityPathToken
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    return observedConcretePrefix
+      ? `${host}/${v34Core228ObservedIdentityPathToken}`
+      : host;
+  };
+
+  const v34Core228LoadCapacityNumeric =
+    missingHard[0].key === "load_capacity_kg"
+      ? String(missingHard[0].value ?? "")
+          .match(/\d{1,4}(?:[.,]\d+)?/)?.[0]
+          ?.replace(",", ".") ?? ""
+      : "";
+
+  const v34Core228ChairLoadCapacityIndexIntent =
+    genericCategoryHardIntent &&
+    parsed.category === "chair" &&
+    Boolean(v34Core228LoadCapacityNumeric) &&
+    genericFirstPartyPortfolioHosts.length >= 2;
+
+  const v34Core228ChairSupportTerm = normalizeText(
+    supportLiteralSearchTerm || supportSearchTerm
+  );
+
   const genericFirstPartyEngineQueries =
-    genericFirstPartyPortfolioHosts.length >= 3 && genericFirstPartyPortfolioCore
-      ? genericFirstPartyPortfolioHosts.slice(0, 3).map((host) =>
-          normalizeText(`site:${host} ${genericFirstPartyPortfolioCore}`)
-        )
-      : [];
+    v34Core228ChairLoadCapacityIndexIntent
+      ? (() => {
+          const strongestHost = genericFirstPartyPortfolioHosts[0];
+          const secondHost =
+            genericFirstPartyPortfolioHosts[1] || strongestHost;
+          const strongestScope =
+            v34Core228RareHardProductScope(strongestHost);
+          const secondScope =
+            v34Core228RareHardProductScope(secondHost);
+          const identity = quoteSearchTerm(directIdentity);
+          const support = quoteSearchTerm(v34Core228ChairSupportTerm);
+          const compactKg = `${v34Core228LoadCapacityNumeric}kg`;
+          const spacedKg = `${v34Core228LoadCapacityNumeric} kg`;
+
+          const queries = [
+            normalizeText(
+              `site:${strongestScope} ${identity} ${compactKg} ${support} cena`
+            ),
+            normalizeText(
+              `site:${strongestScope} ${identity} ${spacedKg} ${support} cena`
+            ),
+            normalizeText(
+              `site:${secondScope} ${identity} ${compactKg} ${support} cena`
+            ),
+          ];
+
+          console.log(
+            "[AIShopping] V34.CORE228 strongest chair rare-HARD lexical shards:",
+            {
+              strongestHost,
+              secondHost,
+              numeric: v34Core228LoadCapacityNumeric,
+              queries,
+            }
+          );
+
+          return queries;
+        })()
+      : genericFirstPartyPortfolioHosts.length >= 3 &&
+          genericFirstPartyPortfolioCore
+        ? genericFirstPartyPortfolioHosts.slice(0, 3).map((host) =>
+            normalizeText(
+              `site:${v34Core228RareHardProductScope(host)} ${genericFirstPartyPortfolioCore}`
+            )
+          )
+        : [];
   const genericFirstPartyPortfolioQuery = genericFirstPartyEngineQueries[0] || "";
 
   // CORE119: when the fallback retailer mesh is active, first-party direct
@@ -44983,7 +48036,12 @@ async function searchPreVerificationRareHardGap(
                 hosts: directHosts,
                 overrideSearchTexts: directRareSearchTexts,
                 adapterBudgetMs: directAdapterBudgetMs,
-                maxAdapters: usedFallbackMesh ? Math.min(6, directHosts.length) : 2,
+                // V34.CORE228: late compact recovery has little wall clock
+                // left. Four adapters preserve chair recall without starving
+                // the verifier reserve.
+                maxAdapters: usedFallbackMesh
+                  ? Math.min(lateCompactMode ? 4 : 6, directHosts.length)
+                  : 2,
                 maxUrlsPerAdapter: Math.min(2, directRareSearchTexts.length),
                 // This is a short recovery pulse, not primary discovery. Reader
                 // queues/retries can outlive the phase and starve verification;
@@ -45052,8 +48110,48 @@ async function searchPreVerificationRareHardGap(
   });
 
   const seen = new Set(existingResults.map((item) => normalizeUrl(item.url)).filter(Boolean));
+
+  const rawRareHardRecoveryPool = [
+    ...phaseResult.indexed.flat(),
+    ...directRetailerGapResults,
+    ...googleGapResults,
+  ];
+
+  // CORE260: in late compact mode preserve the already-earned verifier reserve.
+  // CORE259 proved that the network phase could return with ~4.9 s remaining,
+  // then synchronous filtering of many large catalog/index snippets consumed
+  // the entire tail before verification started. Prefer first-party direct
+  // candidates, keep a small indexed fallback, and trim only DISCOVERY snippets.
+  // Prefetched concrete pages, structured proof keys and final page verification
+  // remain untouched.
+  const rareHardRecoveryFilterPool = lateCompactMode
+    ? [
+        ...directRetailerGapResults.slice(0, 16),
+        ...phaseResult.indexed.flat().slice(0, 6),
+        ...googleGapResults.slice(0, 2),
+      ].map((result) => ({
+        ...result,
+        snippet: normalizeText(`${result.name} ${result.snippet}`).slice(0, 2_200),
+      }))
+    : rawRareHardRecoveryPool;
+
+  if (lateCompactMode) {
+    console.log("[AIShopping] V34.CORE260 compact rare-HARD filter pool:", {
+      raw: rawRareHardRecoveryPool.length,
+      compact: rareHardRecoveryFilterPool.length,
+      direct: directRetailerGapResults.length,
+      indexed: phaseResult.indexed.flat().length,
+      google: googleGapResults.length,
+      remainingBeforeFilterMs: Math.max(
+        0,
+        hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS
+      ),
+      verificationReserveMs,
+    });
+  }
+
   const recovered = filterZeroResultRecoveryCandidates(
-    [...phaseResult.indexed.flat(), ...directRetailerGapResults, ...googleGapResults],
+    rareHardRecoveryFilterPool,
     parsed
   )
     .filter((item) => !seen.has(normalizeUrl(item.url)))
@@ -45563,8 +48661,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     const requestStartedAt = Date.now();
     const hardDeadlineAt = requestStartedAt + HARD_SEARCH_BUDGET_MS;
 
+    // V34.CORE234: start the bounded BRW first-party load-capacity lane at
+    // request start so its network time overlaps ordinary discovery. It only
+    // activates for chair + hard load_capacity_kg and never changes acceptance.
+    const v34Core234BrwChairPrefetch =
+      startV34Core234BrwChairFirstPartyPrefetch(parsed);
+
+    const v34Core244PowerToolOlxPrefetch =
+      startV34Core244PowerToolOlxPrefetch(parsed);
+
     console.log("================================================");
-    console.log("[AIShopping] NEW SEARCH V34.CORE207");
+    console.log("[AIShopping] NEW SEARCH V34.CORE262");
     console.log("[AIShopping] query:", query);
     console.log("[AIShopping] category:", parsed.category);
     console.log("[AIShopping] platform:", parsed.platform);
@@ -45733,6 +48840,81 @@ export async function POST(request: Request): Promise<NextResponse> {
         "[AIShopping] V34.CORE183 search results after sibling bridge:",
         searchResults.length
       );
+    }
+
+    // V34.CORE234: consume whatever the request-start BRW prefetch has already
+    // proven. Give an unfinished lane at most 250 ms here; it is never allowed
+    // to steal the verifier reserve. Exact page-bound HARD proof makes these
+    // candidates naturally win the existing rare-HARD portfolio score.
+    if (v34Core234BrwChairPrefetch) {
+      await withDeadline(
+        v34Core234BrwChairPrefetch.promise,
+        900,
+        undefined,
+        "CORE235 BRW prefetch join"
+      );
+      if (v34Core234BrwChairPrefetch.results.length > 0) {
+        searchResults = dedupeSearchResultsByUrl([
+          ...v34Core234BrwChairPrefetch.results,
+          ...searchResults,
+        ]);
+        console.log("[AIShopping] V34.CORE236 search results after BRW first-party hydration:", {
+          qualified: v34Core234BrwChairPrefetch.results.length,
+          total: searchResults.length,
+        });
+      }
+    }
+
+    if (v34Core244PowerToolOlxPrefetch) {
+      await withDeadline(
+        v34Core244PowerToolOlxPrefetch.promise,
+        900,
+        undefined,
+        "CORE244 power-tool OLX prefetch join"
+      );
+
+      if (v34Core244PowerToolOlxPrefetch.results.length > 0) {
+        const prefetchedByUrl = new Map(
+          v34Core244PowerToolOlxPrefetch.results.map((result) => [
+            normalizeUrl(result.url),
+            result,
+          ])
+        );
+
+        searchResults = searchResults.map((result) => {
+          const prefetched = prefetchedByUrl.get(normalizeUrl(result.url));
+          if (!prefetched) return result;
+          return {
+            ...result,
+            retailerOwnedCardEvidence:
+              prefetched.retailerOwnedCardEvidence === true ||
+              result.retailerOwnedCardEvidence === true,
+            catalogRequirementProofKeys: Array.from(new Set([
+              ...(result.catalogRequirementProofKeys ?? []),
+              ...(prefetched.catalogRequirementProofKeys ?? []),
+            ])),
+            prefetchedConcreteReaderPromise:
+              prefetched.prefetchedConcreteReaderPromise,
+            prefetchedConcreteReaderText:
+              prefetched.prefetchedConcreteReaderText,
+            prefetchedConcreteReaderSettled:
+              prefetched.prefetchedConcreteReaderSettled,
+          };
+        });
+
+        searchResults = dedupeSearchResultsByUrl([
+          ...v34Core244PowerToolOlxPrefetch.results,
+          ...searchResults,
+        ]);
+
+        console.log(
+          "[AIShopping] V34.CORE260 search results after power-tool OLX prefetch:",
+          {
+            prefetched: v34Core244PowerToolOlxPrefetch.results.length,
+            total: searchResults.length,
+          }
+        );
+      }
     }
 
     console.log(
@@ -45904,7 +49086,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
     }
 
-    const limitedResults = capV34Core164VerificationCandidatesBySourceHealth(
+    let limitedResults = capV34Core164VerificationCandidatesBySourceHealth(
       selectDiverseSearchResults(
         verificationSelectionPool,
         verificationLimit,
@@ -45913,6 +49095,77 @@ export async function POST(request: Request): Promise<NextResponse> {
       ),
       parsed,
       verificationLimit
+    );
+
+    // STORE-B26_FIX2: Morele first-party final verification reserve.
+    // Scheduling only. B25 proved Morele discovery can return many concrete
+    // retailer-owned laptop cards yet receive zero final verifier starts.
+    // Reserve at most ONE mature Morele card from verificationPool. The normal
+    // verifySearchResult() still proves identity, every HARD requirement,
+    // listing-bound price, availability and condition. No evidence is invented.
+    const storeB26Fix2MoreleEligible =
+      parsed.category === "laptop" &&
+      Boolean(parsed.brand) &&
+      hardRequirementCount >= 2
+        ? verificationPool
+            .filter((result) => {
+              if (getResultHostname(result.url) !== "morele.net") return false;
+              if (result.source !== "RetailerRescue") return false;
+              if (result.retailerOwnedCardEvidence !== true) return false;
+              if (isGenericAccessoryResult(result.name, result.url, parsed)) return false;
+              const classReason = evaluateUniversalProductClass(
+                result.name,
+                result.retailerOwnedCardEvidence === true
+                  ? `${result.name} ${result.snippet}`
+                  : result.name,
+                result.url,
+                parsed,
+                result.source
+              );
+              if (classReason === "incompatible-product-class") return false;
+              if (!isConcreteVerificationCandidate(result, parsed)) return false;
+              return getTrustedPortfolioHardProofKeys(result, parsed).length >= 2;
+            })
+            .sort((a, b) =>
+              getTrustedPortfolioHardProofKeys(b, parsed).length -
+                getTrustedPortfolioHardProofKeys(a, parsed).length ||
+              Number(Boolean(b.retailerCatalogCardPrice?.price)) -
+                Number(Boolean(a.retailerCatalogCardPrice?.price)) ||
+              getSearchResultPriority(b, parsed) -
+                getSearchResultPriority(a, parsed) ||
+              a.searchRank - b.searchRank
+            )
+        : [];
+
+    const storeB26Fix2MoreleVerificationReserve =
+      storeB26Fix2MoreleEligible.slice(0, 1);
+
+    if (storeB26Fix2MoreleVerificationReserve.length > 0) {
+      limitedResults = dedupeSearchResultsByUrl([
+        ...storeB26Fix2MoreleVerificationReserve,
+        ...limitedResults,
+      ]).slice(0, verificationLimit);
+    }
+
+    console.log(
+      "[AIShopping] STORE-B26_FIX2 Morele first-party verification reserve JSON:",
+      JSON.stringify({
+        category: parsed.category,
+        brand: parsed.brand ?? null,
+        hardRequirementCount,
+        verificationLimit,
+        eligible: storeB26Fix2MoreleEligible.length,
+        reserved: storeB26Fix2MoreleVerificationReserve.length,
+        finalSelectedMorele: limitedResults.filter(
+          (result) => getResultHostname(result.url) === "morele.net"
+        ).length,
+        rows: storeB26Fix2MoreleVerificationReserve.map((result) => ({
+          name: result.name,
+          url: result.url,
+          proofKeys: getTrustedPortfolioHardProofKeys(result, parsed),
+          cardPrice: result.retailerCatalogCardPrice?.price ?? null,
+        })),
+      })
     );
 
     console.log(
@@ -45940,6 +49193,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const {
       slowMarketplaceVerificationPressure,
       deferredModelBridgeVerificationPressure,
+      monitorVerifierAnchorPressure,
       firstVerificationWindowMs,
       recoveryReserveMs,
       shouldReserveZeroResultRecovery,
@@ -45959,6 +49213,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       firstWaveRemaining,
       slowMarketplaceVerificationPressure,
       deferredModelBridgeVerificationPressure,
+      monitorVerifierAnchorPressure,
       firstVerificationWindowMs,
       recoveryReserveMs,
       shouldReserveZeroResultRecovery,
@@ -45969,7 +49224,8 @@ export async function POST(request: Request): Promise<NextResponse> {
       parsed,
       firstVerificationDeadline,
       staticReferenceCandidates,
-      prefetchedExactModelStaticProofPromise
+      prefetchedExactModelStaticProofPromise,
+      monitorVerifierAnchorPressure
     );
 
     let preRecoveryScored = scoreAndRankOffers(
