@@ -1646,6 +1646,12 @@ function SearchPageContent() {
 
   const [searchError, setSearchError] = useState<string | null>(null);
 
+  // ASARVO_SEARCH_REFRESH_V1
+  const [restoredFromSearchCache, setRestoredFromSearchCache] =
+    useState(false);
+  const [searchRefreshNonce, setSearchRefreshNonce] =
+    useState(0);
+
   // ASARVO_SEARCH_CANCEL_V1_FIX1
   const searchWasCancelled =
     searchError === "Wyszukiwanie anulowane.";
@@ -1715,7 +1721,7 @@ function SearchPageContent() {
 
     compareQueryRef.current = query;
     setCompareFamilyKeys([]);
-  }, [query]);
+  }, [query, searchRefreshNonce]);
 
   // UI -> URL: keep the current search configuration in the browser address.
   useEffect(() => {
@@ -2541,6 +2547,29 @@ function SearchPageContent() {
     }
   };
 
+  const refreshSearchResults = () => {
+    const trimmedQuery = query.trim();
+
+    if (!trimmedQuery) {
+      return;
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        window.sessionStorage.removeItem(
+          searchSessionCacheKey(trimmedQuery)
+        );
+      } catch {
+        // Cache jest tylko optymalizacją UX.
+      }
+    }
+
+    cancelSearchRequest(trimmedQuery);
+    setRestoredFromSearchCache(false);
+    setSearchError(null);
+    setSearchRefreshNonce((current) => current + 1);
+  };
+
   // ANALIZA ZAPYTANIA
   useEffect(() => {
     let cancelled = false;
@@ -2554,6 +2583,7 @@ function SearchPageContent() {
           setInterpretation(null);
           setProducts([]);
           setSearchError(null);
+          setRestoredFromSearchCache(false);
           setLoading(false);
         }
 
@@ -2573,11 +2603,13 @@ function SearchPageContent() {
           );
           setProducts(cachedSearch.products);
           setSearchError(cachedSearch.error);
+          setRestoredFromSearchCache(true);
           setLoading(false);
           return;
         }
 
         if (searchId === activeSearchIdRef.current) {
+          setRestoredFromSearchCache(false);
           setLoading(true);
           setSearchError(null);
         }
@@ -3676,6 +3708,25 @@ function SearchPageContent() {
               {libraryActionMessage}
             </div>
           )}
+
+          {restoredFromSearchCache &&
+            !loading &&
+            interpretation && (
+              <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.04] px-5 py-4 text-sm text-cyan-100 sm:flex-row sm:items-center sm:justify-between">
+                <span>
+                  ↺ Przywrócono świeże wyniki z pamięci
+                  (maks. 3 min).
+                </span>
+
+                <button
+                  type="button"
+                  onClick={refreshSearchResults}
+                  className="inline-flex shrink-0 items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-400/[0.08] px-4 py-2 font-semibold text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-400/[0.14] hover:text-white"
+                >
+                  ↻ Odśwież wyniki
+                </button>
+              </div>
+            )}
 
           {/* NAJLEPSZA OFERTA */}
           {bestProduct ? (
