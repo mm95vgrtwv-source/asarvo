@@ -1596,6 +1596,10 @@ function SearchPageContent() {
   const [ratingFilter, setRatingFilter] =
     useState("Wszystkie");
 
+  // ASARVO_SORTING_V1
+  const [sortMode, setSortMode] =
+    useState("ASARVO");
+
   const [copiedCode, setCopiedCode] =
     useState<string | null>(null);
 
@@ -2558,16 +2562,92 @@ function SearchPageContent() {
     [productFamilies, safestProduct]
   );
 
-  const otherProductFamilies = useMemo(
-    () =>
-      sortProductFamilies(
-        productFamilies.filter(
-          (family) =>
-            !familyHasProduct(family, bestProduct)
+  const otherProductFamilies = useMemo(() => {
+    const families = productFamilies.filter(
+      (family) =>
+        !familyHasProduct(family, bestProduct)
+    );
+
+    if (sortMode === "Cena: rosnąco") {
+      return [...families].sort((a, b) => {
+        const costA =
+          a.lowestConfirmedTotal ?? a.lowestPrice ?? Infinity;
+        const costB =
+          b.lowestConfirmedTotal ?? b.lowestPrice ?? Infinity;
+
+        return costA - costB;
+      });
+    }
+
+    if (sortMode === "Cena: malejąco") {
+      return [...families].sort((a, b) => {
+        const costA =
+          a.lowestConfirmedTotal ?? a.lowestPrice;
+        const costB =
+          b.lowestConfirmedTotal ?? b.lowestPrice;
+
+        if (costA === null && costB === null) {
+          return 0;
+        }
+        if (costA === null) {
+          return 1;
+        }
+        if (costB === null) {
+          return -1;
+        }
+
+        return costB - costA;
+      });
+    }
+
+    if (sortMode === "Ocena: najwyższa") {
+      const familyRating = (family: ProductFamily): number => {
+        const ratings = family.offers
+          .map((offer) => offer.rating)
+          .filter(
+            (rating): rating is number =>
+              typeof rating === "number" &&
+              Number.isFinite(rating)
+          );
+
+        return ratings.length > 0
+          ? Math.max(...ratings)
+          : -Infinity;
+      };
+
+      return [...families].sort(
+        (a, b) => familyRating(b) - familyRating(a)
+      );
+    }
+
+    if (sortMode === "Sklep: A-Z") {
+      const familyStoreLabel = (
+        family: ProductFamily
+      ): string =>
+        family.storeOffers
+          .map((entry) => entry.store)
+          .filter(Boolean)
+          .sort((a, b) =>
+            a.localeCompare(b, "pl", {
+              sensitivity: "base",
+            })
+          )
+          .join(" | ");
+
+      return [...families].sort((a, b) =>
+        familyStoreLabel(a).localeCompare(
+          familyStoreLabel(b),
+          "pl",
+          {
+            sensitivity: "base",
+          }
         )
-      ),
-    [productFamilies, bestProduct]
-  );
+      );
+    }
+
+    // Domyślne sortowanie pozostaje identyczne z dotychczasowym ASARVO.
+    return sortProductFamilies(families);
+  }, [productFamilies, bestProduct, sortMode]);
 
   const totalStoreCount = useMemo(
     () =>
@@ -2878,6 +2958,21 @@ function SearchPageContent() {
               <option>4+</option>
               <option>4.5+</option>
               <option>4.8+</option>
+            </select>
+
+            <select
+              value={sortMode}
+              onChange={(e) =>
+                setSortMode(e.target.value)
+              }
+              aria-label="Sortowanie wyników"
+              className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
+            >
+              <option>ASARVO</option>
+              <option>Cena: rosnąco</option>
+              <option>Cena: malejąco</option>
+              <option>Ocena: najwyższa</option>
+              <option>Sklep: A-Z</option>
             </select>
 
             {hasActiveFilters && (
