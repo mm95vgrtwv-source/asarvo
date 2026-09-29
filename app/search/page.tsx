@@ -1679,6 +1679,10 @@ function SearchPageContent() {
   const [compareFamilyKeys, setCompareFamilyKeys] =
     useState<string[]>([]);
 
+  // ASARVO_COMPARE_V3
+  const [compareDifferencesOnly, setCompareDifferencesOnly] =
+    useState(false);
+
   const searchStateUrlSyncRef = useRef(false);
   const compareQueryRef = useRef(query);
 
@@ -3242,6 +3246,72 @@ function SearchPageContent() {
     compareFamilies.map(compareFamilyRiskScore),
     "min"
   );
+
+  const compareValuesDiffer = (
+    values: Array<string | number | null>
+  ): boolean => {
+    if (compareFamilies.length < 2) {
+      return false;
+    }
+
+    const normalized = values.map((value) => {
+      if (value === null) {
+        return "__ASARVO_NULL__";
+      }
+
+      return typeof value === "number"
+        ? value.toFixed(4)
+        : value.trim().toLowerCase();
+    });
+
+    return new Set(normalized).size > 1;
+  };
+
+  const comparePriceDiff = compareValuesDiffer(
+    compareFamilies.map((family) => family.lowestPrice)
+  );
+
+  const compareConfirmedTotalDiff = compareValuesDiffer(
+    compareFamilies.map(
+      (family) => family.lowestConfirmedTotal
+    )
+  );
+
+  const compareRatingDiff = compareValuesDiffer(
+    compareFamilies.map(compareFamilyRating)
+  );
+
+  const compareDealScoreDiff = compareValuesDiffer(
+    compareFamilies.map(compareFamilyDealScore)
+  );
+
+  const compareConditionDiff = compareValuesDiffer(
+    compareFamilies.map((family) =>
+      productConditionLabel(family.representative)
+    )
+  );
+
+  const compareRiskDiff = compareValuesDiffer(
+    compareFamilies.map(compareFamilyRiskScore)
+  );
+
+  const compareStoreCountDiff = compareValuesDiffer(
+    compareFamilies.map((family) => family.storeCount)
+  );
+
+  const compareOfferCountDiff = compareValuesDiffer(
+    compareFamilies.map((family) => family.offers.length)
+  );
+
+  const compareAnyDifference =
+    comparePriceDiff ||
+    compareConfirmedTotalDiff ||
+    compareRatingDiff ||
+    compareDealScoreDiff ||
+    compareConditionDiff ||
+    compareRiskDiff ||
+    compareStoreCountDiff ||
+    compareOfferCountDiff;
 
   const bestProductFamily = useMemo(
     () =>
@@ -4963,6 +5033,31 @@ function SearchPageContent() {
                   </p>
                 </div>
 
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCompareDifferencesOnly(
+                        (current) => !current
+                      )
+                    }
+                    disabled={compareFamilies.length < 2}
+                    aria-pressed={compareDifferencesOnly}
+                    className={
+                      "w-fit rounded-xl border px-4 py-2 text-xs font-semibold transition " +
+                      (compareDifferencesOnly
+                        ? "border-blue-400/35 bg-blue-500/[0.12] text-blue-100"
+                        : "border-white/[0.08] text-gray-400 hover:bg-white/[0.05] hover:text-white") +
+                      (compareFamilies.length < 2
+                        ? " cursor-not-allowed opacity-40"
+                        : "")
+                    }
+                  >
+                    {compareDifferencesOnly
+                      ? "✓ Tylko różnice"
+                      : "Tylko różnice"}
+                  </button>
+
                 <button
                   type="button"
                   onClick={clearCompareFamilies}
@@ -4970,6 +5065,7 @@ function SearchPageContent() {
                 >
                   Wyczyść porównanie
                 </button>
+                </div>
               </div>
 
               {compareFamilies.length === 1 && (
@@ -4977,6 +5073,14 @@ function SearchPageContent() {
                   Dodaj jeszcze co najmniej jeden produkt, aby porównać je obok siebie.
                 </div>
               )}
+
+              {compareDifferencesOnly &&
+                compareFamilies.length > 1 &&
+                !compareAnyDifference && (
+                  <div className="border-b border-white/[0.05] px-6 py-4 text-sm text-gray-400">
+                    Wybrane produkty mają identyczne wartości we wszystkich porównywanych metrykach.
+                  </div>
+                )}
 
               <div className="grid gap-px bg-white/[0.055] md:grid-cols-2 xl:grid-cols-3">
                 {compareFamilies.map((family) => {
@@ -5040,135 +5144,151 @@ function SearchPageContent() {
                       </div>
 
                       <div className="mt-5 space-y-3 text-xs">
-                        <div
-                          className={
-                            "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
-                            (lowestPriceIsBest
-                              ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
-                              : "")
-                          }
-                        >
-                          <span className={lowestPriceIsBest ? "text-emerald-300" : "text-gray-600"}>
-                            Najniższa cena
-                          </span>
-                          <span className={lowestPriceIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
-                            {formatPrice(family.lowestPrice)}
-                            {lowestPriceIsBest && (
-                              <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
-                                ★ najlepsza
-                              </span>
-                            )}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || comparePriceDiff) && (
+                          <div
+                            className={
+                              "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
+                              (lowestPriceIsBest
+                                ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
+                                : "")
+                            }
+                          >
+                            <span className={lowestPriceIsBest ? "text-emerald-300" : "text-gray-600"}>
+                              Najniższa cena
+                            </span>
+                            <span className={lowestPriceIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
+                              {formatPrice(family.lowestPrice)}
+                              {lowestPriceIsBest && (
+                                <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
+                                  ★ najlepsza
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
 
-                        <div
-                          className={
-                            "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
-                            (confirmedTotalIsBest
-                              ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
-                              : "")
-                          }
-                        >
-                          <span className={confirmedTotalIsBest ? "text-emerald-300" : "text-gray-600"}>
-                            Najlepszy znany koszt
-                          </span>
-                          <span className={confirmedTotalIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
-                            {family.lowestConfirmedTotal !== null
-                              ? formatPrice(family.lowestConfirmedTotal)
-                              : "Niepotwierdzony"}
-                            {confirmedTotalIsBest && (
-                              <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
-                                ★ najlepszy
-                              </span>
-                            )}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || compareConfirmedTotalDiff) && (
+                          <div
+                            className={
+                              "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
+                              (confirmedTotalIsBest
+                                ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
+                                : "")
+                            }
+                          >
+                            <span className={confirmedTotalIsBest ? "text-emerald-300" : "text-gray-600"}>
+                              Najlepszy znany koszt
+                            </span>
+                            <span className={confirmedTotalIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
+                              {family.lowestConfirmedTotal !== null
+                                ? formatPrice(family.lowestConfirmedTotal)
+                                : "Niepotwierdzony"}
+                              {confirmedTotalIsBest && (
+                                <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
+                                  ★ najlepszy
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
 
-                        <div
-                          className={
-                            "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
-                            (ratingIsBest
-                              ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
-                              : "")
-                          }
-                        >
-                          <span className={ratingIsBest ? "text-emerald-300" : "text-gray-600"}>
-                            Ocena
-                          </span>
-                          <span className={ratingIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
-                            {rating !== null ? rating.toFixed(1) : "Brak"}
-                            {ratingIsBest && (
-                              <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
-                                ★ najwyższa
-                              </span>
-                            )}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || compareRatingDiff) && (
+                          <div
+                            className={
+                              "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
+                              (ratingIsBest
+                                ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
+                                : "")
+                            }
+                          >
+                            <span className={ratingIsBest ? "text-emerald-300" : "text-gray-600"}>
+                              Ocena
+                            </span>
+                            <span className={ratingIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
+                              {rating !== null ? rating.toFixed(1) : "Brak"}
+                              {ratingIsBest && (
+                                <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
+                                  ★ najwyższa
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
 
-                        <div
-                          className={
-                            "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
-                            (dealScoreIsBest
-                              ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
-                              : "")
-                          }
-                        >
-                          <span className={dealScoreIsBest ? "text-emerald-300" : "text-gray-600"}>
-                            ASARVO Score
-                          </span>
-                          <span className={dealScoreIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
-                            {dealScore !== null
-                              ? `${dealScore}/100`
-                              : "Brak"}
-                            {dealScoreIsBest && (
-                              <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
-                                ★ najwyższy
-                              </span>
-                            )}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || compareDealScoreDiff) && (
+                          <div
+                            className={
+                              "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
+                              (dealScoreIsBest
+                                ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
+                                : "")
+                            }
+                          >
+                            <span className={dealScoreIsBest ? "text-emerald-300" : "text-gray-600"}>
+                              ASARVO Score
+                            </span>
+                            <span className={dealScoreIsBest ? "font-bold text-emerald-200" : "font-semibold text-white"}>
+                              {dealScore !== null
+                                ? `${dealScore}/100`
+                                : "Brak"}
+                              {dealScoreIsBest && (
+                                <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
+                                  ★ najwyższy
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-gray-600">Stan</span>
-                          <span className="text-right font-medium text-gray-300">
-                            {productConditionLabel(representative)}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || compareConditionDiff) && (
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-gray-600">Stan</span>
+                            <span className="text-right font-medium text-gray-300">
+                              {productConditionLabel(representative)}
+                            </span>
+                          </div>
+                        )}
 
-                        <div
-                          className={
-                            "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
-                            (riskScoreIsBest
-                              ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
-                              : "")
-                          }
-                        >
-                          <span className={riskScoreIsBest ? "text-emerald-300" : "text-gray-600"}>
-                            Ryzyko
-                          </span>
-                          <span className={riskScoreIsBest ? "text-right font-bold text-emerald-200" : "text-right font-medium text-gray-300"}>
-                            {riskLabel(representative.riskLevel)}
-                            {riskScoreIsBest && (
-                              <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
-                                ★ najniższe
-                              </span>
-                            )}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || compareRiskDiff) && (
+                          <div
+                            className={
+                              "flex items-center justify-between gap-4 rounded-lg px-2 py-1.5 " +
+                              (riskScoreIsBest
+                                ? "bg-emerald-500/[0.10] ring-1 ring-inset ring-emerald-400/20"
+                                : "")
+                            }
+                          >
+                            <span className={riskScoreIsBest ? "text-emerald-300" : "text-gray-600"}>
+                              Ryzyko
+                            </span>
+                            <span className={riskScoreIsBest ? "text-right font-bold text-emerald-200" : "text-right font-medium text-gray-300"}>
+                              {riskLabel(representative.riskLevel)}
+                              {riskScoreIsBest && (
+                                <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-300">
+                                  ★ najniższe
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-gray-600">Sklepy / źródła</span>
-                          <span className="font-semibold text-white">
-                            {family.storeCount}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || compareStoreCountDiff) && (
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-gray-600">Sklepy / źródła</span>
+                            <span className="font-semibold text-white">
+                              {family.storeCount}
+                            </span>
+                          </div>
+                        )}
 
-                        <div className="flex items-center justify-between gap-4">
-                          <span className="text-gray-600">Oferty</span>
-                          <span className="font-semibold text-white">
-                            {family.offers.length}
-                          </span>
-                        </div>
+                        {(!compareDifferencesOnly || compareOfferCountDiff) && (
+                          <div className="flex items-center justify-between gap-4">
+                            <span className="text-gray-600">Oferty</span>
+                            <span className="font-semibold text-white">
+                              {family.offers.length}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
