@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 
 /**
+ * V34.CORE200 — COLLOQUIAL GRINDER-DISC IDENTITY NORMALIZATION
+ * - Maps Polish "tarcza do diaxa" to the retailer vocabulary for angle-grinder discs.
+ * - Keeps diameter verification strict and listing-bound.
+ * - Rejects explicit brake-disc / circular-saw classes.
+ *
  * V34.CORE199 — DESCRIPTION-SPEC MEASUREMENT DISCOVERY PRIORITY
  * - Ensures equivalent-unit + specification queries enter the limited primary search budget.
  * - Adds the same focused lane to zero-result recovery.
@@ -3696,6 +3701,17 @@ function detectCategory(query: string): string | null {
   const hasBoschProfessionalToolFamily =
     /\bbosch\s+(?:gsr|gsb|gws|gbh|gks|gst|gdx|gdr|gop|gsa)\b/i.test(text);
   if (hasBoschProfessionalToolFamily) return "power_tool";
+
+  // V34.CORE200: Polish shoppers commonly say "diax/diaxa" for an angle
+  // grinder. When the sold object is explicitly a disc, route the query to a
+  // disc category instead of treating "diaxa" as an identity term that seller
+  // titles are required to repeat.
+  if (
+    /\btarcz\w*\b/iu.test(text) &&
+    /\b(?:diax\w*|szlifierk\w*\s+k[aą]tow\w*|angle\s+grinder)\b/iu.test(text)
+  ) {
+    return "grinder_disc";
+  }
 
   const hasToolFirstBrand =
     /\b(?:makita|dewalt|milwaukee|einhell|metabo|festool|ryobi|hikoki)\b/i.test(text);
@@ -7518,6 +7534,10 @@ function buildUniversalProductIntent(
     productPhrase = "robot sprzątający";
   }
 
+  if (category === "grinder_disc") {
+    productPhrase = "tarcza do szlifierki kątowej";
+  }
+
   if (!productPhrase || productPhrase.length < 2) {
     productPhrase = cleanUniversalProductPhrasePunctuation(
       provisionalProduct || corePhrase || query
@@ -10357,6 +10377,36 @@ const UNIVERSAL_CATEGORY_PROFILES: Record<string, UniversalCategoryProfile> = {
     // These are category-level synonyms only; brand/model/spec requirements
     // are added dynamically from the user's query.
     discoveryAliases: ["air fryer", "frytkownica beztłuszczowa"],
+  },
+  grinder_disc: {
+    positiveAliases: [
+      "tarcza",
+      "tarcza do szlifierki",
+      "tarcza do szlifierki kątowej",
+      "tarcza tnąca",
+      "tarcza szlifierska",
+      "tarcza diamentowa",
+      "disc",
+      "cutting disc",
+      "grinding disc",
+      "abrasive disc",
+      "diamond disc",
+      "cutting wheel",
+      "grinding wheel",
+    ],
+    discoveryAliases: [
+      "tarcza do szlifierki kątowej",
+      "tarcza tnąca",
+      "tarcza szlifierska",
+      "tarcza diamentowa",
+      "cutting disc",
+      "grinding disc",
+    ],
+    incompatibleTitlePatterns: [
+      /\b(?:tarcza|disc)\s+hamulcow\w*/iu,
+      /\bhamulcow\w*\s+(?:tarcza|disc)/iu,
+      /\b(?:piła|pila)\s+tarczow\w*/iu,
+    ],
   },
   power_tool: {
     positiveAliases: ["wiertarka", "wkretarka", "wkrętarka", "wiertarko-wkrętarka", "wkrętarko-wiertarka", "mlotowiertarka", "młotowiertarka", "drill", "drill driver"],
@@ -31611,6 +31661,8 @@ async function runSearch(
   );
   const descriptionSpecMeasurementQueries =
     buildDescriptionSpecMeasurementDiscoveryQueries(parsed);
+  const categorySynonymQueries =
+    buildCategorySynonymDiscoveryQueries(parsed);
   const semanticIdentityTargetedQueries = semanticIdentityDiscoveryAlternates
     .slice(0, 1)
     .flatMap((core) =>
@@ -31632,6 +31684,7 @@ async function runSearch(
     ? Array.from(new Set([
         exactModelGenericQuery,
         exactModelFootprintQuery,
+        ...categorySynonymQueries,
         ...descriptionSpecMeasurementQueries,
         alternativePreciseShoppingQuery || preciseShoppingQuery,
         ...phrasePreservingGenericQueries,
@@ -48362,6 +48415,8 @@ async function runZeroResultRecoverySearch(
   );
   const descriptionSpecMeasurementRecoveryQueries =
     buildDescriptionSpecMeasurementDiscoveryQueries(parsed);
+  const categorySynonymRecoveryQueries =
+    buildCategorySynonymDiscoveryQueries(parsed);
   const rangeRelaxedBudgetRecoveryQuery =
     buildRangeRelaxedBudgetSearchQuery(parsed);
   const recoveryQueries = Array.from(new Set([
@@ -48370,6 +48425,7 @@ async function runZeroResultRecoverySearch(
       : "",
     automotive[0] ?? "",
     exactFeatureRecoveryQuery ?? "",
+    ...categorySynonymRecoveryQueries,
     ...descriptionSpecMeasurementRecoveryQueries,
     ...hardLexicalRecoveryQueries,
     normalizeText(`${quoteSearchTerm(base)} ${stateHint} ${originalityHint} cena kup`),
