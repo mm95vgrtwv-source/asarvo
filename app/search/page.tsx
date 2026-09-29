@@ -2255,6 +2255,37 @@ function SearchPageContent() {
   };
 
 
+  // ASARVO_FILTERS_V1
+  const activePriceLimit =
+    priceFilter === "Do 100 zł"
+      ? 100
+      : priceFilter === "Do 200 zł"
+        ? 200
+        : priceFilter === "Do 500 zł"
+          ? 500
+          : priceFilter === "Do 1000 zł"
+            ? 1000
+            : priceFilter === "Do 2000 zł"
+              ? 2000
+              : priceFilter === "Do 4000 zł"
+                ? 4000
+                : null;
+
+  const hasActiveFilters =
+    conditionFilter !== "Wszystkie" ||
+    priceFilter !== "Wszystkie" ||
+    deliveryFilter !== "Wszystkie" ||
+    storeFilter !== "Wszystkie" ||
+    ratingFilter !== "Wszystkie";
+
+  const clearResultFilters = () => {
+    setConditionFilter("Wszystkie");
+    setPriceFilter("Wszystkie");
+    setDeliveryFilter("Wszystkie");
+    setStoreFilter("Wszystkie");
+    setRatingFilter("Wszystkie");
+  };
+
   // FILTROWANIE PRODUKTÓW
   const filteredProducts = useMemo(() => {
     return products.filter((product) => {
@@ -2327,55 +2358,18 @@ function SearchPageContent() {
       }
 
       // FILTR CENA
+      // Przy aktywnym limicie pokazujemy wyłącznie oferty z potwierdzoną
+      // ceną mieszczącą się w limicie.
       if (
-        priceFilter === "Do 100 zł" &&
-        product.price !== null &&
-        product.price > 100
-      ) {
-        return false;
-      }
-
-      if (
-        priceFilter === "Do 200 zł" &&
-        product.price !== null &&
-        product.price > 200
-      ) {
-        return false;
-      }
-
-      if (
-        priceFilter === "Do 500 zł" &&
-        product.price !== null &&
-        product.price > 500
-      ) {
-        return false;
-      }
-
-      if (
-        priceFilter === "Do 1000 zł" &&
-        product.price !== null &&
-        product.price > 1000
-      ) {
-        return false;
-      }
-
-      if (
-        priceFilter === "Do 2000 zł" &&
-        product.price !== null &&
-        product.price > 2000
-      ) {
-        return false;
-      }
-
-      if (
-        priceFilter === "Do 4000 zł" &&
-        product.price !== null &&
-        product.price > 4000
+        activePriceLimit !== null &&
+        (product.price === null || product.price > activePriceLimit)
       ) {
         return false;
       }
 
       // DOSTAWA
+      // Darmowa = potwierdzone 0. Płatna = potwierdzone > 0.
+      // Nieznany koszt nie trafia do żadnej z tych dwóch kategorii.
       if (
         deliveryFilter === "Darmowa" &&
         product.delivery !== 0
@@ -2385,7 +2379,20 @@ function SearchPageContent() {
 
       if (
         deliveryFilter === "Płatna" &&
-        product.delivery === 0
+        (
+          product.delivery === null ||
+          product.delivery === undefined ||
+          product.delivery <= 0
+        )
+      ) {
+        return false;
+      }
+
+      // ASARVO_FILTERS_V1_FIX1
+      if (
+        deliveryFilter === "Niepotwierdzona" &&
+        product.delivery !== null &&
+        product.delivery !== undefined
       ) {
         return false;
       }
@@ -2429,6 +2436,7 @@ function SearchPageContent() {
     deliveryFilter,
     storeFilter,
     ratingFilter,
+    activePriceLimit,
   ]);
 
   // DEDUPLIKACJA PRODUKTÓW I WARIANTÓW
@@ -2810,7 +2818,7 @@ function SearchPageContent() {
               }
               className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
             >
-              <option>Wszystkie</option>
+              <option value="Wszystkie">Stan: wszystkie</option>
               <option>Nowy</option>
               <option>Używany</option>
             </select>
@@ -2822,7 +2830,7 @@ function SearchPageContent() {
               }
               className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
             >
-              <option>Wszystkie</option>
+              <option value="Wszystkie">Cena: wszystkie</option>
               <option>Do 100 zł</option>
               <option>Do 200 zł</option>
               <option>Do 500 zł</option>
@@ -2838,9 +2846,10 @@ function SearchPageContent() {
               }
               className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
             >
-              <option>Wszystkie</option>
+              <option value="Wszystkie">Dostawa: wszystkie</option>
               <option>Darmowa</option>
               <option>Płatna</option>
+              <option>Niepotwierdzona</option>
             </select>
 
             <select
@@ -2850,7 +2859,7 @@ function SearchPageContent() {
               }
               className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
             >
-              <option>Wszystkie</option>
+              <option value="Wszystkie">Sklep: wszystkie</option>
               {Array.from(new Set(products.map((product) => product.store)))
                 .filter(Boolean)
                 .map((store) => (
@@ -2865,11 +2874,21 @@ function SearchPageContent() {
               }
               className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
             >
-              <option>Wszystkie</option>
+              <option value="Wszystkie">Ocena: wszystkie</option>
               <option>4+</option>
               <option>4.5+</option>
               <option>4.8+</option>
             </select>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearResultFilters}
+                className="rounded-full border border-white/10 bg-white/[0.03] px-5 py-3 text-sm text-gray-400 transition hover:border-blue-500/30 hover:bg-blue-500/[0.06] hover:text-white"
+              >
+                Wyczyść filtry
+              </button>
+            )}
 
           </div>
 
