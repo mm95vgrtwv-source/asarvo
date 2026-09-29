@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 
 /**
+ * V34.CORE198 — DESCRIPTION-SPEC MEASUREMENT RECOVERY
+ * - Single circular-product measurements such as "tarcza 25 cm" are interpreted as diameter, not generic length.
+ * - Diameter verification is listing-bound and may be proven from the concrete title, product description or specification using equivalent units (25 cm == 250 mm).
+ * - Discovery gains a bounded equivalent-unit spelling so retailer indexes using millimetres can still surface candidates even when the shopper typed centimetres.
+ * - Generic length, dimensions, identity, price, availability and every existing fail-closed gate remain unchanged.
+ */
+
+/**
  * V34.CORE196 — MODEL-LED TIRE GRAMMAR HARDENING
  * - V34.CORE196: canonical tire-size notation plus either load/speed index or tire season classifies a model-led query as `tire` even when the noun "opona"/"tire" is omitted.
  * - V34.CORE196: this category decision happens before the generic voltage pass, so a compact speed index such as `91V` becomes `tire_load_speed` instead of electrical `voltage`.
@@ -5803,7 +5811,11 @@ function extractUniversalRequirements(
     }
   }
 
-  for (const match of text.matchAll(openWorldMeasurementRegex("mm|cm|m", "giu"))) {
+  const singleLengthMeasurements = Array.from(
+    text.matchAll(openWorldMeasurementRegex("mm|cm|m", "giu"))
+  );
+
+  for (const match of singleLengthMeasurements) {
     if (
       typeof match.index === "number" &&
       (
@@ -5829,21 +5841,49 @@ function extractUniversalRequirements(
         "spec"
       );
     } else {
-      add(
-        "length",
-        "długość/wymiar",
-        `${canonicalNumber(numeric)}${unit}`,
-        uniqueNormalized([
-          `${canonicalNumber(numeric)} ${unit}`,
+      const measurementStart = typeof match.index === "number" ? match.index : -1;
+      const measurementEnd = measurementStart >= 0 ? measurementStart + match[0].length : -1;
+      const measurementAround = measurementStart >= 0 ? text.slice(Math.max(0, measurementStart - 72), Math.min(text.length, measurementEnd + 72)) : text;
+      const circularProductContext = /\b(?:tarcza\w*|disc|disk|cutting\s+disc|grinding\s+disc|cutting\s+wheel|grinding\s+wheel|krazek\w*|krążek\w*|kolo\s+tnace|koło\s+tnące)\b/iu.test(text);
+      const explicitDiameterContext = /(?:\b(?:srednic\w*|średnic\w*|diameter|fi)\b|[ø⌀])/iu.test(measurementAround);
+      const explicitOtherDimensionContext = /\b(?:grubosc\w*|grubość\w*|thickness|otwor\w*|otwór\w*|bore|dlugosc\w*|długość\w*|length|szerokosc\w*|szerokość\w*|width|wysokosc\w*|wysokość\w*|height)\b/iu.test(measurementAround);
+      const inferCircularDiameter = circularProductContext && singleLengthMeasurements.length === 1 && !explicitOtherDimensionContext;
+      const isDiameterMeasurement = explicitDiameterContext || inferCircularDiameter;
+
+      if (isDiameterMeasurement) {
+        const normalizedValue = canonicalNumber(numeric);
+        add(
+          "diameter",
+          "średnica",
+          `${normalizedValue}${unit}`,
+          uniqueNormalized([
+            `${normalizedValue} ${unit}`,
+            `${normalizedValue}${unit}`,
+            ...openWorldEquivalentNumberAliases(millimeters, "mm"),
+            `średnica ${normalizedValue} ${unit}`,
+            `srednica ${normalizedValue} ${unit}`,
+            `fi ${normalizedValue} ${unit}`,
+            `ø${normalizedValue}${unit}`,
+          ]),
+          "size",
+          true,
+          measurementStart >= 0 ? detectUniversalNumericComparison(text, measurementStart, measurementEnd) : "eq"
+        );
+      } else {
+        add(
+          "length",
+          "długość/wymiar",
           `${canonicalNumber(numeric)}${unit}`,
-          ...openWorldEquivalentNumberAliases(millimeters, "mm"),
-        ]),
-        "size",
-        true,
-        typeof match.index === "number"
-          ? detectUniversalNumericComparison(text, match.index, match.index + match[0].length)
-          : "eq"
-      );
+          uniqueNormalized([
+            `${canonicalNumber(numeric)} ${unit}`,
+            `${canonicalNumber(numeric)}${unit}`,
+            ...openWorldEquivalentNumberAliases(millimeters, "mm"),
+          ]),
+          "size",
+          true,
+          measurementStart >= 0 ? detectUniversalNumericComparison(text, measurementStart, measurementEnd) : "eq"
+        );
+      }
     }
   }
 
@@ -7050,6 +7090,25 @@ function requirementAlternativeSearchTerm(
 
   const primaryRaw = normalizeText(requirementPrimarySearchTerm(requirement));
   const primary = normalizeMatchText(primaryRaw);
+
+  // V34.CORE198: retailer indexes frequently publish circular dimensions in
+  // millimetres even when a shopper types centimetres ("25 cm" vs "250 mm").
+  // Keep verification numeric/listing-bound, but allow one equivalent-unit
+  // spelling to participate in the existing bounded alternative discovery lane.
+  if (requirement.key === "diameter" || requirement.key === "length") {
+    const requestedMm = parseOpenWorldMeasurementToBase(requirement.value, "length");
+    if (requestedMm !== null) {
+      const convertedAlias = requirement.aliases
+        .map((alias) => normalizeText(alias))
+        .find((alias) => {
+          if (!alias || normalizeMatchText(alias) === primary) return false;
+          const aliasMm = parseOpenWorldMeasurementToBase(alias, "length");
+          return aliasMm !== null && universalNumbersNearlyEqual(aliasMm, requestedMm) &&
+            normalizeMatchText(alias).replace(/\s+/g, "") !== primary.replace(/\s+/g, "");
+        });
+      if (convertedAlias) return convertedAlias;
+    }
+  }
 
   // Numeric shopping specs are indexed with different decimal/unit surfaces:
   // 6,2 l / 6.2 l / 6.2l, 1,5 TB / 1.5TB, etc. Prefer an equivalent dotted
@@ -9184,6 +9243,13 @@ function requirementHasExactNumericEvidence(
     return offered.some((value) => universalNumericComparisonSatisfied(value, requested, universalRequirementComparison(requirement)));
   }
 
+  if (requirement.key === "diameter") {
+    const requested = parseOpenWorldMeasurementToBase(requirement.value, "length");
+    if (requested === null) return null;
+    const offered = extractUniversalDiameterValuesMm(evidence);
+    return offered.some((value) => universalNumericComparisonSatisfied(value, requested, universalRequirementComparison(requirement)));
+  }
+
   if (requirement.key === "dimensions") {
     const requested = normalizeMatchText(requirement.value).match(
       /(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)/i
@@ -9280,6 +9346,30 @@ function hasStructuredAncEncContradiction(evidenceRaw: string): boolean {
     if (/(?:^|[^a-z0-9])enc(?=$|[^a-z0-9])/iu.test(value)) encField = true;
   }
   return encField && !ancField;
+}
+
+function extractUniversalDiameterValuesMm(valueRaw: string): number[] {
+  const text = normalizeMatchText(valueRaw);
+  if (!text) return [];
+  const values = new Set<number>();
+  const addValue = (valueRaw: string, unitRaw: string) => {
+    const value = Number(valueRaw.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0) return;
+    const unit = unitRaw.toLowerCase();
+    const mm = unit === "m" ? value * 1000 : unit === "cm" ? value * 10 : value;
+    if (Number.isFinite(mm) && mm > 0) values.add(Number(mm.toFixed(4)));
+  };
+  const labelledPatterns = [
+    /(?:\b(?:srednic\w*|średnic\w*|diameter|fi)\b|[ø⌀])\s*(?:[:=\-]?\s*)?(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b/giu,
+    /\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b[^.!?;\n]{0,28}\b(?:srednic\w*|średnic\w*|diameter)\b/giu,
+  ];
+  for (const pattern of labelledPatterns) for (const match of text.matchAll(pattern)) addValue(match[1], match[2]);
+  const circularPatterns = [
+    /\b(?:tarcza\w*|disc|disk|cutting\s+disc|grinding\s+disc|cutting\s+wheel|grinding\s+wheel|krazek\w*|krążek\w*|kolo\s+tnace|koło\s+tnące)\b[^.!?;\n]{0,90}\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b/giu,
+    /\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b[^.!?;\n]{0,55}\b(?:tarcza\w*|disc|disk|cutting\s+disc|grinding\s+disc|cutting\s+wheel|grinding\s+wheel|krazek\w*|krążek\w*|kolo\s+tnace|koło\s+tnące)\b/giu,
+  ];
+  for (const pattern of circularPatterns) for (const match of text.matchAll(pattern)) addValue(match[1], match[2]);
+  return Array.from(values);
 }
 
 function requirementHasEvidence(
@@ -34245,6 +34335,7 @@ function canUseExternalProofForRequirement(requirement: UniversalRequirement): b
       "gpu_model",
       "capacity",
       "volume",
+      "diameter",
       "package_weight",
       "serving_weight",
       "material",
