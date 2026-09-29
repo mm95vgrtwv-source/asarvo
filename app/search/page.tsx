@@ -3708,14 +3708,18 @@ function SearchPageContent() {
               </div>
 
               <div className="p-7 sm:p-8">
-                <div className="flex flex-col justify-between gap-8 lg:flex-row">
+                {/* ASARVO_RESULT_HERO_LAYOUT_V1 */}
+                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
 
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-gray-500">
+                    <div className="break-words text-sm font-medium text-gray-500">
                       🏪 {bestProduct.store}
                     </div>
 
-                    <h2 className="mt-3 text-2xl font-bold leading-tight sm:text-3xl">
+                    <h2
+                      title={bestProductFamily?.displayName ?? bestProduct.name}
+                      className="mt-3 line-clamp-5 break-words text-xl font-bold leading-tight sm:text-2xl xl:text-3xl"
+                    >
                       {bestProductFamily?.displayName ?? bestProduct.name}
                     </h2>
 
@@ -3815,7 +3819,7 @@ function SearchPageContent() {
                     </div>
                   </div>
 
-                  <div className="shrink-0 lg:min-w-[260px]">
+                  <div className="min-w-0 lg:w-full">
                     <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
                       <div className="flex items-center justify-between gap-6 text-sm">
                         <span className="text-gray-500">Cena produktu</span>
@@ -3852,7 +3856,7 @@ function SearchPageContent() {
                             </div>
                           )}
                         </div>
-                        <div className="text-3xl font-bold tracking-tight text-white">
+                        <div className="min-w-0 break-words text-right text-2xl font-bold tracking-tight text-white sm:text-3xl">
                           {purchaseTotalLabel(bestProduct)}
                         </div>
                       </div>
