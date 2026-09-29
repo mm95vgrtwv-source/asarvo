@@ -1546,6 +1546,75 @@ function SearchPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const query = searchParams.get("q") || "";
+
+  // ASARVO_SEARCH_STATE_V1
+  const conditionUrlParam = searchParams.get("condition");
+  const priceUrlParam = searchParams.get("price");
+  const deliveryUrlParam = searchParams.get("delivery");
+  const storeUrlParam = searchParams.get("store");
+  const ratingUrlParam = searchParams.get("rating");
+  const sortUrlParam = searchParams.get("sort");
+
+  const searchStateValue = (
+    value: string | null,
+    allowed: readonly string[],
+    fallback: string
+  ): string =>
+    value && allowed.includes(value)
+      ? value
+      : fallback;
+
+  const conditionFromUrl = searchStateValue(
+    conditionUrlParam,
+    ["Wszystkie", "Nowy", "Używany"],
+    "Wszystkie"
+  );
+
+  const priceFromUrl = searchStateValue(
+    priceUrlParam,
+    [
+      "Wszystkie",
+      "Do 100 zł",
+      "Do 200 zł",
+      "Do 500 zł",
+      "Do 1000 zł",
+      "Do 2000 zł",
+      "Do 4000 zł",
+    ],
+    "Wszystkie"
+  );
+
+  const deliveryFromUrl = searchStateValue(
+    deliveryUrlParam,
+    [
+      "Wszystkie",
+      "Darmowa",
+      "Płatna",
+      "Niepotwierdzona",
+    ],
+    "Wszystkie"
+  );
+
+  const storeFromUrl =
+    storeUrlParam?.trim() || "Wszystkie";
+
+  const ratingFromUrl = searchStateValue(
+    ratingUrlParam,
+    ["Wszystkie", "4+", "4.5+", "4.8+"],
+    "Wszystkie"
+  );
+
+  const sortFromUrl = searchStateValue(
+    sortUrlParam,
+    [
+      "ASARVO",
+      "Cena: rosnąco",
+      "Cena: malejąco",
+      "Ocena: najwyższa",
+      "Sklep: A-Z",
+    ],
+    "ASARVO"
+  );
   const activeSearchIdRef = useRef(0);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [searchInput, setSearchInput] = useState(query);
@@ -1582,27 +1651,155 @@ function SearchPageContent() {
     searchError === "Wyszukiwanie anulowane.";
 
   const [conditionFilter, setConditionFilter] =
-    useState("Wszystkie");
+    useState(conditionFromUrl);
 
   const [priceFilter, setPriceFilter] =
-    useState("Wszystkie");
+    useState(priceFromUrl);
 
   const [deliveryFilter, setDeliveryFilter] =
-    useState("Wszystkie");
+    useState(deliveryFromUrl);
 
   const [storeFilter, setStoreFilter] =
-    useState("Wszystkie");
+    useState(storeFromUrl);
 
   const [ratingFilter, setRatingFilter] =
-    useState("Wszystkie");
+    useState(ratingFromUrl);
 
   // ASARVO_SORTING_V1
   const [sortMode, setSortMode] =
-    useState("ASARVO");
+    useState(sortFromUrl);
 
   // ASARVO_COMPARE_V1
   const [compareFamilyKeys, setCompareFamilyKeys] =
     useState<string[]>([]);
+
+  const searchStateUrlSyncRef = useRef(false);
+  const compareQueryRef = useRef(query);
+
+  // URL -> UI: back/forward, reload and shared search links restore state.
+  useEffect(() => {
+    const changed =
+      conditionFilter !== conditionFromUrl ||
+      priceFilter !== priceFromUrl ||
+      deliveryFilter !== deliveryFromUrl ||
+      storeFilter !== storeFromUrl ||
+      ratingFilter !== ratingFromUrl ||
+      sortMode !== sortFromUrl;
+
+    if (!changed) {
+      return;
+    }
+
+    searchStateUrlSyncRef.current = true;
+    setConditionFilter(conditionFromUrl);
+    setPriceFilter(priceFromUrl);
+    setDeliveryFilter(deliveryFromUrl);
+    setStoreFilter(storeFromUrl);
+    setRatingFilter(ratingFromUrl);
+    setSortMode(sortFromUrl);
+  }, [
+    query,
+    conditionUrlParam,
+    priceUrlParam,
+    deliveryUrlParam,
+    storeUrlParam,
+    ratingUrlParam,
+    sortUrlParam,
+  ]);
+
+  // A new search must not inherit Compare selections from previous results.
+  useEffect(() => {
+    if (compareQueryRef.current === query) {
+      return;
+    }
+
+    compareQueryRef.current = query;
+    setCompareFamilyKeys([]);
+  }, [query]);
+
+  // UI -> URL: keep the current search configuration in the browser address.
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (searchStateUrlSyncRef.current) {
+      searchStateUrlSyncRef.current = false;
+      return;
+    }
+
+    const params = new URLSearchParams(
+      window.location.search
+    );
+
+    const setSearchStateParam = (
+      key: string,
+      value: string,
+      defaultValue: string
+    ) => {
+      if (value === defaultValue) {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    };
+
+    setSearchStateParam(
+      "condition",
+      conditionFilter,
+      "Wszystkie"
+    );
+    setSearchStateParam(
+      "price",
+      priceFilter,
+      "Wszystkie"
+    );
+    setSearchStateParam(
+      "delivery",
+      deliveryFilter,
+      "Wszystkie"
+    );
+    setSearchStateParam(
+      "store",
+      storeFilter,
+      "Wszystkie"
+    );
+    setSearchStateParam(
+      "rating",
+      ratingFilter,
+      "Wszystkie"
+    );
+    setSearchStateParam(
+      "sort",
+      sortMode,
+      "ASARVO"
+    );
+
+    const queryString = params.toString();
+    const nextUrl =
+      window.location.pathname +
+      (queryString ? `?${queryString}` : "") +
+      window.location.hash;
+    const currentUrl =
+      window.location.pathname +
+      window.location.search +
+      window.location.hash;
+
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        nextUrl
+      );
+    }
+  }, [
+    conditionFilter,
+    priceFilter,
+    deliveryFilter,
+    storeFilter,
+    ratingFilter,
+    sortMode,
+  ]);
 
   const [copiedCode, setCopiedCode] =
     useState<string | null>(null);
@@ -2143,6 +2340,101 @@ function SearchPageContent() {
     }
   };
 
+  // ASARVO_SEARCH_STATE_V1_FIX1
+  // ASARVO_SEARCH_STATE_V1_FIX2
+  const SEARCH_SESSION_CACHE_TTL_MS = 3 * 60 * 1000;
+
+  const searchSessionCacheKey = (value: string): string =>
+    `asarvo:search-session:v1:${value
+      .trim()
+      .toLowerCase()}`;
+
+  const readSearchSessionCache = (
+    value: string
+  ): {
+    interpretation: Interpretation;
+    products: Product[];
+    error: string | null;
+  } | null => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+
+    const key = searchSessionCacheKey(value);
+
+    try {
+      const raw = window.sessionStorage.getItem(key);
+
+      if (!raw) {
+        return null;
+      }
+
+      const parsed = JSON.parse(raw) as {
+        cachedAt?: unknown;
+        interpretation?: unknown;
+        products?: unknown;
+        error?: unknown;
+      };
+
+      if (
+        typeof parsed.cachedAt !== "number" ||
+        !Number.isFinite(parsed.cachedAt) ||
+        Date.now() - parsed.cachedAt >
+          SEARCH_SESSION_CACHE_TTL_MS
+      ) {
+        window.sessionStorage.removeItem(key);
+        return null;
+      }
+
+      if (
+        !parsed.interpretation ||
+        typeof parsed.interpretation !== "object" ||
+        !Array.isArray(parsed.products)
+      ) {
+        window.sessionStorage.removeItem(key);
+        return null;
+      }
+
+      return {
+        interpretation:
+          parsed.interpretation as Interpretation,
+        products: parsed.products as Product[],
+        error:
+          typeof parsed.error === "string"
+            ? parsed.error
+            : null,
+      };
+    } catch {
+      window.sessionStorage.removeItem(key);
+      return null;
+    }
+  };
+
+  const writeSearchSessionCache = (
+    value: string,
+    interpretation: Interpretation,
+    products: Product[],
+    error: string | null
+  ) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      window.sessionStorage.setItem(
+        searchSessionCacheKey(value),
+        JSON.stringify({
+          cachedAt: Date.now(),
+          interpretation,
+          products,
+          error,
+        })
+      );
+    } catch {
+      // Cache jest tylko optymalizacją UX.
+    }
+  };
+
   // ANALIZA ZAPYTANIA
   useEffect(() => {
     let cancelled = false;
@@ -2163,6 +2455,22 @@ function SearchPageContent() {
       }
 
       try {
+        const cachedSearch =
+          readSearchSessionCache(trimmedQuery);
+
+        if (
+          cachedSearch &&
+          searchId === activeSearchIdRef.current
+        ) {
+          setInterpretation(
+            cachedSearch.interpretation
+          );
+          setProducts(cachedSearch.products);
+          setSearchError(cachedSearch.error);
+          setLoading(false);
+          return;
+        }
+
         if (searchId === activeSearchIdRef.current) {
           setLoading(true);
           setSearchError(null);
@@ -2311,8 +2619,18 @@ function SearchPageContent() {
               })
             : [];
 
+          const normalizedSearchError =
+            data.error || null;
+
+          writeSearchSessionCache(
+            trimmedQuery,
+            data.interpreted,
+            liveOffers,
+            normalizedSearchError
+          );
+
           setProducts(liveOffers);
-          setSearchError(data.error || null);
+          setSearchError(normalizedSearchError);
         } else {
           setInterpretation(null);
           setProducts([]);
