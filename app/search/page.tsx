@@ -3313,6 +3313,65 @@ function SearchPageContent() {
     compareStoreCountDiff ||
     compareOfferCountDiff;
 
+  // ASARVO_COMPARE_V4
+  const compareLeaderFamilies = (
+    valueForFamily: (
+      family: ProductFamily
+    ) => number | null,
+    bestValue: number | null
+  ): ProductFamily[] => {
+    if (
+      compareFamilies.length < 2 ||
+      bestValue === null
+    ) {
+      return [];
+    }
+
+    return compareFamilies.filter((family) =>
+      compareMetricMatches(
+        valueForFamily(family),
+        bestValue
+      )
+    );
+  };
+
+  const compareLeaderNames = (
+    families: ProductFamily[]
+  ): string =>
+    families
+      .map((family) => family.displayName)
+      .join(" • ");
+
+  const comparePriceLeaders =
+    compareLeaderFamilies(
+      (family) => family.lowestPrice,
+      compareBestLowestPrice
+    );
+
+  const compareConfirmedTotalLeaders =
+    compareLeaderFamilies(
+      (family) => family.lowestConfirmedTotal,
+      compareBestConfirmedTotal
+    );
+
+  const compareRatingLeaders =
+    compareLeaderFamilies(
+      compareFamilyRating,
+      compareBestRating
+    );
+
+  const compareDealScoreLeaders =
+    compareLeaderFamilies(
+      compareFamilyDealScore,
+      compareBestDealScore
+    );
+
+  const compareRiskLeaders =
+    compareLeaderFamilies(
+      compareFamilyRiskScore,
+      compareBestRiskScore
+    );
+
   const bestProductFamily = useMemo(
     () =>
       productFamilies.find((family) =>
@@ -5067,6 +5126,140 @@ function SearchPageContent() {
                 </button>
                 </div>
               </div>
+
+              {compareFamilies.length > 1 && (
+                <div className="border-b border-white/[0.05] bg-black/10 px-6 py-5">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-400">
+                        Szybkie podsumowanie
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        Liderzy poszczególnych metryk — bez wybierania jednego zwycięzcy całości.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                    {compareBestLowestPrice !== null &&
+                      comparePriceLeaders.length > 0 && (
+                        <div className="min-w-0 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.045] p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                            Najniższa cena
+                          </div>
+                          <div
+                            title={compareLeaderNames(comparePriceLeaders)}
+                            className="mt-2 line-clamp-2 text-xs font-semibold text-white"
+                          >
+                            {compareLeaderNames(comparePriceLeaders)}
+                          </div>
+                          <div className="mt-2 text-sm font-bold text-emerald-200">
+                            {formatPrice(compareBestLowestPrice)}
+                            {comparePriceLeaders.length > 1 && (
+                              <span className="ml-2 text-[10px] font-semibold uppercase text-emerald-300">
+                                remis
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {compareBestConfirmedTotal !== null &&
+                      compareConfirmedTotalLeaders.length > 0 && (
+                        <div className="min-w-0 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.045] p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                            Najniższy znany koszt
+                          </div>
+                          <div
+                            title={compareLeaderNames(compareConfirmedTotalLeaders)}
+                            className="mt-2 line-clamp-2 text-xs font-semibold text-white"
+                          >
+                            {compareLeaderNames(compareConfirmedTotalLeaders)}
+                          </div>
+                          <div className="mt-2 text-sm font-bold text-emerald-200">
+                            {formatPrice(compareBestConfirmedTotal)}
+                            {compareConfirmedTotalLeaders.length > 1 && (
+                              <span className="ml-2 text-[10px] font-semibold uppercase text-emerald-300">
+                                remis
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {compareBestRating !== null &&
+                      compareRatingLeaders.length > 0 && (
+                        <div className="min-w-0 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.045] p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                            Najwyższa ocena
+                          </div>
+                          <div
+                            title={compareLeaderNames(compareRatingLeaders)}
+                            className="mt-2 line-clamp-2 text-xs font-semibold text-white"
+                          >
+                            {compareLeaderNames(compareRatingLeaders)}
+                          </div>
+                          <div className="mt-2 text-sm font-bold text-emerald-200">
+                            {compareBestRating.toFixed(1)}
+                            {compareRatingLeaders.length > 1 && (
+                              <span className="ml-2 text-[10px] font-semibold uppercase text-emerald-300">
+                                remis
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {compareBestDealScore !== null &&
+                      compareDealScoreLeaders.length > 0 && (
+                        <div className="min-w-0 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.045] p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                            Najwyższy ASARVO Score
+                          </div>
+                          <div
+                            title={compareLeaderNames(compareDealScoreLeaders)}
+                            className="mt-2 line-clamp-2 text-xs font-semibold text-white"
+                          >
+                            {compareLeaderNames(compareDealScoreLeaders)}
+                          </div>
+                          <div className="mt-2 text-sm font-bold text-emerald-200">
+                            {compareBestDealScore}/100
+                            {compareDealScoreLeaders.length > 1 && (
+                              <span className="ml-2 text-[10px] font-semibold uppercase text-emerald-300">
+                                remis
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    {compareBestRiskScore !== null &&
+                      compareRiskLeaders.length > 0 && (
+                        <div className="min-w-0 rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.045] p-3">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-300">
+                            Najniższe ryzyko
+                          </div>
+                          <div
+                            title={compareLeaderNames(compareRiskLeaders)}
+                            className="mt-2 line-clamp-2 text-xs font-semibold text-white"
+                          >
+                            {compareLeaderNames(compareRiskLeaders)}
+                          </div>
+                          <div className="mt-2 text-sm font-bold text-emerald-200">
+                            {riskLabel(
+                              compareRiskLeaders[0].representative.riskLevel
+                            )}
+                            {compareRiskLeaders.length > 1 && (
+                              <span className="ml-2 text-[10px] font-semibold uppercase text-emerald-300">
+                                remis
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                </div>
+              )}
 
               {compareFamilies.length === 1 && (
                 <div className="border-b border-white/[0.05] px-6 py-4 text-sm text-gray-400">
