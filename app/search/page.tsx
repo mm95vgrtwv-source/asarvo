@@ -1764,6 +1764,118 @@ function SearchPageContent() {
     }
   };
 
+  // ASARVO_SHARE_V1
+  const shareProduct = async (
+    product: Product,
+    displayName?: string
+  ) => {
+    const title =
+      displayName?.trim() || product.name || "Oferta ASARVO";
+    const url =
+      product.url?.trim() ||
+      (typeof window !== "undefined"
+        ? window.location.href
+        : "");
+    const text =
+      product.price !== null
+        ? `${title} — ${formatPrice(product.price)}`
+        : title;
+
+    setLibraryActionMessage(null);
+
+    const copyShareLink = async () => {
+      if (!url) {
+        throw new Error("Brak linku do udostępnienia.");
+      }
+
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard?.writeText
+      ) {
+        await navigator.clipboard.writeText(url);
+        return;
+      }
+
+      if (typeof document === "undefined") {
+        throw new Error("Schowek jest niedostępny.");
+      }
+
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+
+      if (!copied) {
+        throw new Error("Nie udało się skopiować linku.");
+      }
+    };
+
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        typeof navigator.share === "function"
+      ) {
+        await navigator.share({
+          title,
+          text,
+          url,
+        });
+
+        setLibraryActionMessage(
+          "Oferta została udostępniona."
+        );
+        return;
+      }
+
+      await copyShareLink();
+      setLibraryActionMessage(
+        "Link do oferty skopiowano do schowka."
+      );
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
+      try {
+        await copyShareLink();
+        setLibraryActionMessage(
+          "Link do oferty skopiowano do schowka."
+        );
+      } catch (copyError) {
+        console.error(
+          "[ASARVO SHARE]",
+          error,
+          copyError
+        );
+        setLibraryActionMessage(
+          "Nie udało się udostępnić oferty."
+        );
+      }
+    }
+  };
+
+  const shareFamily = async (family: ProductFamily) => {
+    const shareCandidate =
+      family.storeOffers
+        .map((entry) => entry.costRepresentative)
+        .find((offer) => Boolean(offer.url)) ??
+      family.representative;
+
+    await shareProduct(
+      shareCandidate,
+      family.displayName
+    );
+  };
+
   const openPriceWatchEditor = (product: Product) => {
     if (!requireAccount()) {
       return;
@@ -3356,6 +3468,20 @@ function SearchPageContent() {
                         : "🔔 Obserwuj cenę"}
                     </button>
 
+                    <button
+                      type="button"
+                      onClick={() =>
+                        void shareProduct(
+                          bestProduct,
+                          bestProductFamily?.displayName ??
+                            bestProduct.name
+                        )
+                      }
+                      className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.025] px-6 py-3 text-sm font-medium text-gray-300 transition hover:bg-white/[0.06] hover:text-white"
+                    >
+                      ↗ Udostępnij
+                    </button>
+
                     {bestProductFamily && (
                       <button
                         type="button"
@@ -4562,6 +4688,16 @@ function SearchPageContent() {
                               : compareFamilyKeys.length >= 3
                                 ? "Limit 3 produktów"
                                 : "⇄ Porównaj"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void shareFamily(family)
+                            }
+                            className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-[11px] font-medium text-gray-400 transition hover:bg-white/[0.05] hover:text-white"
+                          >
+                            ↗ Udostępnij
                           </button>
                         </div>
                       </div>
