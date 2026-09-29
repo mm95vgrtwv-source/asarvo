@@ -1600,6 +1600,10 @@ function SearchPageContent() {
   const [sortMode, setSortMode] =
     useState("ASARVO");
 
+  // ASARVO_COMPARE_V1
+  const [compareFamilyKeys, setCompareFamilyKeys] =
+    useState<string[]>([]);
+
   const [copiedCode, setCopiedCode] =
     useState<string | null>(null);
 
@@ -2538,6 +2542,56 @@ function SearchPageContent() {
     [groupedProducts]
   );
 
+  const compareFamilies = useMemo(
+    () =>
+      compareFamilyKeys
+        .map((key) =>
+          productFamilies.find((family) => family.key === key)
+        )
+        .filter(
+          (family): family is ProductFamily =>
+            family !== undefined
+        ),
+    [compareFamilyKeys, productFamilies]
+  );
+
+  const isFamilyCompared = (family: ProductFamily): boolean =>
+    compareFamilyKeys.includes(family.key);
+
+  const toggleCompareFamily = (family: ProductFamily) => {
+    setCompareFamilyKeys((current) => {
+      if (current.includes(family.key)) {
+        return current.filter((key) => key !== family.key);
+      }
+
+      if (current.length >= 3) {
+        return current;
+      }
+
+      return [...current, family.key];
+    });
+  };
+
+  const clearCompareFamilies = () => {
+    setCompareFamilyKeys([]);
+  };
+
+  const compareFamilyRating = (
+    family: ProductFamily
+  ): number | null => {
+    const ratings = family.offers
+      .map((offer) => offer.rating)
+      .filter(
+        (rating): rating is number =>
+          typeof rating === "number" &&
+          Number.isFinite(rating)
+      );
+
+    return ratings.length > 0
+      ? Math.max(...ratings)
+      : null;
+  };
+
   const bestProductFamily = useMemo(
     () =>
       productFamilies.find((family) =>
@@ -3301,6 +3355,24 @@ function SearchPageContent() {
                         ? "🔔 Obserwowana — wyłącz"
                         : "🔔 Obserwuj cenę"}
                     </button>
+
+                    {bestProductFamily && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          toggleCompareFamily(bestProductFamily)
+                        }
+                        className={`mt-2 inline-flex w-full items-center justify-center rounded-xl border px-6 py-3 text-sm font-medium transition ${
+                          isFamilyCompared(bestProductFamily)
+                            ? "border-blue-500/35 bg-blue-500/[0.12] text-blue-200"
+                            : "border-white/10 bg-white/[0.025] text-gray-300 hover:bg-white/[0.06] hover:text-white"
+                        }`}
+                      >
+                        {isFamilyCompared(bestProductFamily)
+                          ? "✓ W porównaniu"
+                          : "⇄ Porównaj produkt"}
+                      </button>
+                    )}
                   </div>
 
                 </div>
@@ -4141,6 +4213,136 @@ function SearchPageContent() {
             </div>
           )}
 
+          {compareFamilies.length > 0 && (
+            <div className="mt-8 overflow-hidden rounded-3xl border border-blue-500/20 bg-blue-500/[0.035]">
+              <div className="flex flex-col gap-3 border-b border-white/[0.06] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-400">
+                    ASARVO COMPARE
+                  </div>
+                  <h2 className="mt-1 text-xl font-bold">
+                    Porównanie produktów
+                  </h2>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Wybrano {compareFamilies.length}/3. Porównujesz różne produkty, nie duplikaty ofert tego samego produktu.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={clearCompareFamilies}
+                  className="w-fit rounded-xl border border-white/[0.08] px-4 py-2 text-xs font-medium text-gray-400 transition hover:bg-white/[0.05] hover:text-white"
+                >
+                  Wyczyść porównanie
+                </button>
+              </div>
+
+              {compareFamilies.length === 1 && (
+                <div className="border-b border-white/[0.05] px-6 py-4 text-sm text-gray-400">
+                  Dodaj jeszcze co najmniej jeden produkt, aby porównać je obok siebie.
+                </div>
+              )}
+
+              <div className="grid gap-px bg-white/[0.055] md:grid-cols-2 xl:grid-cols-3">
+                {compareFamilies.map((family) => {
+                  const rating = compareFamilyRating(family);
+                  const representative = family.representative;
+
+                  return (
+                    <div
+                      key={family.key}
+                      className="bg-[#080a0f] p-5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-400">
+                            Produkt
+                          </div>
+                          <div className="mt-1 line-clamp-3 font-semibold text-white">
+                            {family.displayName}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleCompareFamily(family)
+                          }
+                          aria-label="Usuń z porównania"
+                          className="shrink-0 rounded-lg border border-white/[0.08] px-2.5 py-1.5 text-xs text-gray-500 transition hover:text-white"
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      <div className="mt-5 space-y-3 text-xs">
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">Najniższa cena</span>
+                          <span className="font-semibold text-white">
+                            {formatPrice(family.lowestPrice)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">Najlepszy znany koszt</span>
+                          <span className="font-semibold text-white">
+                            {family.lowestConfirmedTotal !== null
+                              ? formatPrice(family.lowestConfirmedTotal)
+                              : "Niepotwierdzony"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">Ocena</span>
+                          <span className="font-semibold text-white">
+                            {rating !== null ? rating.toFixed(1) : "Brak"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">ASARVO Score</span>
+                          <span className="font-semibold text-white">
+                            {typeof representative.dealScore === "number"
+                              ? `${representative.dealScore}/100`
+                              : "Brak"}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">Stan</span>
+                          <span className="text-right font-medium text-gray-300">
+                            {productConditionLabel(representative)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">Ryzyko</span>
+                          <span className="text-right font-medium text-gray-300">
+                            {riskLabel(representative.riskLevel)}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">Sklepy / źródła</span>
+                          <span className="font-semibold text-white">
+                            {family.storeCount}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4">
+                          <span className="text-gray-600">Oferty</span>
+                          <span className="font-semibold text-white">
+                            {family.offers.length}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* INNE DOPASOWANE PRODUKTY — PRODUCT → VARIANTS → OFFERS */}
           {otherProductFamilies.length > 0 && (
             <div className="mt-10">
@@ -4339,6 +4541,28 @@ function SearchPageContent() {
                                 : "Obserwuj"}
                             </button>
                           </div>
+
+                          <button
+                            type="button"
+                            disabled={
+                              !isFamilyCompared(family) &&
+                              compareFamilyKeys.length >= 3
+                            }
+                            onClick={() =>
+                              toggleCompareFamily(family)
+                            }
+                            className={`mt-2 w-full rounded-xl border px-3 py-2.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+                              isFamilyCompared(family)
+                                ? "border-blue-500/35 bg-blue-500/[0.12] text-blue-200"
+                                : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:bg-white/[0.05] hover:text-white"
+                            }`}
+                          >
+                            {isFamilyCompared(family)
+                              ? "✓ W porównaniu"
+                              : compareFamilyKeys.length >= 3
+                                ? "Limit 3 produktów"
+                                : "⇄ Porównaj"}
+                          </button>
                         </div>
                       </div>
 
