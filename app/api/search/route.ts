@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 /**
+ * V34.CORE199 — DESCRIPTION-SPEC MEASUREMENT DISCOVERY PRIORITY
+ * - Ensures equivalent-unit + specification queries enter the limited primary search budget.
+ * - Adds the same focused lane to zero-result recovery.
+ *
  * V34.CORE198 — DESCRIPTION-SPEC MEASUREMENT RECOVERY
  * - Single circular-product measurements such as "tarcza 25 cm" are interpreted as diameter, not generic length.
  * - Diameter verification is listing-bound and may be proven from the concrete title, product description or specification using equivalent units (25 cm == 250 mm).
@@ -12652,6 +12656,51 @@ function buildUniversalAlternativePreciseDiscoveryCore(
 
   if (!changed) return "";
   return normalizeText(`${buildProductSearchBase(parsed)} ${terms.join(" ")}`);
+}
+
+function buildDescriptionSpecMeasurementDiscoveryQueries(
+  parsed: ParsedQuery
+): string[] {
+  const base = normalizeText(buildProductSearchBase(parsed));
+  if (!base) return [];
+
+  const measurementRequirements = parsed.intent.required
+    .filter((requirement) =>
+      requirement.hard &&
+      ["diameter", "length", "dimensions"].includes(requirement.key)
+    )
+    .slice(0, 2);
+
+  if (measurementRequirements.length === 0) return [];
+
+  const queries: string[] = [];
+  for (const requirement of measurementRequirements) {
+    const primary = normalizeText(requirementPrimarySearchTerm(requirement));
+    const alternative = normalizeText(
+      requirementAlternativeSearchTerm(requirement) ?? ""
+    );
+
+    const terms = Array.from(new Set([alternative, primary].filter(Boolean)))
+      .slice(0, 2);
+
+    for (const term of terms) {
+      const label =
+        requirement.key === "diameter"
+          ? "średnica"
+          : requirement.key === "dimensions"
+            ? "wymiary"
+            : "wymiar";
+
+      // This lane deliberately searches for specification/description wording.
+      // Verification remains listing-bound and still requires the concrete
+      // product page to prove the exact numeric requirement.
+      queries.push(
+        normalizeText(`${quoteSearchTerm(base)} ${quoteSearchTerm(term)} ${label} specyfikacja sklep`)
+      );
+    }
+  }
+
+  return Array.from(new Set(queries.filter(Boolean))).slice(0, 2);
 }
 
 function getMatchingCategoryDiscoveryAlias(
@@ -31560,6 +31609,8 @@ async function runSearch(
       `${quoteSearchTerm(core)} ${semanticHardRequirementTerms} cena sklep kup`
     )
   );
+  const descriptionSpecMeasurementQueries =
+    buildDescriptionSpecMeasurementDiscoveryQueries(parsed);
   const semanticIdentityTargetedQueries = semanticIdentityDiscoveryAlternates
     .slice(0, 1)
     .flatMap((core) =>
@@ -31581,12 +31632,13 @@ async function runSearch(
     ? Array.from(new Set([
         exactModelGenericQuery,
         exactModelFootprintQuery,
+        ...descriptionSpecMeasurementQueries,
+        alternativePreciseShoppingQuery || preciseShoppingQuery,
         ...phrasePreservingGenericQueries,
         rangeRelaxedBudgetQuery
           ? `${quoteSearchTerm(rangeRelaxedBudgetQuery)} cena sklep kup`
           : "",
         exactAttributeQuery,
-        alternativePreciseShoppingQuery || preciseShoppingQuery,
         ...semanticIdentityGenericQueries,
         primaryHardLexicalAlternateQuery,
         relaxedRetailDiscoveryQuery,
@@ -48308,6 +48360,8 @@ async function runZeroResultRecoverySearch(
     alreadySeenResults,
     3
   );
+  const descriptionSpecMeasurementRecoveryQueries =
+    buildDescriptionSpecMeasurementDiscoveryQueries(parsed);
   const rangeRelaxedBudgetRecoveryQuery =
     buildRangeRelaxedBudgetSearchQuery(parsed);
   const recoveryQueries = Array.from(new Set([
@@ -48316,6 +48370,7 @@ async function runZeroResultRecoverySearch(
       : "",
     automotive[0] ?? "",
     exactFeatureRecoveryQuery ?? "",
+    ...descriptionSpecMeasurementRecoveryQueries,
     ...hardLexicalRecoveryQueries,
     normalizeText(`${quoteSearchTerm(base)} ${stateHint} ${originalityHint} cena kup`),
     normalizeText(`${parsed.intent.productPhrase || base} ${stateHint} ${originalityHint} sklep`),
