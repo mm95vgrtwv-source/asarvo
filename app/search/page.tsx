@@ -1961,6 +1961,112 @@ function SearchPageContent() {
     }
   };
 
+  // ASARVO_SHARE_SEARCH_V1
+  const shareCurrentSearch = async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    // ASARVO_SHARE_SEARCH_V1_FIX1
+    // ASARVO_SHARE_SEARCH_V1_FIX2
+    // Search sharing is clipboard-only on purpose.
+    // This guarantees that the shared target is the canonical /search URL,
+    // never a product URL supplied by browser/OS share integration.
+    const params = new URLSearchParams();
+
+    if (query.trim()) {
+      params.set("q", query.trim());
+    }
+
+    const setShareSearchParam = (
+      key: string,
+      value: string,
+      defaultValue: string
+    ) => {
+      if (value !== defaultValue) {
+        params.set(key, value);
+      }
+    };
+
+    setShareSearchParam(
+      "condition",
+      conditionFilter,
+      "Wszystkie"
+    );
+    setShareSearchParam(
+      "price",
+      priceFilter,
+      "Wszystkie"
+    );
+    setShareSearchParam(
+      "delivery",
+      deliveryFilter,
+      "Wszystkie"
+    );
+    setShareSearchParam(
+      "store",
+      storeFilter,
+      "Wszystkie"
+    );
+    setShareSearchParam(
+      "rating",
+      ratingFilter,
+      "Wszystkie"
+    );
+    setShareSearchParam(
+      "sort",
+      sortMode,
+      "ASARVO"
+    );
+
+    const queryString = params.toString();
+    const url =
+      `${window.location.origin}/search` +
+      (queryString ? `?${queryString}` : "");
+
+    setLibraryActionMessage(null);
+
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard?.writeText
+      ) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        const textarea =
+          document.createElement("textarea");
+        textarea.value = url;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        const copied =
+          document.execCommand("copy");
+        document.body.removeChild(textarea);
+
+        if (!copied) {
+          throw new Error(
+            "Nie udało się skopiować linku."
+          );
+        }
+      }
+
+      setLibraryActionMessage(
+        `Skopiowano link WYSZUKIWANIA (nie oferty): ${url}`
+      );
+    } catch (error) {
+      console.error(
+        "[ASARVO SHARE SEARCH COPY]",
+        error
+      );
+      setLibraryActionMessage(
+        "Nie udało się skopiować linku wyszukiwania."
+      );
+    }
+  };
+
   // ASARVO_SHARE_V1
   const shareProduct = async (
     product: Product,
@@ -3459,6 +3565,27 @@ function SearchPageContent() {
               <option>Sklep: A-Z</option>
             </select>
 
+            {/* ASARVO_SHARE_SEARCH_V1_FIX3 */}
+            <button
+              type="button"
+              onPointerDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void shareCurrentSearch();
+              }}
+              className="rounded-full border border-blue-500/20 bg-blue-500/[0.06] px-5 py-3 text-sm font-medium text-blue-200 transition hover:border-blue-400/35 hover:bg-blue-500/[0.10] hover:text-white"
+            >
+              🔗 Kopiuj link wyszukiwania
+            </button>
+
             {hasActiveFilters && (
               <button
                 type="button"
@@ -3797,7 +3924,28 @@ function SearchPageContent() {
                       }
                       className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.025] px-6 py-3 text-sm font-medium text-gray-300 transition hover:bg-white/[0.06] hover:text-white"
                     >
-                      ↗ Udostępnij
+                      ↗ Udostępnij tylko tę ofertę
+                    </button>
+
+                    {/* ASARVO_SHARE_SEARCH_V1_FIX4 */}
+                    <button
+                      type="button"
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                      }}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void shareCurrentSearch();
+                      }}
+                      className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-blue-500/25 bg-blue-500/[0.08] px-6 py-3 text-sm font-semibold text-blue-200 transition hover:border-blue-400/40 hover:bg-blue-500/[0.14] hover:text-white"
+                    >
+                      🔗 Kopiuj całe wyszukiwanie
                     </button>
 
                     {bestProductFamily && (
@@ -5015,7 +5163,7 @@ function SearchPageContent() {
                             }
                             className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-[11px] font-medium text-gray-400 transition hover:bg-white/[0.05] hover:text-white"
                           >
-                            ↗ Udostępnij
+                            ↗ Udostępnij tylko tę ofertę
                           </button>
                         </div>
                       </div>
