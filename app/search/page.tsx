@@ -3372,6 +3372,121 @@ function SearchPageContent() {
       compareBestRiskScore
     );
 
+  // ASARVO_COMPARE_V5
+  const copyComparisonSummary = async () => {
+    if (
+      typeof window === "undefined" ||
+      compareFamilies.length < 2
+    ) {
+      return;
+    }
+
+    const lines: string[] = [
+      `ASARVO — Porównanie produktów (${compareFamilies.length}/3)`,
+      query.trim()
+        ? `Zapytanie: ${query.trim()}`
+        : "Zapytanie: —",
+      "",
+    ];
+
+    compareFamilies.forEach((family, index) => {
+      const representative = family.representative;
+      const rating = compareFamilyRating(family);
+      const dealScore =
+        compareFamilyDealScore(family);
+
+      lines.push(
+        `${index + 1}. ${family.displayName}`,
+        `   Najniższa cena: ${formatPrice(family.lowestPrice)}`,
+        `   Najlepszy znany koszt: ${
+          family.lowestConfirmedTotal !== null
+            ? formatPrice(family.lowestConfirmedTotal)
+            : "Niepotwierdzony"
+        }`,
+        `   Ocena: ${
+          rating !== null
+            ? rating.toFixed(1)
+            : "Brak"
+        }`,
+        `   ASARVO Score: ${
+          dealScore !== null
+            ? `${dealScore}/100`
+            : "Brak"
+        }`,
+        `   Ryzyko: ${riskLabel(representative.riskLevel)}`,
+        `   Stan: ${productConditionLabel(representative)}`,
+        `   Sklepy / źródła: ${family.storeCount}`,
+        `   Oferty: ${family.offers.length}`,
+        ""
+      );
+    });
+
+    lines.push(
+      "Liderzy metryk:",
+      comparePriceLeaders.length > 0
+        ? `• Najniższa cena: ${compareLeaderNames(comparePriceLeaders)}`
+        : "• Najniższa cena: brak danych",
+      compareConfirmedTotalLeaders.length > 0
+        ? `• Najniższy znany koszt: ${compareLeaderNames(compareConfirmedTotalLeaders)}`
+        : "• Najniższy znany koszt: brak danych",
+      compareRatingLeaders.length > 0
+        ? `• Najwyższa ocena: ${compareLeaderNames(compareRatingLeaders)}`
+        : "• Najwyższa ocena: brak danych",
+      compareDealScoreLeaders.length > 0
+        ? `• Najwyższy ASARVO Score: ${compareLeaderNames(compareDealScoreLeaders)}`
+        : "• Najwyższy ASARVO Score: brak danych",
+      compareRiskLeaders.length > 0
+        ? `• Najniższe ryzyko: ${compareLeaderNames(compareRiskLeaders)}`
+        : "• Najniższe ryzyko: brak danych",
+      "",
+      "ASARVO nie wybiera jednego zwycięzcy całości — pokazuje liderów konkretnych metryk."
+    );
+
+    const text = lines.join("\n");
+
+    setLibraryActionMessage(null);
+
+    try {
+      if (
+        typeof navigator !== "undefined" &&
+        navigator.clipboard?.writeText
+      ) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textarea =
+          document.createElement("textarea");
+        textarea.value = text;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        const copied =
+          document.execCommand("copy");
+        document.body.removeChild(textarea);
+
+        if (!copied) {
+          throw new Error(
+            "Nie udało się skopiować porównania."
+          );
+        }
+      }
+
+      setLibraryActionMessage(
+        "Porównanie produktów skopiowano do schowka."
+      );
+    } catch (error) {
+      console.error(
+        "[ASARVO COMPARE COPY]",
+        error
+      );
+      setLibraryActionMessage(
+        "Nie udało się skopiować porównania."
+      );
+    }
+  };
+
   const bestProductFamily = useMemo(
     () =>
       productFamilies.find((family) =>
@@ -5093,6 +5208,23 @@ function SearchPageContent() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                  {/* ASARVO_COMPARE_V5 */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void copyComparisonSummary()
+                    }
+                    disabled={compareFamilies.length < 2}
+                    className={
+                      "w-fit rounded-xl border px-4 py-2 text-xs font-semibold transition " +
+                      (compareFamilies.length < 2
+                        ? "cursor-not-allowed border-white/[0.08] text-gray-500 opacity-40"
+                        : "border-emerald-400/25 bg-emerald-500/[0.07] text-emerald-200 hover:border-emerald-300/40 hover:bg-emerald-500/[0.12] hover:text-white")
+                    }
+                  >
+                    ⧉ Kopiuj porównanie
+                  </button>
+
                   <button
                     type="button"
                     onClick={() =>
