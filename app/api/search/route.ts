@@ -32744,7 +32744,17 @@ async function fetchHtml(
       html,
       finalUrl: response.url || url,
     };
-  } catch {
+  } catch (error) {
+    if (asarvoMvpIsBingSearchUrl(url)) {
+      const errorName = error instanceof Error ? error.name : typeof error;
+      console.error("[AIShopping] ASARVO_VERCEL_BING_FETCH_DIAG", {
+        source: url.includes("format=rss") ? "BingRSS" : "Bing",
+        errorName,
+        timeoutAborted: timeoutSignal.aborted,
+        externalAborted: externalSignal?.aborted ?? false,
+        timeBudgetMs: timeoutMs,
+      });
+    }
     return null;
   } finally {
     releaseSlot?.();
