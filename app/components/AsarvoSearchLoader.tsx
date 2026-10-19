@@ -9,33 +9,36 @@ type AsarvoSearchLoaderProps = {
 };
 
 const SEARCH_BUDGET_MS = 20_000;
+
+// ASARVO_RESULTS_UI_V6_LOADING_QA
+// ASARVO_RESULTS_UI_V5_7_LOADING_FINISH
 const MAX_VISIBLE_PROGRESS = 94;
 
 const STAGES = [
   {
     at: 0,
-    title: "Rozumiem Twoje wymagania",
-    description: "Analizuję produkt, budżet i najważniejsze parametry.",
+    title: "Rozumiem zapytanie",
+    description: "Wyłapuję produkt, budżet i warunki, których nie wolno pominąć.",
   },
   {
     at: 2_600,
-    title: "Przeszukuję dostępne źródła",
-    description: "Szukam ofert w wielu miejscach równolegle.",
+    title: "Przeszukuję sklepy i źródła",
+    description: "Zbieram dostępne oferty i łączę duplikaty tego samego produktu.",
   },
   {
     at: 6_800,
-    title: "Porównuję znalezione oferty",
-    description: "Porównuję ceny, warianty i informacje o zakupie.",
+    title: "Odrzucam nietrafione wyniki",
+    description: "Usuwam akcesoria, złe warianty i oferty niespełniające zapytania.",
   },
   {
     at: 11_000,
-    title: "Weryfikuję produkty",
-    description: "Sprawdzam zgodność ofert z Twoimi wymaganiami.",
+    title: "Porównuję cenę i ryzyko",
+    description: "Sprawdzam koszt, źródło, zgodność produktu i sygnały wiarygodności.",
   },
   {
     at: 15_300,
-    title: "Wybieram najlepsze wyniki",
-    description: "Porządkuję zweryfikowane oferty przed wyświetleniem.",
+    title: "Układam najlepsze odpowiedzi",
+    description: "Porządkuję zweryfikowane wyniki, żeby od razu pokazać najważniejsze opcje.",
   },
 ] as const;
 
@@ -95,61 +98,15 @@ export default function AsarvoSearchLoader({
 
       <div className={styles.card}>
         <div className={styles.brandMark} aria-hidden="true">
-          <svg className={styles.logo} viewBox="0 0 120 120">
-            <defs>
-              <linearGradient
-                id="asarvo-logo-gradient"
-                x1="20"
-                y1="20"
-                x2="100"
-                y2="100"
-              >
-                <stop offset="0%" stopColor="#3b82f6" />
-                <stop offset="55%" stopColor="#22a7f0" />
-                <stop offset="100%" stopColor="#5eead4" />
-              </linearGradient>
-              <linearGradient
-                id="asarvo-ring-gradient"
-                x1="12"
-                y1="12"
-                x2="106"
-                y2="106"
-              >
-                <stop offset="0%" stopColor="#2563eb" stopOpacity="0.35" />
-                <stop offset="58%" stopColor="#2f7df6" />
-                <stop offset="100%" stopColor="#52e5df" />
-              </linearGradient>
-            </defs>
-
-            <circle
-              cx="60"
-              cy="60"
-              r="48"
-              fill="none"
-              stroke="rgba(59,130,246,.14)"
-              strokeWidth="2"
-            />
-            <circle
-              className={styles.ring}
-              cx="60"
-              cy="60"
-              r="48"
-              fill="none"
-              stroke="url(#asarvo-ring-gradient)"
-              strokeWidth="2.7"
-              strokeLinecap="round"
-              strokeDasharray="214 302"
-            />
-
-            <path
-              d="M35 77.5 55.6 35c1.8-3.7 7-3.7 8.8 0L85 77.5c1.6 3.3-.8 7.1-4.4 7.1h-7.9c-2 0-3.8-1.2-4.6-3L60 64.8l-8.1 16.8c-.8 1.8-2.6 3-4.6 3h-7.9c-3.6 0-6-3.8-4.4-7.1Z"
-              fill="url(#asarvo-logo-gradient)"
-            />
-          </svg>
-          <span className={styles.brandName}>ASARVO</span>
+          <div className={styles.logoGlow} />
+          <img
+            src="/asarvo-mark.png"
+            alt=""
+            className={styles.logoMark}
+          />
         </div>
 
-        <div className={styles.eyebrow}>ASARVO SEARCH</div>
+        <div className={styles.eyebrow}>ASARVO SEARCH ENGINE</div>
 
         <div className={styles.copy} key={stageIndex}>
           <h2 className={styles.title}>{stage.title}</h2>
@@ -164,8 +121,8 @@ export default function AsarvoSearchLoader({
 
         <div className={styles.progressArea}>
           <div className={styles.progressLabels}>
-            <span>WYSZUKIWANIE</span>
-            <span>ORIENTACYJNY POSTĘP</span>
+            <span>ANALIZA RYNKU</span>
+            <span>{progress}%</span>
           </div>
 
           <div
@@ -203,7 +160,7 @@ export default function AsarvoSearchLoader({
         </div>
 
         <p className={styles.footer}>
-          ASARVO weryfikuje wyniki zamiast pokazywać pierwsze przypadkowe oferty.
+          ASARVO filtruje przypadkowe wyniki zanim zobaczysz listę produktów.
         </p>
       </div>
     </section>

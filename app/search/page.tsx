@@ -1,5 +1,23 @@
 "use client";
 
+// ASARVO_RESULTS_UI_V6_3_OPTIONAL_IMAGES
+// ASARVO_RESULTS_UI_V6_2_SINGLE_RESULT_TRUTH
+// ASARVO_RESULTS_UI_V6_1_PRICE_PANEL_MICRO
+// ASARVO_RESULTS_UI_V6_FIX1_BUILD
+// ASARVO_RESULTS_UI_V6_FINAL_QA
+// ASARVO_RESULTS_UI_V5_9_ADAPTIVE_DECISION
+// ASARVO_RESULTS_UI_V5_8_FINAL_POLISH
+// ASARVO_RESULTS_UI_V5_7_STATES_FINISH
+// ASARVO_RESULTS_UI_V5_6_MARKETPLACE_TRUST
+// ASARVO_RESULTS_UI_V5_5_RESPONSIVE_FINISH
+// ASARVO_RESULTS_UI_V5_4_ADAPTIVE_TRUST
+// ASARVO_RESULTS_UI_V5_3_RELEVANCE_LOCK
+// ASARVO_RESULTS_UI_V5_2_TRUST_COMPACT
+// COMPACT_SHIELD_V52
+// ASARVO_RESULTS_UI_V5_1_RELEVANCE_SHIELD
+
+// ASARVO_RESULTS_UI_V5_SIGNATURE_POLISH — premium visual hierarchy + quieter trust chips + richer cards + motion-safe microinteractions; search engine untouched.
+
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -34,6 +52,7 @@ type Product = {
   original: boolean | null;
   delivery: number | null;
   url?: string;
+  imageUrl?: string | null;
   description?: string;
   category: string;
   platform: string | null;
@@ -103,6 +122,12 @@ type Interpretation = {
   condition: "new" | "used" | null;
   original: boolean | null;
   maxPrice: number | null;
+  requirements?: Array<{
+    key: string;
+    label: string;
+    value: string;
+    hard: boolean;
+  }>;
 };
 
 function formatPrice(price: number | null): string {
@@ -190,6 +215,802 @@ function purchaseTotalLabel(product: Product): string {
 
   return "Niepotwierdzony";
 }
+
+function polishCountWord(
+  count: number,
+  singular: string,
+  few: string,
+  many: string
+): string {
+  const value = Math.abs(Math.trunc(count));
+  const mod10 = value % 10;
+  const mod100 = value % 100;
+
+  if (value === 1) return singular;
+  if (mod10 >= 2 && mod10 <= 4 && !(mod100 >= 12 && mod100 <= 14)) {
+    return few;
+  }
+
+  return many;
+}
+
+function countLabel(
+  count: number,
+  singular: string,
+  few: string,
+  many: string
+): string {
+  return `${count} ${polishCountWord(count, singular, few, many)}`;
+}
+
+function firstNonEmptyString(...values: unknown[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return null;
+}
+
+function uiProductTitle(value: string): string {
+  let normalized = value.replace(/\s+/g, " ").trim();
+
+  normalized = normalized
+    .replace(/\s*[|—]\s*(?:nawet|kup|raty|ratach|promocja|bonus|głośniki|sluchawki|słuchawki|sprawdź|sprawdz|oferta).*$/i, "")
+    .replace(/\s*-\s*(?:Apple Business Partner|Kup na Raty.*|Raty.*|Nawet.*|Promocja.*|najlepsze\s+ce(?:ny)?[^|—]*|sprawdź.*|sprawdz.*)$/i, "")
+    .replace(/\s+Apple Business Partner\b.*$/i, "")
+    .replace(/[-–—]\s*najlepsze\s+ce(?:ny)?[^|—]*$/i, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  const firstSegment = normalized.split(/\s+\|\s+|\s+—\s+/)[0]?.trim() || normalized;
+
+  if (firstSegment.length <= 104) return firstSegment;
+  return `${firstSegment.slice(0, 101).trimEnd()}…`;
+}
+
+function extractCpuUiLabel(value: string): string | null {
+  const coreUltra = value.match(
+    /\b(?:Intel(?:\s*[™®])?\s+)?Core(?:\s*[™®])?\s+Ultra\s+([579])\s*[- ]?\s*(\d{3,4}[A-Z]{0,3})\b/i
+  );
+  if (coreUltra) {
+    return `Core Ultra ${coreUltra[1]} ${coreUltra[2].toUpperCase()}`;
+  }
+
+  const core = value.match(
+    /\b(?:Intel(?:\s*[™®])?\s+)?Core(?:\s*[™®])?\s+(i[3579])\s*[- ]?\s*(\d{3,5}[A-Z]{0,3})\b/i
+  );
+  if (core) {
+    return `Core ${core[1].toLowerCase()}-${core[2].toUpperCase()}`;
+  }
+
+  const ryzen = value.match(
+    /\b(?:AMD(?:\s*[™®])?\s+)?Ryzen(?:\s*[™®])?\s+([3579])\s*[- ]?\s*(\d{3,5}[A-Z]{0,3})\b/i
+  );
+  if (ryzen) {
+    return `Ryzen ${ryzen[1]} ${ryzen[2].toUpperCase()}`;
+  }
+
+  return null;
+}
+
+function extractGpuUiLabel(value: string): string | null {
+  const geforce = value.match(
+    /\b(RTX|GTX)\s*[- ]?\s*(\d{4})(?:\s*(Ti|SUPER))?\b/i
+  );
+  if (geforce) {
+    const suffix = geforce[3] ? ` ${geforce[3].toUpperCase() === "TI" ? "Ti" : "SUPER"}` : "";
+    return `${geforce[1].toUpperCase()} ${geforce[2]}${suffix}`;
+  }
+
+  const radeon = value.match(/\bRX\s*[- ]?\s*(\d{4}[A-Z]{0,3})\b/i);
+  if (radeon) {
+    return `RX ${radeon[1].toUpperCase()}`;
+  }
+
+  return null;
+}
+
+function extractLaptopModelBase(raw: string, normalized: string): string {
+  const hpVictus = raw.match(/\bHP\s+VICTUS\s+(\d{2})\b/i);
+  if (hpVictus) return `HP VICTUS ${hpVictus[1]}`;
+
+  const hpOmen = raw.match(/\bHP\s+OMEN\s+(\d{2})\b/i);
+  if (hpOmen) return `HP OMEN ${hpOmen[1]}`;
+
+  const omenByHp = raw.match(/\bOMEN\s+BY\s+HP\s+(\d{2})\b/i);
+  if (omenByHp) return `HP OMEN ${omenByHp[1]}`;
+
+  const lenovoLoq = raw.match(/\bLENOVO\s+LOQ\s+(\d{2})/i);
+  if (lenovoLoq) return `Lenovo LOQ ${lenovoLoq[1]}`;
+
+  const lenovoLegion = raw.match(/\bLENOVO\s+LEGION\s+([3579])(?:\s+(\d{2}))?/i);
+  if (lenovoLegion) {
+    return `Lenovo Legion ${lenovoLegion[1]}${lenovoLegion[2] ? ` ${lenovoLegion[2]}` : ""}`;
+  }
+
+  const lenovoY = raw.match(/\bLENOVO\s+(Y\d{3})\b/i);
+  if (lenovoY) {
+    return `Lenovo Legion ${lenovoY[1].toUpperCase()}`;
+  }
+
+  const asusTuf = raw.match(/\bASUS\s+TUF\s+GAMING\s+([AF]\d{2})\b/i);
+  if (asusTuf) return `ASUS TUF Gaming ${asusTuf[1].toUpperCase()}`;
+
+  if (/\bASUS\s+TUF(?:\s+GAMING)?\b/i.test(raw)) {
+    return "ASUS TUF Gaming";
+  }
+
+  const asusRog = raw.match(/\bASUS\s+ROG\s+(STRIX|ZEPHYRUS)\s+([A-Z]\d{2})\b/i);
+  if (asusRog) {
+    const line = asusRog[1].toLowerCase() === "strix" ? "Strix" : "Zephyrus";
+    return `ASUS ROG ${line} ${asusRog[2].toUpperCase()}`;
+  }
+
+  const acerNitro = raw.match(/\bACER\s+NITRO(?:\s+V)?\s+(\d{2})\b/i);
+  if (acerNitro) {
+    const hasV = /\bACER\s+NITRO\s+V\b/i.test(raw);
+    return `Acer Nitro${hasV ? " V" : ""} ${acerNitro[1]}`;
+  }
+
+  const gigabyteGaming = raw.match(/\bGIGABYTE\s+GAMING\s+([A-Z]\d{2})\b/i);
+  if (gigabyteGaming) return `Gigabyte Gaming ${gigabyteGaming[1].toUpperCase()}`;
+
+  const msiLine = raw.match(/\bMSI\s+(KATANA|CYBORG|THIN|PULSE|VECTOR|RAIDER)\s+(\d{2})\b/i);
+  if (msiLine) {
+    const line = msiLine[1].charAt(0).toUpperCase() + msiLine[1].slice(1).toLowerCase();
+    return `MSI ${line} ${msiLine[2]}`;
+  }
+
+  const dellG = raw.match(/\bDELL\s+(G\d{2})\b/i);
+  if (dellG) return `Dell ${dellG[1].toUpperCase()}`;
+
+  let base = normalized
+    .replace(/^Laptop\s+/i, "")
+    .replace(/^Notebook\s+/i, "")
+    .replace(/^gamingowy\s+/i, "")
+    .replace(/^gamingowa\s+/i, "")
+    .replace(/^gamingowe\s+/i, "")
+    .replace(/\s+do\s+gier\b.*$/i, "")
+    .trim();
+
+  const specStart = base.search(
+    /\b(?:(?:Intel\s+)?Core(?:\s*[™®])?\s+(?:Ultra\s+)?[i3579]|(?:AMD\s+)?Ryzen(?:\s*[™®])?\s+[3579]|RTX\s*\d{4}|GTX\s*\d{4}|RX\s*\d{4}|\d{2,4}\s*(?:GB|TB)|Windows\s*1[01]|Win\s*1[01])\b/i
+  );
+
+  if (specStart > 3) {
+    base = base.slice(0, specStart).trim();
+  }
+
+  base = base
+    .split(/\s+\|\s+|\s+—\s+|\s*\/\s*/)[0]
+    ?.replace(/[-–—,:]+\s*$/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim() || normalized;
+
+  if (base.length <= 54) return base;
+  return `${base.slice(0, 51).trimEnd()}…`;
+}
+
+function productUiIdentity(product: Product, fallback?: string | null): string {
+  const raw = `${fallback ?? ""} ${product.name}`.replace(/\s+/g, " ").trim();
+  const normalized = uiProductTitle(fallback || product.name);
+
+  const iphone = raw.match(/(?:Apple\s+)?iPhone\s+\d{1,2}[A-Za-z]*(?:\s+(?:Pro|Max|Plus|Mini|Air|SE))?(?:\s+\d{2,4}\s*(?:GB|TB))?/i);
+  if (iphone) {
+    const title = iphone[0].replace(/\s+/g, " ").trim();
+    return /^Apple\b/i.test(title) ? title : `Apple ${title}`;
+  }
+
+  const cpu = extractCpuUiLabel(raw);
+  const gpu = extractGpuUiLabel(raw);
+  const laptopSignal = /\b(?:laptop|notebook|victus|omen|legion|loq|tuf|nitro|rog|ideapad|vivobook|zenbook|katana|predator|gigabyte\s+gaming|cyborg|pulse|vector|raider|dell\s+g\d{2})\b/i.test(raw) ||
+    Boolean(cpu || gpu);
+
+  if (laptopSignal) {
+    const base = extractLaptopModelBase(raw, normalized);
+
+    const parts = [base, cpu, gpu]
+      .filter((part): part is string => Boolean(part && part.trim()))
+      .map((part) => part.replace(/\s+/g, " ").trim());
+
+    const seen = new Set<string>();
+    const unique = parts.filter((part) => {
+      const key = normalizeGroupingText(part);
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const title = unique.join(" · ");
+    return title.length <= 96 ? title : `${title.slice(0, 93).trimEnd()}…`;
+  }
+
+  return normalized;
+}
+
+function productUiSpecs(product: Product): string[] {
+  const raw = `${product.name} ${product.description ?? ""}`.replace(/\s+/g, " ");
+  const specs: string[] = [];
+
+  const push = (value: string | null | undefined) => {
+    if (!value) return;
+    const clean = value.replace(/\s+/g, " ").trim();
+    if (clean && !specs.some((item) => item.toLowerCase() === clean.toLowerCase())) {
+      specs.push(clean);
+    }
+  };
+
+  push(extractCpuUiLabel(raw));
+  push(extractGpuUiLabel(raw));
+
+  const memoryValues = Array.from(raw.matchAll(/\b(\d{2,4})\s*(GB|TB)\b/gi))
+    .map((match) => `${match[1]} ${match[2].toUpperCase()}`);
+  for (const memory of memoryValues.slice(0, 2)) push(memory);
+
+  push(raw.match(/\b\d{2,3}\s*Hz\b/i)?.[0]?.replace(/\s+/g, " ").trim());
+
+  const windows = raw.match(
+    /\b(?:Windows\s*11|Win\s*11|Windows\s*10|Win\s*10)\b/i
+  )?.[0];
+  if (windows) {
+    push(
+      /^Win\s*11$/i.test(windows)
+        ? "Windows 11"
+        : /^Win\s*10$/i.test(windows)
+          ? "Windows 10"
+          : windows.replace(/\s+/g, " ").trim()
+    );
+  }
+
+  push(raw.match(/\b5G\b/i)?.[0]);
+
+  return specs.slice(0, 6);
+}
+
+function productFamilyUiIdentity(family: ProductFamily): string {
+  const candidates = [
+    productUiIdentity(family.representative, family.displayName),
+    ...family.offers.map((offer) =>
+      productUiIdentity(offer, family.displayName)
+    ),
+  ].filter(Boolean);
+
+  const score = (value: string): number => {
+    let result = 0;
+    if (extractCpuUiLabel(value)) result += 4;
+    if (extractGpuUiLabel(value)) result += 4;
+    result += Math.min(3, (value.match(/ · /g) ?? []).length);
+    return result;
+  };
+
+  return [...candidates].sort((a, b) => {
+    const diff = score(b) - score(a);
+    if (diff !== 0) return diff;
+    return a.length - b.length;
+  })[0] ?? family.displayName;
+}
+
+function productFamilyUiSpecs(family: ProductFamily): string[] {
+  const all = family.offers.flatMap((offer) => productUiSpecs(offer));
+  const unique = all.filter(
+    (spec, index) =>
+      all.findIndex((candidate) => candidate.toLowerCase() === spec.toLowerCase()) === index
+  );
+
+  const cpu = unique.find((spec) => /^(?:Core|Ryzen)\b/i.test(spec));
+  const gpu = unique.find((spec) => /^(?:RTX|GTX|RX)\b/i.test(spec));
+  const memory = unique.filter((spec) => /^\d{1,4}\s+(?:GB|TB)$/i.test(spec));
+  const ram = memory.find((spec) => {
+    const match = spec.match(/^(\d+)\s+GB$/i);
+    return Boolean(match && Number(match[1]) <= 128);
+  });
+  const storage = memory.find((spec) => {
+    if (ram && spec.toLowerCase() === ram.toLowerCase()) return false;
+    const gb = spec.match(/^(\d+)\s+GB$/i);
+    return /TB$/i.test(spec) || Boolean(gb && Number(gb[1]) >= 128);
+  });
+  const refresh = unique.find((spec) => /Hz$/i.test(spec));
+  const system = unique.find((spec) => /^Windows\b/i.test(spec));
+  const connectivity = unique.find((spec) => /^5G$/i.test(spec));
+
+  return [cpu, gpu, ram, storage, refresh, system, connectivity]
+    .filter((spec): spec is string => Boolean(spec))
+    .slice(0, 6);
+}
+
+function originalityChipTone(
+  confidence: OriginalityConfidence | undefined
+): string {
+  if (confidence === "high") {
+    return "border-emerald-500/20 bg-emerald-500/[0.07] text-emerald-300";
+  }
+
+  if (confidence === "medium") {
+    return "border-amber-500/20 bg-amber-500/[0.07] text-amber-200";
+  }
+
+  if (confidence === "low") {
+    return "border-orange-500/25 bg-orange-500/[0.08] text-orange-200";
+  }
+
+  return "border-white/[0.08] bg-white/[0.03] text-gray-400";
+}
+
+function originalityChipIcon(
+  confidence: OriginalityConfidence | undefined
+): string {
+  if (confidence === "high") return "✓";
+  if (confidence === "medium" || confidence === "low") return "⚠";
+  return "•";
+}
+
+function originalityUiLabel(
+  confidence: OriginalityConfidence | undefined
+): string {
+  if (confidence === "high") return "Oryginalność: mocne sygnały";
+  if (confidence === "medium") return "Oryginalność: częściowo potwierdzona";
+  if (confidence === "low") return "Oryginalność: wymaga weryfikacji";
+  return "Oryginalność: brak danych";
+}
+
+function productNeedsCaution(product: Product | null | undefined): boolean {
+  if (!product) return false;
+
+  return (
+    product.riskLevel === "high" ||
+    product.riskLevel === "medium" ||
+    product.originalityConfidence === "low" ||
+    (typeof product.sourceConfidence === "number" && product.sourceConfidence < 55)
+  );
+}
+
+const productImageResolverCache = new Map<string, Promise<string | null>>();
+
+function resolveProductImageFromSource(offerUrl: string): Promise<string | null> {
+  const cached = productImageResolverCache.get(offerUrl);
+  if (cached) return cached;
+
+  const request = fetch(`/api/product-image?url=${encodeURIComponent(offerUrl)}`)
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const payload = (await response.json()) as { imageUrl?: unknown };
+      return typeof payload.imageUrl === "string" && payload.imageUrl.trim()
+        ? payload.imageUrl.trim()
+        : null;
+    })
+    .catch(() => null);
+
+  productImageResolverCache.set(offerUrl, request);
+  return request;
+}
+
+function ProductVisual({
+  product,
+  label,
+  compact = false,
+}: {
+  product: Product;
+  label: string;
+  compact?: boolean;
+}) {
+  const directImageUrl = product.imageUrl?.trim() || null;
+  const [resolvedImageUrl, setResolvedImageUrl] = useState<string | null>(directImageUrl);
+  const [imageFailed, setImageFailed] = useState(false);
+  const [imageReady, setImageReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setImageFailed(false);
+    setImageReady(false);
+
+    if (directImageUrl) {
+      setResolvedImageUrl(directImageUrl);
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!product.url) {
+      setResolvedImageUrl(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    setResolvedImageUrl(null);
+
+    void resolveProductImageFromSource(product.url).then((imageUrl) => {
+      if (!active) return;
+      setResolvedImageUrl(imageUrl);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [directImageUrl, product.url]);
+
+  const imageUrl = resolvedImageUrl;
+
+  if (!imageUrl || imageFailed) {
+    return null;
+  }
+
+  return (
+    <div
+      data-product-image={imageReady ? "ready" : "loading"}
+      className={`${
+        imageReady
+          ? `relative overflow-hidden rounded-[22px] border border-blue-300/[0.10] bg-[radial-gradient(circle_at_38%_18%,rgba(59,130,246,0.26),transparent_40%),linear-gradient(145deg,#0b1628,#060a11_62%,#030507)] ring-1 ring-inset ring-white/[0.025] shadow-[0_18px_60px_rgba(0,0,0,0.24)] ${
+              compact
+                ? "h-[96px] min-h-[96px] w-[84px] shrink-0 sm:h-[112px] sm:min-h-[112px] sm:w-[96px]"
+                : "h-[220px] w-full shrink-0 self-start sm:h-[265px] md:w-[235px] lg:h-[285px] xl:w-[270px]"
+            }`
+          : "pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
+      }`}
+    >
+      {imageReady && (
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,transparent_20%,rgba(255,255,255,0.035)_48%,transparent_70%)]" />
+      )}
+
+      <div
+        className={`absolute overflow-hidden bg-[linear-gradient(145deg,#ffffff,#f4f7fb)] shadow-[0_20px_55px_rgba(0,0,0,0.30)] ring-1 ring-black/[0.04] ${
+          compact
+            ? "inset-2 rounded-xl"
+            : "inset-3 rounded-[20px] sm:inset-4"
+        }`}
+      >
+        <img
+          src={imageUrl}
+          alt={label}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onLoad={() => setImageReady(true)}
+          onError={() => {
+            setImageReady(false);
+            setImageFailed(true);
+          }}
+          className={`h-full w-full object-contain transition-transform duration-500 ease-out group-hover:scale-[1.025] motion-reduce:transform-none motion-reduce:transition-none ${
+            compact ? "p-2" : "p-3"
+          }`}
+        />
+      </div>
+
+      {imageReady && !compact && (
+        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2">
+          <span className="max-w-[70%] truncate rounded-full border border-white/[0.08] bg-black/45 px-2.5 py-1 text-[9px] font-medium text-gray-300 backdrop-blur">
+            {product.store}
+          </span>
+          {product.priceVerified && (
+            <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2.5 py-1 text-[9px] font-semibold text-emerald-300 backdrop-blur">
+              ✓ cena
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function MetricGauge({
+  label,
+  value,
+  inverse = false,
+}: {
+  label: string;
+  value: number | null | undefined;
+  inverse?: boolean;
+}) {
+  const raw =
+    typeof value === "number" && Number.isFinite(value)
+      ? Math.max(0, Math.min(100, value))
+      : null;
+  const display = raw === null ? null : inverse ? 100 - raw : raw;
+  const quality = display ?? 0;
+
+  const barTone =
+    quality >= 82
+      ? "bg-emerald-400"
+      : quality >= 68
+        ? "bg-blue-400"
+        : quality >= 50
+          ? "bg-amber-400"
+          : "bg-rose-400";
+
+  return (
+    <div className="rounded-xl border border-white/[0.07] bg-[linear-gradient(145deg,rgba(255,255,255,0.028),rgba(255,255,255,0.012))] px-3 py-3 transition duration-300 hover:border-blue-300/[0.14] hover:bg-white/[0.026]">
+      <div className="flex items-center justify-between gap-3">
+        <span className="inline-flex items-center gap-1.5 text-[10px] font-medium text-gray-500">
+          <span className={`h-1.5 w-1.5 rounded-full ${barTone} shadow-[0_0_10px_currentColor]`} />
+          {label}
+        </span>
+        <span className="text-sm font-bold text-white">
+          {display === null ? "—" : `${Math.round(display)}/100`}
+        </span>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+        <div
+          className={`h-full rounded-full shadow-[0_0_12px_currentColor] transition-all duration-700 ease-out ${barTone}`}
+          style={{ width: `${display ?? 0}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+
+function scoreChipTone(score: number | null | undefined): string {
+  if (typeof score !== "number" || !Number.isFinite(score)) {
+    return "border-white/[0.10] bg-white/[0.04] text-gray-300";
+  }
+  if (score >= 82) return "border-emerald-400/20 bg-emerald-500/[0.08] text-emerald-300";
+  if (score >= 68) return "border-blue-400/20 bg-blue-500/[0.08] text-blue-300";
+  if (score >= 52) return "border-amber-400/20 bg-amber-500/[0.08] text-amber-300";
+  return "border-rose-400/20 bg-rose-500/[0.08] text-rose-300";
+}
+
+type ShortlistRole = "best" | "cheapest" | "safest";
+
+type ShortlistEntry = {
+  key: string;
+  product: Product;
+  family: ProductFamily | null;
+  roles: ShortlistRole[];
+};
+
+function shortlistRoleLabel(role: ShortlistRole): string {
+  if (role === "best") return "Najlepsze dopasowanie";
+  if (role === "cheapest") return "Najtańszy z wyników";
+  return "Najbezpieczniejsza";
+}
+
+function shortlistRoleIcon(role: ShortlistRole): string {
+  if (role === "best") return "🏆";
+  if (role === "cheapest") return "💸";
+  return "🛡";
+}
+
+function shortlistMergedRoleLabel(role: ShortlistRole): string {
+  if (role === "best") return "Najlepsze dopasowanie";
+  if (role === "cheapest") return "Najtańszy model z wyników";
+  return "Najbezpieczniejsza oferta modelu";
+}
+
+function shortlistSameProductModel(
+  aProduct: Product,
+  aFamily: ProductFamily | null,
+  bProduct: Product,
+  bFamily: ProductFamily | null
+): boolean {
+  if (aFamily?.key && bFamily?.key && aFamily.key === bFamily.key) {
+    return true;
+  }
+
+  if (sameProductIdentity(aProduct, bProduct)) {
+    return true;
+  }
+
+  const aUi = normalizeGroupingText(
+    productUiIdentity(aProduct, aFamily?.displayName)
+  );
+  const bUi = normalizeGroupingText(
+    productUiIdentity(bProduct, bFamily?.displayName)
+  );
+
+  return Boolean(aUi && bUi && aUi === bUi);
+}
+
+function ShortlistCard({ entry }: { entry: ShortlistEntry }) {
+  const { product, family, roles } = entry;
+  const merged = roles.length > 1;
+  const primary = roles[0] ?? "best";
+  const shortlistSpecs = (
+    family ? productFamilyUiSpecs(family) : productUiSpecs(product)
+  ).slice(0, 3);
+
+  const shellClass = merged
+    ? "border-blue-400/30 bg-[linear-gradient(145deg,rgba(37,99,235,0.14),rgba(7,13,24,0.97)_48%,rgba(3,6,10,0.99))] shadow-[0_18px_80px_rgba(37,99,235,0.10)] hover:border-blue-300/45"
+    : primary === "best"
+      ? "border-amber-400/30 bg-[linear-gradient(145deg,rgba(245,158,11,0.12),rgba(8,11,17,0.95)_46%,rgba(3,6,10,0.98))] shadow-[0_18px_70px_rgba(245,158,11,0.07)] hover:border-amber-300/45"
+      : primary === "cheapest"
+        ? "border-emerald-400/25 bg-[linear-gradient(145deg,rgba(16,185,129,0.10),rgba(7,15,16,0.96)_48%,rgba(3,6,10,0.98))] shadow-[0_18px_70px_rgba(16,185,129,0.06)] hover:border-emerald-300/40"
+        : "border-cyan-400/25 bg-[linear-gradient(145deg,rgba(14,165,233,0.11),rgba(6,13,22,0.97)_48%,rgba(3,6,10,0.98))] shadow-[0_18px_70px_rgba(14,165,233,0.06)] hover:border-cyan-300/40";
+
+  const ctaClass = merged
+    ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[0_8px_24px_rgba(37,99,235,0.20)] hover:from-blue-500 hover:to-cyan-500"
+    : primary === "best"
+      ? "bg-gradient-to-r from-amber-300 to-yellow-300 text-black shadow-[0_8px_24px_rgba(245,158,11,0.16)] hover:from-amber-200 hover:to-yellow-200"
+      : primary === "cheapest"
+        ? "bg-gradient-to-r from-emerald-400 to-teal-400 text-[#03110c] shadow-[0_8px_24px_rgba(16,185,129,0.16)] hover:from-emerald-300 hover:to-teal-300"
+        : "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-[0_8px_24px_rgba(14,165,233,0.16)] hover:from-blue-400 hover:to-cyan-400";
+
+  const accentClass = merged
+    ? "text-blue-300"
+    : primary === "best"
+      ? "text-amber-300"
+      : primary === "cheapest"
+        ? "text-emerald-300"
+        : "text-cyan-300";
+
+  return (
+    <article
+      className={`group relative overflow-hidden rounded-[26px] border p-4 sm:p-5 ring-1 ring-inset ring-white/[0.018] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_90px_rgba(37,99,235,0.12)] motion-reduce:transform-none motion-reduce:transition-none ${shellClass}`}
+    >
+      <div className="pointer-events-none absolute -right-16 -top-16 h-44 w-44 rounded-full bg-blue-400/[0.08] blur-3xl" />
+
+      <div className="relative flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${accentClass}`}>
+            {merged ? "✦ Lider w kilku kategoriach" : `${shortlistRoleIcon(primary)} ${shortlistRoleLabel(primary)}`}
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {roles.map((role) => (
+              <span
+                key={role}
+                className="rounded-full border border-white/[0.08] bg-black/20 px-2 py-1 text-[9px] font-semibold text-gray-300"
+              >
+                {shortlistRoleIcon(role)} {merged ? shortlistMergedRoleLabel(role) : shortlistRoleLabel(role)}
+              </span>
+            ))}
+          </div>
+
+          <h3 className="mt-3 line-clamp-2 min-h-[44px] text-base font-bold leading-snug text-white">
+            {family ? productFamilyUiIdentity(family) : productUiIdentity(product)}
+          </h3>
+
+          {shortlistSpecs.length > 0 && (
+            <div className="mt-2 flex max-h-[24px] flex-wrap gap-1 overflow-hidden">
+              {shortlistSpecs.map((spec) => (
+                <span
+                  key={spec}
+                  className="rounded-md border border-blue-400/12 bg-blue-500/[0.045] px-2 py-1 text-[9px] font-semibold leading-none text-blue-100/75"
+                >
+                  {spec}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {typeof product.dealScore === "number" && (
+          <span
+            className={`shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-semibold ${scoreChipTone(
+              product.dealScore
+            )}`}
+          >
+            {product.dealScore}/100
+          </span>
+        )}
+      </div>
+
+      <div className="relative mt-4 flex items-stretch gap-3 sm:gap-4">
+        <ProductVisual
+          product={product}
+          label={family ? productFamilyUiIdentity(family) : productUiIdentity(product)}
+          compact
+        />
+
+        <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
+          <div>
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <span className="truncate text-xs text-gray-500">{product.store}</span>
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] ${sourceKindChipTone(
+                  product.store
+                )}`}
+              >
+                {sourceKindLabel(product.store)}
+              </span>
+            </div>
+            <div className="mt-2 text-xl font-bold tracking-tight text-white sm:text-2xl">
+              {purchaseTotalLabel(product)}
+            </div>
+            <div
+              className={`mt-2 text-xs ${
+                product.delivery === 0 ? "text-emerald-300" : "text-gray-400"
+              }`}
+            >
+              {deliveryCostLabel(product.delivery)} dostawa
+            </div>
+
+            {marketplaceTrustNote(product.store) ? (
+              <div className="mt-2 rounded-lg border border-amber-400/15 bg-amber-400/[0.06] px-2.5 py-1.5 text-[10px] leading-4 text-amber-200">
+                ⚠ {marketplaceTrustNote(product.store)}
+              </div>
+            ) : productNeedsCaution(product) ? (
+              <div className="mt-2 rounded-lg border border-amber-400/15 bg-amber-400/[0.06] px-2.5 py-1.5 text-[10px] leading-4 text-amber-200">
+                ⚠ Warto sprawdzić sygnały wiarygodności
+              </div>
+            ) : null}
+          </div>
+
+          {product.url && (
+            <a
+              href={product.url}
+              target="_blank"
+              rel="noreferrer"
+              className={`mt-4 inline-flex items-center justify-center rounded-xl px-3 py-2.5 text-xs font-bold transition duration-300 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/40 motion-reduce:transform-none ${ctaClass}`}
+            >
+              Zobacz ofertę →
+            </a>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function MergedLeaderStrip({ entry }: { entry: ShortlistEntry }) {
+  const { product, family, roles } = entry;
+  const title = family ? productFamilyUiIdentity(family) : productUiIdentity(product);
+
+  return (
+    <article className="relative overflow-hidden rounded-[20px] border border-blue-400/25 bg-[linear-gradient(125deg,rgba(37,99,235,0.15),rgba(5,10,18,0.985)_46%,rgba(2,5,9,0.995))] px-4 py-4 sm:rounded-[24px] sm:px-6 shadow-[0_22px_90px_rgba(37,99,235,0.11)] ring-1 ring-inset ring-white/[0.018] backdrop-blur-xl sm:px-6">
+      <div className="pointer-events-none absolute -left-20 top-1/2 h-44 w-44 -translate-y-1/2 rounded-full bg-blue-500/[0.10] blur-[70px]" />
+
+      <div className="relative flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-blue-300/20 bg-blue-500/[0.09] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-blue-300 shadow-[0_0_14px_rgba(96,165,250,0.9)]" />
+              ASARVO DECISION
+            </span>
+            <span className="text-xs text-gray-500">
+              ten model obejmuje liderów w {roles.length} kryteriach
+            </span>
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between xl:justify-start xl:gap-8">
+            <div className="min-w-0">
+              <h2 className="line-clamp-2 text-lg font-bold tracking-tight text-white sm:text-2xl">
+                {title}
+              </h2>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                <span>{product.store}</span>
+                <span className="font-semibold text-white">{purchaseTotalLabel(product)}</span>
+                {typeof product.dealScore === "number" && (
+                  <span className="text-blue-300">ASARVO {product.dealScore}/100</span>
+                )}
+              </div>
+            </div>
+
+            <div className="shrink-0 text-xs text-gray-500">
+              pełna analiza poniżej ↓
+            </div>
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-wrap gap-2 xl:max-w-[520px] xl:justify-end">
+          {roles.map((role) => {
+            const tone =
+              role === "best"
+                ? "border-amber-400/20 bg-amber-400/[0.06] text-amber-200"
+                : role === "cheapest"
+                  ? "border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-200"
+                  : "border-cyan-400/20 bg-cyan-400/[0.06] text-cyan-200";
+
+            return (
+              <div
+                key={role}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 sm:gap-2 sm:px-3 sm:py-2 ${tone}`}
+              >
+                <span className="text-xs">{shortlistRoleIcon(role)}</span>
+                <span className="text-[9px] font-bold uppercase tracking-[0.08em] sm:text-[10px] sm:tracking-[0.10em]">
+                  {shortlistMergedRoleLabel(role)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+
 
 const COLOR_VARIANTS = [
   { label: "Czarny", aliases: ["czarny", "czarna", "czarne", "black", "onyx"] },
@@ -647,6 +1468,26 @@ function sourceKindLabel(store: string): "Marketplace" | "Sklep" | "Źródło" {
   return "Źródło";
 }
 
+function sourceKindChipTone(store: string): string {
+  const kind = sourceKindLabel(store);
+
+  if (kind === "Marketplace") {
+    return "border-amber-400/18 bg-amber-400/[0.055] text-amber-200";
+  }
+
+  if (kind === "Sklep") {
+    return "border-blue-400/16 bg-blue-500/[0.05] text-blue-200";
+  }
+
+  return "border-white/[0.08] bg-white/[0.025] text-gray-400";
+}
+
+function marketplaceTrustNote(store: string): string | null {
+  return sourceKindLabel(store) === "Marketplace"
+    ? "Marketplace — sprawdź stan, sprzedawcę i warunki gwarancji"
+    : null;
+}
+
 function compactListingName(
   offer: Product,
   familyDisplayName: string
@@ -863,7 +1704,10 @@ function buildProductFamilies(
       key: `product-family-${index}-${normalizeGroupingText(
         cleanFamilyDisplayName(representative)
       )}`,
-      displayName: cleanFamilyDisplayName(representative),
+      displayName: productUiIdentity(
+        representative,
+        cleanFamilyDisplayName(representative)
+      ),
       representative,
       offers,
       storeOffers,
@@ -945,22 +1789,22 @@ function familyVariantSummary(
 
   const pieces: string[] = [];
 
-  if (family.colors.length > 1) {
-    pieces.push(`${family.colors.length} kolory`);
-  } else if (family.colors.length === 1) {
-    pieces.push(`kolor: ${family.colors[0]}`);
+  if (family.colors.length > 0) {
+    pieces.push(
+      family.colors.length === 1
+        ? `kolor: ${family.colors[0]}`
+        : countLabel(family.colors.length, "kolor", "kolory", "kolorów")
+    );
   }
 
-  if (family.storeCount > 1) {
-    pieces.push(`${family.storeCount} sklepy / źródła`);
-  } else if (family.storeCount === 1) {
-    pieces.push("1 sklep / źródło");
+  if (family.storeCount > 0) {
+    pieces.push(
+      countLabel(family.storeCount, "źródło", "źródła", "źródeł")
+    );
   }
 
   pieces.push(
-    `${family.offers.length} ${
-      family.offers.length === 1 ? "oferta" : "ofert"
-    }`
+    countLabel(family.offers.length, "oferta", "oferty", "ofert")
   );
 
   return pieces.join(" · ");
@@ -1146,6 +1990,42 @@ function priceAttractivenessLabel(
   if (value === "fair") return "Przeciętna cena";
   if (value === "poor") return "Wysoka cena";
   return null;
+}
+
+function singleModelReason(product: Product): string {
+  const reasons: string[] = [];
+
+  if (typeof product.matchScore === "number" && product.matchScore >= 70) {
+    reasons.push("dobre dopasowanie do zapytania");
+  } else if (typeof product.matchScore === "number" && product.matchScore >= 55) {
+    reasons.push("solidne dopasowanie do zapytania");
+  }
+
+  if (product.riskLevel === "low") {
+    reasons.push("niskie ryzyko");
+  } else if (product.riskLevel === "medium") {
+    reasons.push("ryzyko na akceptowalnym poziomie");
+  }
+
+  if (product.priceVerified) {
+    reasons.push("cena zweryfikowana");
+  }
+
+  if (product.delivery === 0) {
+    reasons.push("darmowa dostawa");
+  }
+
+  if (
+    typeof product.sourceConfidence === "number" &&
+    product.sourceConfidence >= 80
+  ) {
+    reasons.push("silne źródło");
+  }
+
+  return (
+    reasons.slice(0, 4).join(" • ") ||
+    "najlepiej zweryfikowany wynik dla tego zapytania"
+  );
 }
 
 function productConditionLabel(product: Product): string {
@@ -1671,6 +2551,10 @@ function SearchPageContent() {
   const [ratingFilter, setRatingFilter] =
     useState(ratingFromUrl);
 
+  // ASARVO_RELEVANCE_SHIELD_V1
+  const [showSuspiciousMatches, setShowSuspiciousMatches] =
+    useState(false);
+
   // ASARVO_SORTING_V1
   const [sortMode, setSortMode] =
     useState(sortFromUrl);
@@ -1725,6 +2609,7 @@ function SearchPageContent() {
 
     compareQueryRef.current = query;
     setCompareFamilyKeys([]);
+    setShowSuspiciousMatches(false);
   }, [query, searchRefreshNonce]);
 
   // UI -> URL: keep the current search configuration in the browser address.
@@ -2700,6 +3585,15 @@ function SearchPageContent() {
                     typeof offer.url === "string"
                       ? offer.url
                       : "",
+                  imageUrl: firstNonEmptyString(
+                    offer.imageUrl,
+                    offer.image_url,
+                    offer.image,
+                    offer.thumbnailUrl,
+                    offer.thumbnail,
+                    offer.photoUrl,
+                    offer.photo
+                  ),
                   description:
                     typeof offer.description === "string"
                       ? offer.description
@@ -2835,6 +3729,241 @@ function SearchPageContent() {
   };
 
 
+  // ASARVO_RELEVANCE_SHIELD_V1
+  const normalizeRelevanceText = (
+    value: string | null | undefined
+  ): string =>
+    (value ?? "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  // ASARVO_RELEVANCE_SHIELD_V2
+  // Title-first classification: retailer descriptions often mention the word
+  // "laptop" even for bags, hubs, docks and other accessories. Therefore an
+  // accessory noun in the offer title wins over generic laptop wording found
+  // only in description/SEO text.
+  const isObviousLaptopAccessory = (
+    product: Product,
+    currentInterpretation: Interpretation | null
+  ): boolean => {
+    if (
+      !currentInterpretation ||
+      currentInterpretation.category?.toLowerCase() !== "laptop"
+    ) {
+      return false;
+    }
+
+    const title = normalizeRelevanceText(product.name);
+    const fullText = normalizeRelevanceText(
+      [product.name, product.description ?? ""].join(" ")
+    );
+
+    const titleAccessorySignals = [
+      "plecak",
+      "torba",
+      "etui",
+      "pokrowiec",
+      "rekaw",
+      "sleeve",
+      "case do laptop",
+      "hub usb",
+      "usb hub",
+      "hub type c",
+      "hub type-c",
+      "hub usb-c",
+      "stacja dokuj",
+      "docking station",
+      "dock usb",
+      "adapter usb",
+      "adapter type c",
+      "adapter type-c",
+      "przejsciow",
+      "zasilacz",
+      "ladowarka",
+      "charger",
+      "power adapter",
+      "podstawka pod laptop",
+      "stand pod laptop",
+      "cooling pad",
+      "chlodzenie pod laptop",
+      "mysz",
+      "mouse",
+      "klawiatur",
+      "keyboard",
+      "podkladka",
+      "mousepad",
+      "kabel",
+      "cable",
+      "mikrofon",
+      "microphone",
+      "sluchawki",
+      "headset",
+      "uchwyt do laptop",
+      "ramie do laptop",
+      "organizer",
+    ];
+
+    const explicitLaptopModelSignals = [
+      "victus",
+      "omen ",
+      "legion",
+      "loq ",
+      "tuf gaming",
+      "rog strix",
+      "zephyrus",
+      "rog scar",
+      "nitro ",
+      "predator",
+      "katana",
+      "raider",
+      "cyborg",
+      "pulse",
+      "vector",
+      "thinkpad",
+      "ideapad",
+      "vivobook",
+      "zenbook",
+      "latitude",
+      "inspiron",
+      "xps ",
+      "elitebook",
+      "probook",
+      "matebook",
+      "surface laptop",
+      "macbook",
+      "chromebook",
+      "gigabyte gaming",
+      "dell g15",
+      "dell g16",
+    ];
+
+    const explicitDeviceTypeSignals = [
+      "laptop ",
+      "laptop,",
+      "laptop-",
+      "notebook",
+      "ultrabook",
+    ];
+
+    const titleAccessoryWordPatterns = [
+      /\bhub\b/i,
+      /\bdock(?:ing)?\b/i,
+      /\badapter\b/i,
+      /\bplecak\b/i,
+      /\btorba\b/i,
+      /\betui\b/i,
+      /\bpokrowiec\b/i,
+      /\bsleeve\b/i,
+      /\bzasilacz\b/i,
+      /\bladowark\w*\b/i,
+      /\bcharger\b/i,
+      /\bpodstawka\b/i,
+      /\bstand\b/i,
+      /\bcooling\s+pad\b/i,
+      /\bmysz\b/i,
+      /\bmouse\b/i,
+      /\bklawiatur\w*\b/i,
+      /\bkeyboard\b/i,
+      /\bmousepad\b/i,
+      /\bkabel\b/i,
+      /\bcable\b/i,
+      /\bmikrofon\b/i,
+      /\bmicrophone\b/i,
+      /\bsluchawk\w*\b/i,
+      /\bheadset\b/i,
+      /\borganizer\b/i,
+    ];
+
+    const titleHasAccessory =
+      titleAccessorySignals.some((signal) => title.includes(signal)) ||
+      titleAccessoryWordPatterns.some((pattern) => pattern.test(title));
+
+    const titleHasKnownLaptopModel = explicitLaptopModelSignals.some((signal) =>
+      title.includes(signal)
+    );
+
+    const titleHasDeviceType = explicitDeviceTypeSignals.some((signal) =>
+      title.includes(signal)
+    );
+
+    const hardwareSignals = [
+      /\b(?:intel\s+)?core\s+(?:ultra\s+)?[i3579][-\s]?\d{3,5}[a-z]{0,3}\b/i,
+      /\bryzen\s+[3579]\s*[- ]?\d{3,5}[a-z]{0,3}\b/i,
+      /\brtx\s*\d{4}\b/i,
+      /\bgtx\s*\d{4}\b/i,
+      /\bradeon\s+rx\s*\d{3,4}\b/i,
+    ];
+
+    const hardwareSignalCount = hardwareSignals.reduce(
+      (count, pattern) => count + (pattern.test(fullText) ? 1 : 0),
+      0
+    );
+
+    // V5.3 HARD TITLE LOCK:
+    // an accessory noun in the TITLE wins before any description/hardware rescue.
+    // This prevents e.g. "HUB dla graczy..." from becoming a laptop recommendation
+    // just because retailer SEO text mentions CPUs, GPUs or the word "laptop".
+    if (titleHasAccessory && !titleHasKnownLaptopModel) {
+      return true;
+    }
+
+    // Conservative secondary accessory check still runs before hardware rescue.
+    const secondaryAccessorySignals = [
+      "plecak",
+      "torba",
+      "hub ",
+      "dock ",
+      "adapter ",
+      "zasilacz",
+      "ladowarka",
+      "etui",
+      "pokrowiec",
+      "podstawka",
+      "cooling pad",
+    ];
+
+    if (
+      secondaryAccessorySignals.some((signal) => title.includes(signal)) &&
+      !titleHasKnownLaptopModel
+    ) {
+      return true;
+    }
+
+    // Offers that do not look like an accessory but clearly identify a laptop
+    // remain visible.
+    if (
+      titleHasKnownLaptopModel ||
+      titleHasDeviceType ||
+      hardwareSignalCount >= 2
+    ) {
+      return false;
+    }
+
+    return false;
+  };
+
+  const suspiciousRelevanceProducts = useMemo(
+    () =>
+      products.filter((product) =>
+        isObviousLaptopAccessory(
+          product,
+          interpretation
+        )
+      ),
+    [products, interpretation]
+  );
+
+  const suspiciousRelevanceCount =
+    suspiciousRelevanceProducts.length;
+
+  const toggleSuspiciousMatches = () => {
+    setCompareFamilyKeys([]);
+    setShowSuspiciousMatches(
+      (current) => !current
+    );
+  };
+
   // ASARVO_FILTERS_V1
   const activePriceLimit =
     priceFilter === "Do 100 zł"
@@ -2893,6 +4022,18 @@ function SearchPageContent() {
       if (
         interpretation.platform &&
         product.platform !== interpretation.platform
+      ) {
+        return false;
+      }
+
+      // ASARVO RELEVANCE SHIELD:
+      // konserwatywnie odrzucamy tylko oczywiste akcesoria laptopowe.
+      if (
+        !showSuspiciousMatches &&
+        isObviousLaptopAccessory(
+          product,
+          interpretation
+        )
       ) {
         return false;
       }
@@ -3017,6 +4158,8 @@ function SearchPageContent() {
     storeFilter,
     ratingFilter,
     activePriceLimit,
+    showSuspiciousMatches,
+    products,
   ]);
 
   // DEDUPLIKACJA PRODUKTÓW I WARIANTÓW
@@ -3220,8 +4363,35 @@ function SearchPageContent() {
     best !== null &&
     Math.abs(value - best) < 0.0001;
 
+  // ASARVO_COMPARE_V21_RELEVANCE_BRIDGE
+  // Relevance Shield stays presentation-only. Suspicious products may still be
+  // compared after "Pokaż mimo to", but they do not compete for metric leaders.
+  const suspiciousCompareProductIds = useMemo(
+    () =>
+      new Set(
+        suspiciousRelevanceProducts.map((product) => product.id)
+      ),
+    [suspiciousRelevanceProducts]
+  );
+
+  const compareFamilyEligibleForLeaders = (
+    family: ProductFamily
+  ): boolean =>
+    !suspiciousCompareProductIds.has(
+      family.representative.id
+    );
+
+  const compareHasRelevanceExcludedFamily =
+    compareFamilies.some(
+      (family) => !compareFamilyEligibleForLeaders(family)
+    );
+
   const compareBestLowestPrice = compareBestMetric(
-    compareFamilies.map((family) => family.lowestPrice),
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? family.lowestPrice
+        : null
+    ),
     "min"
   );
 
@@ -3233,17 +4403,29 @@ function SearchPageContent() {
   );
 
   const compareBestRating = compareBestMetric(
-    compareFamilies.map(compareFamilyRating),
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? compareFamilyRating(family)
+        : null
+    ),
     "max"
   );
 
   const compareBestDealScore = compareBestMetric(
-    compareFamilies.map(compareFamilyDealScore),
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? compareFamilyDealScore(family)
+        : null
+    ),
     "max"
   );
 
   const compareBestRiskScore = compareBestMetric(
-    compareFamilies.map(compareFamilyRiskScore),
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? compareFamilyRiskScore(family)
+        : null
+    ),
     "min"
   );
 
@@ -3268,7 +4450,11 @@ function SearchPageContent() {
   };
 
   const comparePriceDiff = compareValuesDiffer(
-    compareFamilies.map((family) => family.lowestPrice)
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? family.lowestPrice
+        : null
+    )
   );
 
   const compareConfirmedTotalDiff = compareValuesDiffer(
@@ -3278,11 +4464,19 @@ function SearchPageContent() {
   );
 
   const compareRatingDiff = compareValuesDiffer(
-    compareFamilies.map(compareFamilyRating)
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? compareFamilyRating(family)
+        : null
+    )
   );
 
   const compareDealScoreDiff = compareValuesDiffer(
-    compareFamilies.map(compareFamilyDealScore)
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? compareFamilyDealScore(family)
+        : null
+    )
   );
 
   const compareConditionDiff = compareValuesDiffer(
@@ -3292,7 +4486,11 @@ function SearchPageContent() {
   );
 
   const compareRiskDiff = compareValuesDiffer(
-    compareFamilies.map(compareFamilyRiskScore)
+    compareFamilies.map((family) =>
+      compareFamilyEligibleForLeaders(family)
+        ? compareFamilyRiskScore(family)
+        : null
+    )
   );
 
   const compareStoreCountDiff = compareValuesDiffer(
@@ -3328,7 +4526,8 @@ function SearchPageContent() {
     }
 
     return compareFamilies.filter((family) =>
-      compareMetricMatches(
+        compareFamilyEligibleForLeaders(family) &&
+        compareMetricMatches(
         valueForFamily(family),
         bestValue
       )
@@ -3341,6 +4540,378 @@ function SearchPageContent() {
     families
       .map((family) => family.displayName)
       .join(" • ");
+
+  // ASARVO_COMPARE_V24_SPEC_DIFFERENCE_FOCUS
+  const compareExtractSpec = (
+    name: string,
+    kind:
+      | "CPU"
+      | "GPU"
+      | "RAM"
+      | "SSD"
+      | "Ekran"
+      | "Odświeżanie"
+      | "System"
+  ): string | null => {
+    const text = name
+      .replace(/[®™]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (kind === "GPU") {
+      const match = text.match(
+        /\b(?:RTX\s*\d{4}|GTX\s*\d{3,4}|RX\s*\d{4}[A-Z]{0,3})\b/i
+      );
+      return match
+        ? match[0]
+            .replace(/\s+/g, "")
+            .replace(/^(RTX|GTX|RX)(\d)/i, "$1 $2")
+            .toUpperCase()
+        : null;
+    }
+
+    if (kind === "CPU") {
+      // ASARVO_COMPARE_V251_SPEC_PARSER_COVERAGE
+      const patterns = [
+        /\bIntel\s+Core\s+Ultra\s+\d(?:\s+\d{3}[A-Z]{0,2})?\b/i,
+        /\bIntel\s+Core\s+[3579]\s+\d{3}[A-Z]{0,3}\b/i,
+        /\bCore\s+i[3579]-?\d{4,5}[A-Z]{0,3}\b/i,
+        /\bRyzen\s+AI\s+\d(?:\s+\d{3}[A-Z]{0,3})?\b/i,
+        /\bRyzen\s+[3579]-?\d{4}[A-Z]{0,3}\b/i,
+        /\bRyzen\s+[3579]\s+\d{3,4}[A-Z]{0,3}\b/i,
+        /\bR[3579]-?\d{4}[A-Z]{0,3}\b/i,
+      ];
+
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match) {
+          const raw = match[0].replace(/\s+/g, " ");
+          const shorthand = raw.match(
+            /^R([3579])-?(\d{4}[A-Z]{0,3})$/i
+          );
+
+          return shorthand
+            ? `Ryzen ${shorthand[1]} ${shorthand[2].toUpperCase()}`
+            : raw;
+        }
+      }
+
+      return null;
+    }
+
+    if (kind === "RAM") {
+      const matches = [
+        ...text.matchAll(/\b(\d{1,3})\s*GB(?:\s*RAM)?\b/gi),
+      ];
+
+      const candidate = matches.find((match) => {
+        const value = Number(match[1]);
+        return value >= 4 && value <= 128;
+      });
+
+      return candidate ? `${candidate[1]} GB` : null;
+    }
+
+    if (kind === "SSD") {
+      const tb = text.match(
+        /\b(\d+(?:[.,]\d+)?)\s*TB(?:\s*(?:SSD|NVME))?\b/i
+      );
+      if (tb) {
+        return `${tb[1].replace(",", ".")} TB`;
+      }
+
+      const matches = [
+        ...text.matchAll(
+          /\b(\d{3,4})\s*GB(?:\s*(?:SSD|NVME))?\b/gi
+        ),
+      ];
+
+      const candidate = matches.find(
+        (match) => Number(match[1]) >= 128
+      );
+
+      if (candidate) {
+        return `${candidate[1]} GB`;
+      }
+
+      const compact = text.match(
+        /(?:^|[\/\-])(128|256|512|1000|1024|2000|2048)(?=[\/\-]|\b)/i
+      );
+
+      if (compact) {
+        const amount = Number(compact[1]);
+
+        if (amount === 1000 || amount === 1024) {
+          return "1 TB";
+        }
+
+        if (amount === 2000 || amount === 2048) {
+          return "2 TB";
+        }
+
+        return `${amount} GB`;
+      }
+
+      return null;
+    }
+
+    if (kind === "Odświeżanie") {
+      const match = text.match(/\b(\d{2,3})\s*HZ\b/i);
+      return match ? `${match[1]} Hz` : null;
+    }
+
+    if (kind === "System") {
+      const match = text.match(
+        /\b(?:Windows\s*11(?:\s*(?:Home|Pro))?|Win11|Windows\s*10(?:\s*(?:Home|Pro))?|Win10)\b/i
+      );
+
+      if (!match) return null;
+
+      return match[0]
+        .replace(/^Win11$/i, "Windows 11")
+        .replace(/^Win10$/i, "Windows 10");
+    }
+
+    if (kind === "Ekran") {
+      const matches = [
+        text.match(/\bWQXGA\b/i),
+        text.match(/\bWUXGA\b/i),
+        text.match(/\bQHD\+?\b/i),
+        text.match(/\bFHD\+?\b/i),
+        text.match(/\b(?:OLED|IPS|MINI\s*LED)\b/i),
+        text.match(/\b\d{3,4}\s*[x×]\s*\d{3,4}\b/i),
+      ].filter(Boolean);
+
+      if (matches.length === 0) return null;
+
+      return [...new Set(
+        matches.map((match) =>
+          match![0]
+            .replace(/\s+/g, " ")
+            .toUpperCase()
+        )
+      )].join(" / ");
+    }
+
+    return null;
+  };
+
+  const compareSpecRows = useMemo(() => {
+    const labels = [
+      "CPU",
+      "GPU",
+      "RAM",
+      "SSD",
+      "Ekran",
+      "Odświeżanie",
+      "System",
+    ] as const;
+
+    return labels.map((label) => {
+      const values = compareFamilies.map((family) =>
+        compareExtractSpec(
+          family.representative.name,
+          label
+        )
+      );
+
+      // ASARVO_COMPARE_V241_SPEC_NORMALIZATION
+      const presentValues = values.filter(
+        (value): value is string => value !== null
+      );
+
+      const normalizedPresent = presentValues.map((value) =>
+        value
+          .toLowerCase()
+          .replace(/\s+/g, " ")
+          .replace(/rtx\s*(\d{4})/g, "rtx $1")
+          .replace(/gtx\s*(\d{3,4})/g, "gtx $1")
+          .replace(/rx\s*(\d{4}[a-z]{0,3})/g, "rx $1")
+          .replace(/^win11$/g, "windows 11")
+          .replace(/^win10$/g, "windows 10")
+          .trim()
+      );
+
+      const knownDistinctCount =
+        new Set(normalizedPresent).size;
+
+      const incomplete =
+        presentValues.length !== values.length;
+
+      const differs =
+        knownDistinctCount > 1;
+
+      // ASARVO_COMPARE_V25_SPEC_ADVANTAGE_CLARITY
+      const numericValues = values.map((value) => {
+        if (value === null) return null;
+
+        if (label === "RAM") {
+          const match = value.match(/(\d+(?:[.,]\d+)?)\s*GB/i);
+          return match ? Number(match[1].replace(",", ".")) : null;
+        }
+
+        if (label === "SSD") {
+          const tb = value.match(/(\d+(?:[.,]\d+)?)\s*TB/i);
+          if (tb) {
+            return Number(tb[1].replace(",", ".")) * 1024;
+          }
+
+          const gb = value.match(/(\d+(?:[.,]\d+)?)\s*GB/i);
+          return gb ? Number(gb[1].replace(",", ".")) : null;
+        }
+
+        if (label === "Odświeżanie") {
+          const hz = value.match(/(\d+(?:[.,]\d+)?)\s*Hz/i);
+          return hz ? Number(hz[1].replace(",", ".")) : null;
+        }
+
+        return null;
+      });
+
+      const finiteNumericValues = numericValues.filter(
+        (value): value is number =>
+          typeof value === "number" && Number.isFinite(value)
+      );
+
+      const bestNumeric =
+        finiteNumericValues.length > 0
+          ? Math.max(...finiteNumericValues)
+          : null;
+
+      return {
+        label,
+        values,
+        differs,
+        incomplete,
+        numericValues,
+        bestNumeric,
+      };
+    });
+  }, [compareFamilies]);
+
+  const visibleCompareSpecRows =
+    compareDifferencesOnly
+      ? compareSpecRows.filter((row) => row.differs)
+      : compareSpecRows;
+
+  // ASARVO_COMPARE_V26_KEY_DIFFERENCES_SUMMARY
+  const compareKeyDifferences = useMemo(() => {
+    return compareSpecRows
+      .filter((row) => row.differs)
+      .map((row) => {
+        const distinctKnownValues = [
+          ...new Set(
+            row.values
+              .filter((value): value is string => value !== null)
+              .map((value) => value.trim())
+          ),
+        ];
+
+        if (distinctKnownValues.length === 0) {
+          return null;
+        }
+
+        return {
+          label: row.label,
+          values: distinctKnownValues,
+          incomplete: row.incomplete,
+        };
+      })
+      .filter(
+        (
+          item
+        ): item is {
+          label: (typeof compareSpecRows)[number]["label"];
+          values: string[];
+          incomplete: boolean;
+        } => item !== null
+      );
+  }, [compareSpecRows]);
+
+  // ASARVO_COMPARE_V27_SPEC_COMPLETENESS_CONFIDENCE
+  const compareSpecCompleteness = useMemo(() => {
+    return compareFamilies.map((family, familyIndex) => {
+      const knownLabels = compareSpecRows
+        .filter((row) => row.values[familyIndex] !== null)
+        .map((row) => row.label);
+
+      const missingLabels = compareSpecRows
+        .filter((row) => row.values[familyIndex] === null)
+        .map((row) => row.label);
+
+      const known = knownLabels.length;
+      const total = compareSpecRows.length;
+      const ratio = total > 0 ? known / total : 0;
+
+      return {
+        key: family.key,
+        known,
+        total,
+        ratio,
+        missingLabels,
+      };
+    });
+  }, [compareFamilies, compareSpecRows]);
+
+  const compareSpecCompletenessByKey = useMemo(
+    () =>
+      new Map(
+        compareSpecCompleteness.map((entry) => [
+          entry.key,
+          entry,
+        ])
+      ),
+    [compareSpecCompleteness]
+  );
+
+  // ASARVO_COMPARE_V22_DECISION_CLARITY
+  const compareMetricGap = (
+    values: Array<number | null>,
+    mode: "min" | "max"
+  ): number | null => {
+    const finite = values.filter(
+      (value): value is number =>
+        typeof value === "number" && Number.isFinite(value)
+    );
+
+    if (finite.length < 2) {
+      return null;
+    }
+
+    const sorted = [...finite].sort(
+      mode === "min"
+        ? (a, b) => a - b
+        : (a, b) => b - a
+    );
+
+    return Math.abs(sorted[0] - sorted[1]) < 0.0001
+      ? 0
+      : Math.abs(sorted[0] - sorted[1]);
+  };
+
+  const compareDecisionEligibleFamilies =
+    compareFamilies.filter(compareFamilyEligibleForLeaders);
+
+  const compareDecisionPriceGap = compareMetricGap(
+    compareDecisionEligibleFamilies.map(
+      (family) => family.lowestPrice
+    ),
+    "min"
+  );
+
+  const compareDecisionDealScoreGap = compareMetricGap(
+    compareDecisionEligibleFamilies.map(
+      compareFamilyDealScore
+    ),
+    "max"
+  );
+
+  const compareDecisionRiskGap = compareMetricGap(
+    compareDecisionEligibleFamilies.map(
+      compareFamilyRiskScore
+    ),
+    "min"
+  );
 
   const comparePriceLeaders =
     compareLeaderFamilies(
@@ -3439,6 +5010,9 @@ function SearchPageContent() {
         ? `• Najniższe ryzyko: ${compareLeaderNames(compareRiskLeaders)}`
         : "• Najniższe ryzyko: brak danych",
       "",
+      compareHasRelevanceExcludedFamily
+        ? "Uwaga: podejrzane dopasowania z Relevance Shield są widoczne w porównaniu, ale wyłączone z liderów metryk."
+        : "",
       "ASARVO nie wybiera jednego zwycięzcy całości — pokazuje liderów konkretnych metryk."
     );
 
@@ -3510,6 +5084,63 @@ function SearchPageContent() {
       ) ?? null,
     [productFamilies, safestProduct]
   );
+
+
+  const shortlistEntries = useMemo<ShortlistEntry[]>(() => {
+    const candidates: Array<{
+      role: ShortlistRole;
+      product: Product | null;
+      family: ProductFamily | null;
+    }> = [
+      { role: "best", product: bestProduct, family: bestProductFamily },
+      { role: "cheapest", product: cheapestProduct, family: cheapestProductFamily },
+      { role: "safest", product: safestProduct, family: safestProductFamily },
+    ];
+
+    const merged = new Map<string, ShortlistEntry>();
+
+    for (const candidate of candidates) {
+      if (!candidate.product) continue;
+
+      const key =
+        candidate.family?.key ??
+        `${normalizeGroupingText(candidate.product.store)}::${candidate.product.id}`;
+
+      const existing =
+        merged.get(key) ??
+        Array.from(merged.values()).find((entry) =>
+          shortlistSameProductModel(
+            entry.product,
+            entry.family,
+            candidate.product!,
+            candidate.family
+          )
+        );
+
+      if (existing) {
+        if (!existing.roles.includes(candidate.role)) {
+          existing.roles.push(candidate.role);
+        }
+        continue;
+      }
+
+      merged.set(key, {
+        key,
+        product: candidate.product,
+        family: candidate.family,
+        roles: [candidate.role],
+      });
+    }
+
+    return Array.from(merged.values());
+  }, [
+    bestProduct,
+    bestProductFamily,
+    cheapestProduct,
+    cheapestProductFamily,
+    safestProduct,
+    safestProductFamily,
+  ]);
 
   const otherProductFamilies = useMemo(() => {
     const families = productFamilies.filter(
@@ -3658,14 +5289,14 @@ function SearchPageContent() {
   };
   if (loading) {
     return (
-      <>
+      <div className="min-h-[100dvh] bg-[#02060c] text-white">
         <AsarvoSearchLoader query={query} />
 
-        <div className="fixed inset-x-0 bottom-8 z-[100] flex justify-center px-4">
+        <div className="fixed inset-x-0 bottom-6 z-[100] flex justify-center px-4 sm:bottom-8">
           <button
             type="button"
             onClick={handleCancelSearch}
-            className="inline-flex min-h-12 items-center gap-2 rounded-xl border border-red-400/25 bg-[#0b0b0d]/95 px-5 py-3 text-sm font-semibold text-red-200 shadow-[0_12px_50px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-300/45 hover:bg-red-500/[0.10] hover:text-red-100 focus:outline-none focus:ring-2 focus:ring-red-400/40"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-red-400/25 bg-[#0b0b0d]/95 px-4 py-2.5 text-xs font-semibold text-red-200 sm:min-h-12 sm:px-5 sm:py-3 sm:text-sm shadow-[0_12px_50px_rgba(0,0,0,0.45)] backdrop-blur transition hover:border-red-300/45 hover:bg-red-500/[0.10] hover:text-red-100 focus:outline-none focus:ring-2 focus:ring-red-400/40"
             aria-label="Anuluj wyszukiwanie"
           >
             <svg
@@ -3684,19 +5315,20 @@ function SearchPageContent() {
             Anuluj wyszukiwanie
           </button>
         </div>
-      </>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#050505] text-white">
+    <main className="min-h-screen bg-[#03060a] text-white">
 
-      <div className="pointer-events-none fixed left-1/2 top-[-300px] h-[600px] w-[900px] -translate-x-1/2 rounded-full bg-blue-600/[0.08] blur-[150px]" />
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_50%_-12%,rgba(37,99,235,0.30),transparent_35%),radial-gradient(circle_at_18%_35%,rgba(14,165,233,0.08),transparent_27%),radial-gradient(circle_at_82%_58%,rgba(16,185,129,0.05),transparent_24%)]" />
+      <div className="pointer-events-none fixed inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-blue-400/35 to-transparent" />
 
-      <div className="relative mx-auto min-h-screen max-w-6xl px-5 sm:px-8">
+      <div className="relative mx-auto min-h-screen max-w-[1480px] px-4 sm:px-8 lg:px-10">
 
         {/* HEADER */}
-        <header className="flex items-center justify-between border-b border-white/[0.06] py-5">
+        <header className="flex items-center justify-between border-b border-blue-400/[0.08] py-4 sm:py-5">
 
           <a
             href="/"
@@ -3706,7 +5338,7 @@ function SearchPageContent() {
             <img
               src="/asarvo-mark.png"
               alt=""
-              className="h-9 w-9 object-contain transition group-hover:scale-105"
+              className="h-8 w-8 object-contain transition group-hover:scale-105 sm:h-9 sm:w-9"
             />
             <div>
               <div className="text-lg font-semibold tracking-[0.14em] text-white">
@@ -3720,7 +5352,7 @@ function SearchPageContent() {
 
           <a
             href={isAuthenticated ? "/account" : "/login"}
-            className="rounded-full border border-white/10 bg-white/[0.03] px-5 py-2 text-sm text-gray-300 transition hover:bg-white/[0.07] hover:text-white"
+            className="rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-2 text-xs text-gray-300 transition hover:bg-white/[0.07] hover:text-white sm:px-5 sm:text-sm"
           >
             {!authReady
               ? "Konto"
@@ -3732,11 +5364,11 @@ function SearchPageContent() {
         </header>
 
         {/* WYSZUKIWARKA */}
-        <div className="mt-7">
+        <div className="mt-6 sm:mt-7">
 
           <form
             action="/search"
-            className="rounded-2xl border border-white/10 bg-white/[0.035] p-2 transition focus-within:border-blue-500/25"
+            className="rounded-2xl border border-blue-400/[0.14] bg-[#07101d]/80 p-1.5 shadow-[0_18px_70px_rgba(16,61,153,0.12)] backdrop-blur-xl transition focus-within:border-blue-400/35 focus-within:shadow-[0_20px_90px_rgba(37,99,235,0.20)] sm:p-2"
           >
             <div className="flex items-center gap-2">
               <input
@@ -3747,7 +5379,7 @@ function SearchPageContent() {
                   if (imageMessage) setImageMessage(null);
                 }}
                 placeholder="Czego szukasz?"
-                className="min-h-14 min-w-0 flex-1 bg-transparent px-4 text-base text-white outline-none placeholder:text-gray-600"
+                className="min-h-12 min-w-0 flex-1 bg-transparent px-3 text-sm text-white outline-none placeholder:text-gray-600 sm:min-h-14 sm:px-4 sm:text-base"
               />
 
               <input
@@ -3770,7 +5402,7 @@ function SearchPageContent() {
                 disabled={imageAnalyzing}
                 aria-label="Wyszukaj produktem ze zdjęcia"
                 title="Dodaj zdjęcie produktu"
-                className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border transition ${
+                className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition sm:h-12 sm:w-12 ${
                   imageAnalyzing
                     ? "cursor-wait border-violet-300/45 bg-violet-400/[0.12] text-violet-200"
                     : "border-white/10 bg-white/[0.03] text-gray-400 hover:border-violet-400/25 hover:bg-violet-500/[0.07] hover:text-violet-300"
@@ -3805,7 +5437,7 @@ function SearchPageContent() {
               <button
                 type="submit"
                 disabled={!searchInput.trim()}
-                className="min-h-12 shrink-0 rounded-xl bg-blue-600 px-5 font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40 sm:px-9"
+                className="min-h-11 shrink-0 rounded-xl bg-blue-600 px-4 text-sm font-semibold transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-12 sm:px-9 sm:text-base"
               >
                 Szukaj
               </button>
@@ -3827,25 +5459,25 @@ function SearchPageContent() {
         </div>
 
         {/* WYNIKI */}
-        <section className="pb-20 pt-8">
+        <section className="pb-16 pt-6 sm:pb-20 sm:pt-8">
 
-          <p className="text-sm text-gray-500">
+          <p className="text-xs text-gray-500 sm:text-sm">
             Wyniki wyszukiwania dla:
           </p>
 
-          <h1 className="mt-2 text-3xl font-bold sm:text-4xl">
+          <h1 className="mt-2 text-2xl font-bold leading-tight sm:text-4xl">
             „{query}”
           </h1>
 
           {/* FILTRY */}
-          <div className="mt-7 flex flex-wrap gap-3">
+          <div className="-mx-1 mt-7 flex gap-2 overflow-x-auto px-1 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:mx-0 sm:flex-wrap sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0">
 
             <select
               value={conditionFilter}
               onChange={(e) =>
                 setConditionFilter(e.target.value)
               }
-              className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
+              className="shrink-0 cursor-pointer appearance-none rounded-full border border-white/10 bg-[#0c0c0c] px-4 py-2.5 pr-8 text-sm text-gray-300 outline-none transition hover:border-blue-400/20 sm:px-5 sm:py-3"
             >
               <option value="Wszystkie">Stan: wszystkie</option>
               <option>Nowy</option>
@@ -3857,7 +5489,7 @@ function SearchPageContent() {
               onChange={(e) =>
                 setPriceFilter(e.target.value)
               }
-              className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
+              className="shrink-0 cursor-pointer appearance-none rounded-full border border-white/10 bg-[#0c0c0c] px-4 py-2.5 pr-8 text-sm text-gray-300 outline-none transition hover:border-blue-400/20 sm:px-5 sm:py-3"
             >
               <option value="Wszystkie">Cena: wszystkie</option>
               <option>Do 100 zł</option>
@@ -3873,7 +5505,7 @@ function SearchPageContent() {
               onChange={(e) =>
                 setDeliveryFilter(e.target.value)
               }
-              className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
+              className="shrink-0 cursor-pointer appearance-none rounded-full border border-white/10 bg-[#0c0c0c] px-4 py-2.5 pr-8 text-sm text-gray-300 outline-none transition hover:border-blue-400/20 sm:px-5 sm:py-3"
             >
               <option value="Wszystkie">Dostawa: wszystkie</option>
               <option>Darmowa</option>
@@ -3886,7 +5518,7 @@ function SearchPageContent() {
               onChange={(e) =>
                 setStoreFilter(e.target.value)
               }
-              className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
+              className="shrink-0 cursor-pointer appearance-none rounded-full border border-white/10 bg-[#0c0c0c] px-4 py-2.5 pr-8 text-sm text-gray-300 outline-none transition hover:border-blue-400/20 sm:px-5 sm:py-3"
             >
               <option value="Wszystkie">Sklep: wszystkie</option>
               {Array.from(new Set(products.map((product) => product.store)))
@@ -3901,7 +5533,7 @@ function SearchPageContent() {
               onChange={(e) =>
                 setRatingFilter(e.target.value)
               }
-              className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
+              className="shrink-0 cursor-pointer appearance-none rounded-full border border-white/10 bg-[#0c0c0c] px-4 py-2.5 pr-8 text-sm text-gray-300 outline-none transition hover:border-blue-400/20 sm:px-5 sm:py-3"
             >
               <option value="Wszystkie">Ocena: wszystkie</option>
               <option>4+</option>
@@ -3915,7 +5547,7 @@ function SearchPageContent() {
                 setSortMode(e.target.value)
               }
               aria-label="Sortowanie wyników"
-              className="cursor-pointer rounded-full border border-white/10 bg-[#0c0c0c] px-5 py-3 text-sm text-gray-300 outline-none"
+              className="shrink-0 cursor-pointer appearance-none rounded-full border border-white/10 bg-[#0c0c0c] px-4 py-2.5 pr-8 text-sm text-gray-300 outline-none transition hover:border-blue-400/20 sm:px-5 sm:py-3"
             >
               <option>ASARVO</option>
               <option>Cena: rosnąco</option>
@@ -3940,7 +5572,7 @@ function SearchPageContent() {
                 event.stopPropagation();
                 void shareCurrentSearch();
               }}
-              className="rounded-full border border-blue-500/20 bg-blue-500/[0.06] px-5 py-3 text-sm font-medium text-blue-200 transition hover:border-blue-400/35 hover:bg-blue-500/[0.10] hover:text-white"
+              className="shrink-0 rounded-full border border-blue-500/20 bg-blue-500/[0.06] px-4 py-2.5 text-sm font-medium text-blue-200 transition hover:border-blue-400/35 hover:bg-blue-500/[0.10] hover:text-white sm:px-5 sm:py-3"
             >
               🔗 Kopiuj link wyszukiwania
             </button>
@@ -3949,7 +5581,7 @@ function SearchPageContent() {
               <button
                 type="button"
                 onClick={clearResultFilters}
-                className="rounded-full border border-white/10 bg-white/[0.03] px-5 py-3 text-sm text-gray-400 transition hover:border-blue-500/30 hover:bg-blue-500/[0.06] hover:text-white"
+                className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm text-gray-400 transition hover:border-blue-500/30 hover:bg-blue-500/[0.06] hover:text-white sm:px-5 sm:py-3"
               >
                 Wyczyść filtry
               </button>
@@ -3991,6 +5623,19 @@ function SearchPageContent() {
                   </b>
                 </span>
               )}
+
+              {/* ASARVO_INTENT_CORE_V1_REQUIREMENTS_UI */}
+              {interpretation.requirements?.map((requirement) => (
+                <span
+                  key={`requirement-${requirement.key}-${requirement.value}`}
+                  className="ml-2"
+                >
+                  • {requirement.label}{" "}
+                  <b className="text-gray-300">
+                    {requirement.value}
+                  </b>
+                </span>
+              ))}
 
               {interpretation.condition && (
                 <span className="ml-2">
@@ -4036,6 +5681,39 @@ function SearchPageContent() {
             </div>
           )}
 
+          {suspiciousRelevanceCount > 0 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/15 bg-amber-400/[0.035] px-4 py-2.5 text-xs">
+              <div className="flex min-w-0 items-center gap-2 text-gray-400">
+                <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-amber-400/15 bg-amber-400/[0.06] text-[11px] text-amber-300">
+                  🛡
+                </span>
+                <span className="truncate">
+                  {showSuspiciousMatches
+                    ? `Relevance Shield: pokazujesz również ${countLabel(
+                        suspiciousRelevanceCount,
+                        "podejrzane dopasowanie",
+                        "podejrzane dopasowania",
+                        "podejrzanych dopasowań"
+                      )}.`
+                    : `Relevance Shield ukrył ${countLabel(
+                        suspiciousRelevanceCount,
+                        "akcesorium",
+                        "akcesoria",
+                        "akcesoriów"
+                      )}, które nie wyglądały jak właściwy produkt.`}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={toggleSuspiciousMatches}
+                className="inline-flex shrink-0 items-center justify-center rounded-lg border border-amber-400/18 bg-amber-400/[0.055] px-3 py-1.5 text-[10px] font-semibold text-amber-100 transition hover:border-amber-300/35 hover:bg-amber-400/[0.10] hover:text-white"
+              >
+                {showSuspiciousMatches ? "Ukryj" : "Pokaż mimo to"}
+              </button>
+            </div>
+          )}
+
           {restoredFromSearchCache &&
             !loading &&
             interpretation && (
@@ -4055,51 +5733,146 @@ function SearchPageContent() {
               </div>
             )}
 
+          {/* ASARVO_RESULTS_UI_V5_9 — ADAPTIVE DECISION */}
+          {bestProduct && shortlistEntries.length > 1 && (
+            <div className="mt-7">
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-blue-400/20 bg-blue-500/[0.07] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-blue-300 shadow-[0_0_14px_rgba(96,165,250,0.9)]" />
+                    ASARVO SHORTLIST
+                  </div>
+
+                  <h2 className="mt-3 text-xl font-bold tracking-tight sm:text-3xl">
+                    {`${shortlistEntries.length} najważniejsze wybory od razu`}
+                  </h2>
+
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-500">
+                    Różne odpowiedzi na najważniejsze pytania: dopasowanie, cena i bezpieczeństwo.
+                  </p>
+                </div>
+
+                <div className="rounded-full border border-white/[0.06] bg-white/[0.018] px-3.5 py-2 text-[11px] text-gray-500">
+                  {countLabel(filteredProducts.length, "oferta", "oferty", "ofert")} · {countLabel(productFamilies.length, "produkt", "produkty", "produktów")} · {countLabel(totalStoreCount, "źródło", "źródła", "źródeł")}
+                </div>
+              </div>
+
+              <div
+                className={`grid gap-4 ${
+                  shortlistEntries.length === 2
+                    ? "lg:grid-cols-2"
+                    : "lg:grid-cols-3"
+                }`}
+              >
+                {shortlistEntries.map((entry) => (
+                  <ShortlistCard key={entry.key} entry={entry} />
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* NAJLEPSZA OFERTA */}
           {bestProduct ? (
-            <div className="mt-7 overflow-hidden rounded-3xl border border-blue-500/40 bg-[#080d17] shadow-[0_20px_80px_rgba(37,99,235,0.08)]">
+            <div className={`group relative ${productFamilies.length === 1 ? "mt-6" : "mt-4"} overflow-hidden rounded-[24px] border border-blue-400/25 sm:rounded-[30px] bg-[linear-gradient(135deg,rgba(9,20,37,0.985),rgba(5,9,15,0.985)_58%,rgba(4,7,12,0.995))] shadow-[0_32px_130px_rgba(37,99,235,0.14)] ring-1 ring-inset ring-white/[0.018] before:pointer-events-none before:absolute before:inset-x-12 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-blue-300/55 before:to-transparent`}>
 
-              <div className="border-b border-white/[0.06] bg-blue-500/[0.04] px-7 py-4 sm:px-8">
+              <div className="border-b border-white/[0.06] bg-[linear-gradient(90deg,rgba(37,99,235,0.09),rgba(37,99,235,0.025)_42%,transparent)] px-4 py-3 backdrop-blur-xl sm:px-7 sm:py-3.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="inline-flex rounded-full border border-blue-500/20 bg-blue-500/[0.10] px-4 py-2 text-xs font-semibold text-blue-300">
-                    🏆 NAJLEPSZA OFERTA
+                    ✦ WYBRANE PRZEZ ASARVO
                   </span>
 
                   {typeof bestProduct.dealScore === "number" && (
-                    <span className="inline-flex rounded-full border border-emerald-500/20 bg-emerald-500/[0.08] px-4 py-2 text-xs font-semibold text-emerald-300">
+                    <span
+                      className={`inline-flex rounded-full border px-4 py-2 text-xs font-semibold ${scoreChipTone(
+                        bestProduct.dealScore
+                      )}`}
+                    >
                       ASARVO Score {bestProduct.dealScore}/100
                     </span>
                   )}
 
-                  {bestProduct.id === cheapestProduct?.id && (
-                    <span className="inline-flex rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-4 py-2 text-xs font-semibold text-amber-300">
-                      💰 {cheapestHasConfirmedTotal ? "NAJTAŃSZY KOSZT" : "NAJNIŻSZA CENA"}
+                  {productFamilies.length === 1 ? (
+                    <span className="inline-flex rounded-full border border-violet-400/18 bg-violet-500/[0.06] px-4 py-2 text-xs font-semibold text-violet-200">
+                      ✦ 1 ZWERYFIKOWANY MODEL
                     </span>
-                  )}
+                  ) : (
+                    <>
+                      {bestProduct.id === cheapestProduct?.id && (
+                        <span className="inline-flex rounded-full border border-amber-500/20 bg-amber-500/[0.08] px-4 py-2 text-xs font-semibold text-amber-300">
+                          💰 {cheapestHasConfirmedTotal ? "NAJTAŃSZY Z WYNIKÓW" : "NAJNIŻSZA CENA W WYNIKACH"}
+                        </span>
+                      )}
 
-                  {bestProduct.safestOffer && (
-                    <span className="inline-flex rounded-full border border-cyan-500/20 bg-cyan-500/[0.08] px-4 py-2 text-xs font-semibold text-cyan-300">
-                      🛡️ NAJBEZPIECZNIEJSZA
-                    </span>
+                      {bestProduct.safestOffer && (
+                        <span className="inline-flex rounded-full border border-cyan-500/20 bg-cyan-500/[0.08] px-4 py-2 text-xs font-semibold text-cyan-300">
+                          🛡️ NAJBEZPIECZNIEJSZA
+                        </span>
+                      )}
+
+                      {bestProduct.id === cheapestProduct?.id &&
+                        typeof bestProduct.priceScore === "number" &&
+                        bestProduct.priceScore < 45 && (
+                          <span className="inline-flex rounded-full border border-amber-400/15 bg-amber-400/[0.045] px-3 py-2 text-[10px] font-medium text-amber-200/90">
+                            najtańszy tutaj ≠ atrakcyjna cena
+                          </span>
+                        )}
+                    </>
                   )}
                 </div>
               </div>
 
-              <div className="p-7 sm:p-8">
+              <div className="p-4 sm:p-7">
                 {/* ASARVO_RESULT_HERO_LAYOUT_V1 */}
-                <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
+                <div className="grid items-start gap-5 sm:gap-6 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_330px]">
 
-                  <div className="min-w-0 flex-1">
-                    <div className="break-words text-sm font-medium text-gray-500">
-                      🏪 {bestProduct.store}
+                  <div className="flex min-w-0 flex-col gap-5 sm:gap-6 md:flex-row">
+                    <ProductVisual
+                      product={bestProduct}
+                      label={
+                        bestProductFamily
+                          ? productFamilyUiIdentity(bestProductFamily)
+                          : productUiIdentity(bestProduct)
+                      }
+                    />
+
+                    <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 text-sm font-medium text-gray-500">
+                      <span>🏪 {bestProduct.store}</span>
+                      <span
+                        className={`rounded-full border px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.08em] ${sourceKindChipTone(
+                          bestProduct.store
+                        )}`}
+                      >
+                        {sourceKindLabel(bestProduct.store)}
+                      </span>
                     </div>
 
                     <h2
-                      title={bestProductFamily?.displayName ?? bestProduct.name}
-                      className="mt-3 line-clamp-5 break-words text-xl font-bold leading-tight sm:text-2xl xl:text-3xl"
+                      className="mt-2.5 line-clamp-3 break-words text-[24px] font-bold leading-[1.12] tracking-tight sm:mt-3 sm:text-3xl xl:text-[34px]"
                     >
-                      {bestProductFamily?.displayName ?? bestProduct.name}
+                      {bestProductFamily
+                        ? productFamilyUiIdentity(bestProductFamily)
+                        : productUiIdentity(bestProduct)}
                     </h2>
+
+                    {(bestProductFamily
+                      ? productFamilyUiSpecs(bestProductFamily)
+                      : productUiSpecs(bestProduct)
+                    ).length > 0 && (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {(bestProductFamily
+                          ? productFamilyUiSpecs(bestProductFamily)
+                          : productUiSpecs(bestProduct)
+                        ).map((spec) => (
+                          <span
+                            key={spec}
+                            className="rounded-lg border border-blue-400/15 bg-blue-500/[0.055] px-2.5 py-1.5 text-[11px] font-semibold text-blue-100/85"
+                          >
+                            {spec}
+                          </span>
+                        ))}
+                      </div>
+                    )}
 
                     {familyVariantSummary(bestProductFamily) && (
                       <div className="mt-3 inline-flex rounded-full border border-violet-500/20 bg-violet-500/[0.07] px-3 py-1.5 text-xs font-medium text-violet-300">
@@ -4107,16 +5880,31 @@ function SearchPageContent() {
                       </div>
                     )}
 
-                    <div className="mt-5 flex flex-wrap gap-2 text-xs">
-                      <span className="rounded-full border border-emerald-500/15 bg-emerald-500/[0.06] px-3 py-1.5 text-emerald-300">
-                        ✓ {originalityLabel(
-                          bestProduct.originalityConfidence ?? "unknown"
-                        )}
-                      </span>
+                    {marketplaceTrustNote(bestProduct.store) && (
+                      <div className="mt-3 rounded-xl border border-amber-400/15 bg-amber-400/[0.045] px-3.5 py-2 text-[11px] leading-5 text-amber-100/85">
+                        <span className="font-semibold text-amber-200">Oferta marketplace.</span>{" "}
+                        Przed zakupem sprawdź stan urządzenia, sprzedawcę, dowód zakupu i gwarancję.
+                      </div>
+                    )}
 
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-gray-300">
-                        {productConditionLabel(bestProduct)}
-                      </span>
+                    <div className="mt-5 flex flex-wrap gap-2 text-xs">
+                      {bestProduct.originalityConfidence &&
+                        bestProduct.originalityConfidence !== "unknown" && (
+                          <span
+                            className={`rounded-full border px-3 py-1.5 ${originalityChipTone(
+                              bestProduct.originalityConfidence
+                            )}`}
+                          >
+                            {originalityChipIcon(bestProduct.originalityConfidence)}{" "}
+                            {originalityUiLabel(bestProduct.originalityConfidence)}
+                          </span>
+                        )}
+
+                      {(bestProduct.condition || bestProduct.assessedCondition === "new" || bestProduct.assessedCondition === "used") && (
+                        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-gray-300">
+                          {productConditionLabel(bestProduct)}
+                        </span>
+                      )}
 
                       <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-gray-300">
                         {riskLabel(bestProduct.riskLevel)}
@@ -4139,74 +5927,42 @@ function SearchPageContent() {
                       )}
                     </div>
 
-                    {bestProduct.aiReason && (
-                      <div className="mt-6 max-w-3xl rounded-2xl border border-white/[0.06] bg-black/20 p-4">
+                    {(bestProduct.aiReason || productFamilies.length === 1) && (
+                      <div className="mt-5 max-w-3xl rounded-2xl border border-white/[0.06] bg-[linear-gradient(145deg,rgba(0,0,0,0.26),rgba(255,255,255,0.012))] p-3.5">
                         <div className="text-xs font-semibold uppercase tracking-wide text-blue-400">
                           Dlaczego ASARVO wybrało tę ofertę?
                         </div>
                         <p className="mt-2 text-sm leading-6 text-gray-400">
-                          {bestProduct.aiReason}
+                          {productFamilies.length === 1
+                            ? singleModelReason(bestProduct)
+                            : bestProduct.aiReason}
                         </p>
                       </div>
                     )}
 
-                    <div className="mt-6 grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                        <div className="text-[11px] text-gray-600">
-                          Dopasowanie
-                        </div>
-                        <div className="mt-1 font-semibold">
-                          {typeof bestProduct.matchScore === "number"
-                            ? `${bestProduct.matchScore}/100`
-                            : "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                        <div className="text-[11px] text-gray-600">
-                          Cena
-                        </div>
-                        <div className="mt-1 font-semibold">
-                          {typeof bestProduct.priceScore === "number"
-                            ? `${bestProduct.priceScore}/100`
-                            : "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                        <div className="text-[11px] text-gray-600">
-                          Źródło
-                        </div>
-                        <div className="mt-1 font-semibold">
-                          {typeof bestProduct.sourceConfidence === "number"
-                            ? `${bestProduct.sourceConfidence}/100`
-                            : "—"}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-                        <div className="text-[11px] text-gray-600">
-                          Ryzyko
-                        </div>
-                        <div className="mt-1 font-semibold">
-                          {typeof bestProduct.riskScore === "number"
-                            ? `${bestProduct.riskScore}/100`
-                            : "—"}
-                        </div>
-                      </div>
+                    <div className="mt-4 grid max-w-3xl grid-cols-2 gap-2 sm:mt-5 sm:gap-2.5 sm:grid-cols-4">
+                      <MetricGauge label="Dopasowanie" value={bestProduct.matchScore} />
+                      <MetricGauge label="Cena" value={bestProduct.priceScore} />
+                      <MetricGauge label="Źródło" value={bestProduct.sourceConfidence} />
+                      <MetricGauge label="Bezpieczeństwo" value={bestProduct.riskScore} inverse />
+                    </div>
                     </div>
                   </div>
 
                   <div className="min-w-0 lg:w-full">
-                    <div className="rounded-2xl border border-white/[0.08] bg-black/20 p-5">
-                      <div className="flex items-center justify-between gap-6 text-sm">
+                    <div className="rounded-2xl border border-blue-300/[0.13] bg-[linear-gradient(145deg,rgba(37,99,235,0.09),rgba(0,0,0,0.30))] p-5 shadow-[0_18px_55px_rgba(37,99,235,0.08)] ring-1 ring-inset ring-white/[0.018]">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-300">
+                        Wybrana oferta
+                      </div>
+
+                      <div className="mt-3 flex items-center justify-between gap-6 text-sm">
                         <span className="text-gray-500">Cena produktu</span>
                         <span className="font-semibold text-white">
                           {formatPrice(bestProduct.price)}
                         </span>
                       </div>
 
-                      <div className="mt-3 flex items-center justify-between gap-6 text-sm">
+                      <div className="mt-2.5 flex items-center justify-between gap-6 text-sm">
                         <span className="text-gray-500">Dostawa</span>
                         <span
                           className={
@@ -4223,19 +5979,21 @@ function SearchPageContent() {
 
                       <div className="my-4 h-px bg-white/[0.07]" />
 
-                      <div className="flex items-end justify-between gap-6">
-                        <div>
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-blue-400">
-                            Razem
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-3">
+                        <div className="min-w-0">
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-300">
+                            {bestProduct.delivery === null ? "Cena produktu" : "Do zapłaty"}
                           </div>
-                          {getPurchaseTotal(bestProduct) === null && (
-                            <div className="mt-1 text-[10px] text-gray-600">
-                              bez potwierdzonej dostawy
-                            </div>
-                          )}
+                          <div className="mt-1 max-w-[120px] text-[10px] leading-4 text-gray-600 sm:max-w-none sm:text-xs">
+                            {bestProduct.delivery === null
+                              ? "dostawa do potwierdzenia"
+                              : bestProduct.store}
+                          </div>
                         </div>
-                        <div className="min-w-0 break-words text-right text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                          {purchaseTotalLabel(bestProduct)}
+                        <div className="whitespace-nowrap text-right text-[26px] font-bold leading-none tracking-tight text-white sm:text-[28px] xl:text-[30px]">
+                          {bestProduct.delivery === null
+                            ? formatPrice(bestProduct.price)
+                            : purchaseTotalLabel(bestProduct)}
                         </div>
                       </div>
                     </div>
@@ -4245,947 +6003,280 @@ function SearchPageContent() {
                         href={bestProduct.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-6 py-3 font-semibold transition hover:bg-blue-500"
+                        className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 px-6 py-3.5 text-sm font-bold text-white shadow-[0_14px_38px_rgba(37,99,235,0.24)] transition duration-300 hover:-translate-y-0.5 hover:brightness-110 hover:shadow-[0_20px_52px_rgba(37,99,235,0.30)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/50 motion-reduce:transform-none"
                       >
-                        Zobacz ofertę ↗
+                        {productFamilies.length === 1 ? "Zobacz ofertę →" : "Zobacz najlepszą ofertę →"}
                       </a>
                     ) : (
-                      <button className="mt-4 w-full rounded-xl bg-blue-600 px-6 py-3 font-semibold">
-                        Zobacz ofertę
+                      <button className="mt-3 w-full rounded-xl bg-blue-500 px-6 py-3.5 text-sm font-bold text-white">
+                        {productFamilies.length === 1 ? "Zobacz ofertę" : "Zobacz najlepszą ofertę"}
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      disabled={
-                        libraryActionBusyKey ===
-                        `favorite:${productStorageKey(bestProduct)}`
-                      }
-                      onClick={() => void toggleFavorite(bestProduct)}
-                      className={`mt-2 inline-flex w-full items-center justify-center rounded-xl border px-6 py-3 text-sm font-medium transition disabled:cursor-wait disabled:opacity-60 ${
-                        isFavorite(bestProduct)
-                          ? "border-rose-500/30 bg-rose-500/[0.10] text-rose-200"
-                          : "border-white/10 bg-white/[0.025] text-gray-300 hover:bg-white/[0.06] hover:text-white"
-                      }`}
-                    >
-                      {isFavorite(bestProduct)
-                        ? "♥ Zapisano w ulubionych"
-                        : "♡ Dodaj do ulubionych"}
-                    </button>
+                    {bestProductFamily && bestProductFamily.storeOffers.length > 1 && (
+                      <div className="mt-3 overflow-hidden rounded-2xl border border-white/[0.07] bg-black/20">
+                        <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                              Inne oferty tego produktu
+                            </div>
+                            <div className="mt-0.5 text-xs text-gray-400">
+                              {bestProductFamily.storeOffers.length} źródeł / sklepów
+                            </div>
+                          </div>
+                          <span className="rounded-full border border-blue-400/15 bg-blue-500/[0.06] px-2.5 py-1 text-[10px] font-semibold text-blue-300">
+                            porównaj
+                          </span>
+                        </div>
 
-                    <button
-                      type="button"
-                      disabled={
-                        libraryActionBusyKey ===
-                        `watch:${productStorageKey(bestProduct)}`
-                      }
-                      onClick={() =>
-                        getPriceWatch(bestProduct)
-                          ? void removePriceWatch(bestProduct)
-                          : openPriceWatchEditor(bestProduct)
-                      }
-                      className={`mt-2 inline-flex w-full items-center justify-center rounded-xl border px-6 py-3 text-sm font-medium transition disabled:cursor-wait disabled:opacity-60 ${
-                        getPriceWatch(bestProduct)
-                          ? "border-amber-500/30 bg-amber-500/[0.10] text-amber-200"
-                          : "border-white/10 bg-white/[0.025] text-gray-300 hover:bg-white/[0.06] hover:text-white"
-                      }`}
-                    >
-                      {getPriceWatch(bestProduct)
-                        ? "🔔 Obserwowana — wyłącz"
-                        : "🔔 Obserwuj cenę"}
-                    </button>
+                        <div className="divide-y divide-white/[0.05]">
+                          {bestProductFamily.storeOffers.slice(0, 4).map((storeOffer) => {
+                            const offer = storeOffer.costRepresentative;
+                            return (
+                              <div key={storeOffer.key} className="flex items-center gap-3 px-4 py-3">
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-xs font-medium text-gray-300">
+                                    {storeOffer.store}
+                                  </div>
+                                  <div className="mt-0.5 text-[10px] text-gray-600">
+                                    {offer.delivery === 0 ? "Darmowa dostawa" : deliveryCostLabel(offer.delivery)}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <div className="text-sm font-bold text-white">
+                                    {purchaseTotalLabel(offer)}
+                                  </div>
+                                </div>
+                                {offer.url && (
+                                  <a
+                                    href={offer.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    aria-label={`Zobacz ofertę ${storeOffer.store}`}
+                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025] text-xs text-gray-300 transition hover:border-blue-400/30 hover:bg-blue-500/[0.08] hover:text-white"
+                                  >
+                                    ↗
+                                  </a>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void shareProduct(
-                          bestProduct,
-                          bestProductFamily?.displayName ??
-                            bestProduct.name
-                        )
-                      }
-                      className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-white/10 bg-white/[0.025] px-6 py-3 text-sm font-medium text-gray-300 transition hover:bg-white/[0.06] hover:text-white"
-                    >
-                      ↗ Udostępnij tylko tę ofertę
-                    </button>
+                        {bestProductFamily.storeOffers.length > 4 && (
+                          <div className="border-t border-white/[0.05] px-4 py-2.5 text-center text-[10px] text-gray-600">
+                            + {bestProductFamily.storeOffers.length - 4} kolejne źródła
+                          </div>
+                        )}
+                      </div>
+                    )}
 
-                    {/* ASARVO_SHARE_SEARCH_V1_FIX4 */}
-                    <button
-                      type="button"
-                      onPointerDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                      }}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void shareCurrentSearch();
-                      }}
-                      className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-blue-500/25 bg-blue-500/[0.08] px-6 py-3 text-sm font-semibold text-blue-200 transition hover:border-blue-400/40 hover:bg-blue-500/[0.14] hover:text-white"
-                    >
-                      🔗 Kopiuj całe wyszukiwanie
-                    </button>
-
-                    {bestProductFamily && (
+                    <div className="mt-3 grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() =>
-                          toggleCompareFamily(bestProductFamily)
-                        }
-                        className={`mt-2 inline-flex w-full items-center justify-center rounded-xl border px-6 py-3 text-sm font-medium transition ${
-                          isFamilyCompared(bestProductFamily)
-                            ? "border-blue-500/35 bg-blue-500/[0.12] text-blue-200"
-                            : "border-white/10 bg-white/[0.025] text-gray-300 hover:bg-white/[0.06] hover:text-white"
+                        disabled={libraryActionBusyKey === `favorite:${productStorageKey(bestProduct)}`}
+                        onClick={() => void toggleFavorite(bestProduct)}
+                        className={`rounded-xl border px-3 py-2.5 text-xs font-medium transition disabled:cursor-wait disabled:opacity-60 ${
+                          isFavorite(bestProduct)
+                            ? "border-rose-500/30 bg-rose-500/[0.10] text-rose-200"
+                            : "border-white/[0.08] bg-white/[0.025] text-gray-400 hover:bg-white/[0.06] hover:text-white"
                         }`}
                       >
-                        {isFamilyCompared(bestProductFamily)
-                          ? "✓ W porównaniu"
-                          : "⇄ Porównaj produkt"}
+                        {isFavorite(bestProduct) ? "♥ Ulubione" : "♡ Ulubione"}
                       </button>
-                    )}
+
+                      <button
+                        type="button"
+                        disabled={libraryActionBusyKey === `watch:${productStorageKey(bestProduct)}`}
+                        onClick={() =>
+                          getPriceWatch(bestProduct)
+                            ? void removePriceWatch(bestProduct)
+                            : openPriceWatchEditor(bestProduct)
+                        }
+                        className={`rounded-xl border px-3 py-2.5 text-xs font-medium transition disabled:cursor-wait disabled:opacity-60 ${
+                          getPriceWatch(bestProduct)
+                            ? "border-amber-500/30 bg-amber-500/[0.10] text-amber-200"
+                            : "border-white/[0.08] bg-white/[0.025] text-gray-400 hover:bg-white/[0.06] hover:text-white"
+                        }`}
+                      >
+                        🔔 {getPriceWatch(bestProduct) ? "Obserwujesz" : "Obserwuj"}
+                      </button>
+
+                      {bestProductFamily && (
+                        <button
+                          type="button"
+                          onClick={() => toggleCompareFamily(bestProductFamily)}
+                          className={`rounded-xl border px-3 py-2.5 text-xs font-medium transition ${
+                            isFamilyCompared(bestProductFamily)
+                              ? "border-blue-500/35 bg-blue-500/[0.12] text-blue-200"
+                              : "border-white/[0.08] bg-white/[0.025] text-gray-400 hover:bg-white/[0.06] hover:text-white"
+                          }`}
+                        >
+                          {isFamilyCompared(bestProductFamily) ? "✓ W porównaniu" : "⇄ Porównaj"}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => void shareProduct(bestProduct, bestProductFamily?.displayName ?? bestProduct.name)}
+                        className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2.5 text-xs font-medium text-gray-400 transition hover:bg-white/[0.06] hover:text-white"
+                      >
+                        ↗ Udostępnij
+                      </button>
+                    </div>
                   </div>
 
                 </div>
               </div>
             </div>
           ) : searchWasCancelled ? null : (
-            <div className="mt-7 overflow-hidden rounded-3xl border border-blue-500/20 bg-gradient-to-b from-blue-500/[0.06] via-[#080c14] to-[#06080d] shadow-[0_24px_90px_rgba(37,99,235,0.08)]">
-              <div className="border-b border-white/[0.06] px-6 py-7 sm:px-9 sm:py-8">
-                <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
-                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/[0.08] text-2xl shadow-[0_0_35px_rgba(59,130,246,0.10)]">
-                    ✦
+            <div className="mt-6 overflow-hidden rounded-[26px] border border-blue-400/20 bg-[linear-gradient(145deg,rgba(10,20,36,0.96),rgba(3,7,12,0.995))] shadow-[0_24px_90px_rgba(37,99,235,0.08)] sm:mt-7 sm:rounded-[30px]">
+              <div className="relative overflow-hidden border-b border-white/[0.06] px-5 py-6 sm:px-8 sm:py-7">
+                <div className="pointer-events-none absolute -right-20 -top-24 h-56 w-56 rounded-full bg-blue-500/[0.08] blur-3xl" />
+                <div className="relative flex items-start gap-4">
+                  <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/[0.08] text-lg text-blue-200 shadow-[0_0_34px_rgba(59,130,246,0.10)] sm:h-12 sm:w-12">
+                    0
                   </div>
 
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-400">
-                      ASARVO — wynik zweryfikowany
+                  <div className="min-w-0">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.20em] text-blue-400">
+                      ASARVO · wynik zweryfikowany
                     </div>
-
-                    <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
-                      Nie znaleźliśmy oferty spełniającej wszystkie wymagania
+                    <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-[30px]">
+                      0 pewnych dopasowań
                     </h2>
-
-                    <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
-                      Nie pokazujemy przypadkowych produktów tylko po to, żeby zapełnić wyniki.
-                      Jeśli ASARVO nie może potwierdzić zgodności oferty z Twoim zapytaniem,
-                      bezpieczniej jest jej nie pokazać.
+                    <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
+                      ASARVO nie znalazło oferty, którą mogłoby bezpiecznie uznać za zgodną z Twoimi wymaganiami.
+                      Zamiast zgadywać, zatrzymaliśmy wynik tutaj.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid gap-6 p-6 sm:p-9 lg:grid-cols-[1.1fr_0.9fr]">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Rozpoznane wymagania
+              <div className="grid gap-5 p-5 sm:p-7 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                <div className="min-w-0">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    ASARVO zrozumiało
                   </div>
 
-                  <div className="mt-4 flex flex-wrap gap-2">
+                  <div className="mt-3 flex flex-wrap gap-2">
                     {interpretation?.product && (
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-300">
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300">
                         Produkt: {interpretation.product}
                       </span>
                     )}
-
+                    {interpretation?.category && (
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300">
+                        Kategoria: {categoryLabel(interpretation.category)}
+                      </span>
+                    )}
                     {interpretation?.brand && (
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-300">
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300">
                         Marka: {interpretation.brand}
                       </span>
                     )}
-
                     {interpretation?.model && (
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-300">
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300">
                         Model: {interpretation.model}
                       </span>
                     )}
-
-                    {interpretation?.platform && (
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-300">
-                        Platforma: {interpretation.platform}
-                      </span>
-                    )}
-
                     {interpretation?.condition && (
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-300">
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300">
                         Stan: {interpretation.condition === "new" ? "nowy" : "używany"}
                       </span>
                     )}
-
                     {interpretation?.original === true && (
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-300">
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300">
                         Oryginalny
                       </span>
                     )}
-
-                    {interpretation?.maxPrice !== null &&
-                      interpretation?.maxPrice !== undefined && (
-                        <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-300">
-                          Budżet: do {interpretation.maxPrice} zł
-                        </span>
-                      )}
-
+                    {interpretation?.maxPrice !== null && interpretation?.maxPrice !== undefined && (
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-300">
+                        Budżet: do {interpretation.maxPrice} zł
+                      </span>
+                    )}
                     {!interpretation && (
-                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-xs text-gray-500">
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-xs text-gray-500">
                         Nie udało się potwierdzić parametrów zapytania.
                       </span>
                     )}
                   </div>
 
-                  <div className="mt-7 text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">
-                    Co możesz zrobić
+                  <div className="mt-6 text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    Najczęstsze powody
                   </div>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-                    <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
-                      <div className="text-sm font-semibold text-white">
-                        1. Doprecyzuj model
+                  <div className="mt-3 divide-y divide-white/[0.055] overflow-hidden rounded-2xl border border-white/[0.07] bg-black/15">
+                    <div className="flex gap-3 px-4 py-3.5">
+                      <span className="mt-0.5 text-blue-300">01</span>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-200">Za mało potwierdzonych danych</div>
+                        <p className="mt-1 text-xs leading-5 text-gray-500">Sklep lub marketplace nie podał informacji potrzebnych do pewnego dopasowania.</p>
                       </div>
-                      <p className="mt-2 text-xs leading-5 text-gray-500">
-                        Dodaj dokładną markę, model lub wariant, jeśli ich brakuje.
-                      </p>
                     </div>
-
-                    <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
-                      <div className="text-sm font-semibold text-white">
-                        2. Sprawdź budżet
+                    <div className="flex gap-3 px-4 py-3.5">
+                      <span className="mt-0.5 text-blue-300">02</span>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-200">Wymagania są bardzo precyzyjne</div>
+                        <p className="mt-1 text-xs leading-5 text-gray-500">Model, stan, budżet lub inny warunek mógł wykluczyć wszystkie znalezione oferty.</p>
                       </div>
-                      <p className="mt-2 text-xs leading-5 text-gray-500">
-                        Jeśli cena jest bardzo ograniczona, spróbuj lekko zwiększyć maksymalny budżet.
-                      </p>
                     </div>
-
-                    <div className="rounded-2xl border border-white/[0.07] bg-black/20 p-4">
-                      <div className="text-sm font-semibold text-white">
-                        3. Zmień wymaganie
+                    <div className="flex gap-3 px-4 py-3.5">
+                      <span className="mt-0.5 text-blue-300">03</span>
+                      <div>
+                        <div className="text-sm font-semibold text-gray-200">Wynik wyglądał zbyt słabo lub podejrzanie</div>
+                        <p className="mt-1 text-xs leading-5 text-gray-500">ASARVO woli pokazać zero wyników niż podsunąć przypadkowy produkt.</p>
                       </div>
-                      <p className="mt-2 text-xs leading-5 text-gray-500">
-                        Zmień tylko parametr, z którego naprawdę możesz zrezygnować.
-                      </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-blue-500/15 bg-blue-500/[0.035] p-5 sm:p-6">
-                  <div className="text-sm font-semibold text-white">
-                    Popraw wyszukiwanie
+                <div className="self-start rounded-2xl border border-blue-400/15 bg-blue-500/[0.035] p-4 sm:p-5">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-blue-400">
+                    Zmień jedno wymaganie
                   </div>
-
+                  <h3 className="mt-2 text-lg font-bold text-white">Popraw zapytanie i sprawdź ponownie</h3>
                   <p className="mt-2 text-xs leading-5 text-gray-500">
-                    Zmień zapytanie poniżej i ASARVO ponownie sprawdzi rynek.
+                    Najlepiej zmienić tylko jeden element — np. budżet, model albo stan produktu.
                   </p>
 
-                  <form action="/search" className="mt-5">
-                    <label
-                      htmlFor="asarvo-zero-query"
-                      className="text-[11px] font-medium uppercase tracking-[0.16em] text-gray-600"
-                    >
-                      Twoje zapytanie
-                    </label>
-
+                  <form action="/search" className="mt-4">
                     <textarea
                       id="asarvo-zero-query"
                       name="q"
                       defaultValue={query}
-                      rows={4}
-                      className="mt-2 w-full resize-none rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-700 focus:border-blue-500/40 focus:ring-2 focus:ring-blue-500/10"
-                      placeholder="Np. oryginalny pad do PS4, używany, do 250 zł"
+                      rows={3}
+                      className="w-full resize-none rounded-xl border border-white/10 bg-black/25 px-3.5 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-700 focus:border-blue-500/40 focus:ring-2 focus:ring-blue-500/10"
+                      placeholder="Np. laptop gamingowy RTX 4050 do 4500 zł"
                     />
 
                     <button
                       type="submit"
-                      className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-500"
+                      className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 px-5 py-3 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(37,99,235,0.18)] transition hover:brightness-110"
                     >
-                      Szukaj ponownie
+                      Szukaj ponownie →
                     </button>
                   </form>
 
                   <a
                     href="/"
-                    className="mt-3 inline-flex w-full items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] px-5 py-3 text-sm font-medium text-gray-400 transition hover:bg-white/[0.05] hover:text-white"
+                    className="mt-2.5 inline-flex w-full items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] px-5 py-3 text-sm font-medium text-gray-400 transition hover:bg-white/[0.05] hover:text-white"
                   >
-                    Zacznij nowe wyszukiwanie
+                    Nowe wyszukiwanie
                   </a>
 
-                  <p className="mt-4 text-center text-[11px] leading-5 text-gray-600">
-                    ASARVO nie osłabia Twoich wymagań automatycznie.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* PRODUCT → VARIANTS → OFFERS: OFERTY TEGO PRODUKTU */}
-          {bestProduct && bestProductFamily && (
-            <div className="mt-4 overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.012]">
-              <div className="flex flex-col gap-4 border-b border-white/[0.06] px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-400">
-                    PRODUCT → VARIANTS → OFFERS
-                  </div>
-                  <h2 className="mt-1 text-lg font-bold">
-                    Porównaj oferty tego produktu
-                  </h2>
-                  <p className="mt-1 text-xs text-gray-600">
-                    Jeden produkt, warianty i oferty z różnych źródeł — bez powielania tych samych kart.
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 sm:justify-end">
-                  {bestProductFamily.colors.length > 0 && (
-                    <span className="rounded-full border border-violet-500/20 bg-violet-500/[0.06] px-3 py-1.5 text-[10px] font-semibold text-violet-300">
-                      ◈ {bestProductFamily.colors.length}{" "}
-                      {bestProductFamily.colors.length === 1
-                        ? "kolor"
-                        : "kolory"}
-                    </span>
-                  )}
-
-                  <span className="rounded-full border border-blue-500/15 bg-blue-500/[0.05] px-3 py-1.5 text-[10px] font-semibold text-blue-300">
-                    🏪 {bestProductFamily.storeCount}{" "}
-                    {bestProductFamily.storeCount === 1
-                      ? "źródło"
-                      : "źródła / sklepy"}
-                  </span>
-
-                  <span className="rounded-full border border-white/[0.08] bg-white/[0.025] px-3 py-1.5 text-[10px] text-gray-400">
-                    {bestProductFamily.offers.length}{" "}
-                    {bestProductFamily.offers.length === 1
-                      ? "oferta"
-                      : "ofert"}
-                  </span>
-                </div>
-              </div>
-
-              {bestProductFamily.colors.length > 0 && (
-                <div className="border-b border-white/[0.05] px-6 py-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-gray-600">
-                    Rozpoznane warianty kolorystyczne
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {bestProductFamily.colors.map((color) => (
-                      <span
-                        key={color}
-                        className="rounded-full border border-violet-500/15 bg-violet-500/[0.045] px-3 py-1.5 text-xs text-violet-200"
-                      >
-                        {color}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="divide-y divide-white/[0.055]">
-                {bestProductFamily.storeOffers.map((storeOffer) => {
-                  const offer = storeOffer.costRepresentative;
-                  const isBest = storeOfferHasProduct(
-                    storeOffer,
-                    bestProduct
-                  );
-                  const isCheapest = storeOfferHasProduct(
-                    storeOffer,
-                    cheapestProduct
-                  );
-                  const isSafest = storeOfferHasProduct(
-                    storeOffer,
-                    safestProduct
-                  );
-                  const sourceKind = sourceKindLabel(storeOffer.store);
-
-                  return (
-                    <div key={storeOffer.key} className="px-5 py-5 sm:px-6">
-                      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-white">
-                              🏪 {storeOffer.store}
-                            </span>
-
-                            <span
-                              className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold ${
-                                sourceKind === "Marketplace"
-                                  ? "border-violet-500/20 bg-violet-500/[0.06] text-violet-300"
-                                  : sourceKind === "Sklep"
-                                    ? "border-emerald-500/15 bg-emerald-500/[0.05] text-emerald-300"
-                                    : "border-white/[0.08] bg-white/[0.025] text-gray-500"
-                              }`}
-                            >
-                              {sourceKind}
-                            </span>
-
-                            {isBest && (
-                              <span className="rounded-full border border-blue-500/20 bg-blue-500/[0.08] px-2.5 py-1 text-[9px] font-semibold text-blue-300">
-                                🏆 NAJLEPSZA
-                              </span>
-                            )}
-
-                            {isCheapest && (
-                              <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1 text-[9px] font-semibold text-amber-300">
-                                💰 NAJTANIEJ
-                              </span>
-                            )}
-
-                            {isSafest && (
-                              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/[0.07] px-2.5 py-1 text-[9px] font-semibold text-cyan-300">
-                                🛡️ NAJBEZPIECZNIEJ
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="mt-2 text-base font-medium text-gray-200">
-                            {compactListingName(
-                              offer,
-                              bestProductFamily.displayName
-                            )}
-                          </div>
-
-                          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
-                            <span>{productConditionLabel(offer)}</span>
-                            <span>{riskLabel(offer.riskLevel)}</span>
-
-                            {storeOffer.colors.length > 0 && (
-                              <span className="text-violet-300/70">
-                                {storeOffer.colors.length === 1
-                                  ? `Kolor: ${storeOffer.colors[0]}`
-                                  : `Kolory: ${storeOffer.colors.join(" · ")}`}
-                              </span>
-                            )}
-
-                            <span>
-                              {storeOffer.offers.length}{" "}
-                              {storeOffer.offers.length === 1
-                                ? "oferta"
-                                : "oferty"}{" "}
-                              w tym źródle
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="min-w-[210px] rounded-2xl border border-white/[0.06] bg-black/15 px-4 py-3">
-                          <div className="flex items-center justify-between gap-5 text-xs">
-                            <span className="text-gray-600">Produkt</span>
-                            <span className="font-medium text-gray-300">
-                              {formatPrice(
-                                storeOffer.lowestPrice ?? offer.price
-                              )}
-                            </span>
-                          </div>
-
-                          <div className="mt-2 flex items-center justify-between gap-5 text-xs">
-                            <span className="text-gray-600">Dostawa</span>
-                            <span
-                              className={
-                                offer.delivery === null
-                                  ? "font-medium text-amber-300"
-                                  : offer.delivery === 0
-                                    ? "font-medium text-emerald-300"
-                                    : "font-medium text-gray-300"
-                              }
-                            >
-                              {deliveryCostLabel(offer.delivery)}
-                            </span>
-                          </div>
-
-                          <div className="mt-3 border-t border-white/[0.06] pt-3">
-                            <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-400">
-                              Razem
-                            </div>
-                            <div className="mt-1 text-lg font-bold">
-                              {storeOffer.lowestConfirmedTotal !== null
-                                ? formatPrice(
-                                    storeOffer.lowestConfirmedTotal
-                                  )
-                                : storeOffer.lowestPrice !== null
-                                  ? `od ${formatPrice(
-                                      storeOffer.lowestPrice
-                                    )}`
-                                  : purchaseTotalLabel(offer)}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="flex flex-col gap-2 lg:items-end">
-                          {offer.url ? (
-                            <a
-                              href={offer.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex w-full items-center justify-center rounded-xl border border-white/10 px-5 py-3 text-sm font-medium transition hover:bg-white/[0.05] lg:w-auto"
-                            >
-                              Zobacz ↗
-                            </a>
-                          ) : (
-                            <button className="inline-flex w-full items-center justify-center rounded-xl border border-white/10 px-5 py-3 text-sm font-medium transition hover:bg-white/[0.05] lg:w-auto">
-                              Zobacz
-                            </button>
-                          )}
-
-                          <div className="flex w-full gap-2 lg:w-auto">
-                            <button
-                              type="button"
-                              onClick={() => void toggleFavorite(offer)}
-                              className={`flex-1 rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                                isFavorite(offer)
-                                  ? "border-rose-500/25 bg-rose-500/[0.09] text-rose-200"
-                                  : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:text-white"
-                              }`}
-                            >
-                              {isFavorite(offer) ? "♥" : "♡"} Ulubione
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                getPriceWatch(offer)
-                                  ? void removePriceWatch(offer)
-                                  : openPriceWatchEditor(offer)
-                              }
-                              className={`flex-1 rounded-xl border px-3 py-2 text-xs font-medium transition ${
-                                getPriceWatch(offer)
-                                  ? "border-amber-500/25 bg-amber-500/[0.09] text-amber-200"
-                                  : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:text-white"
-                              }`}
-                            >
-                              🔔 {getPriceWatch(offer) ? "Obserwujesz" : "Obserwuj"}
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-
-                      {storeOffer.offers.length > 1 && (
-                        <details className="group mt-4 rounded-2xl border border-white/[0.055] bg-black/10">
-                          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-xs font-medium text-gray-400 transition hover:text-white">
-                            <span>
-                              Pokaż wszystkie {storeOffer.offers.length} oferty z{" "}
-                              {storeOffer.store}
-                            </span>
-                            <span className="text-gray-600 transition group-open:rotate-180">
-                              ▾
-                            </span>
-                          </summary>
-
-                          <div className="border-t border-white/[0.05]">
-                            {storeOffer.offers
-                              .slice()
-                              .sort((a, b) => {
-                                const totalA =
-                                  getPurchaseTotal(a) ?? a.price ?? Infinity;
-                                const totalB =
-                                  getPurchaseTotal(b) ?? b.price ?? Infinity;
-                                return totalA - totalB;
-                              })
-                              .map((listing, listingIndex) => (
-                                <div
-                                  key={`${storeOffer.key}-${listing.id}-${listingIndex}`}
-                                  className="grid gap-3 border-b border-white/[0.045] px-4 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
-                                >
-                                  <div className="min-w-0">
-                                    <div className="text-sm font-medium text-gray-300">
-                                      {compactListingName(
-                                        listing,
-                                        bestProductFamily.displayName
-                                      )}
-                                    </div>
-
-                                    <div className="mt-1 line-clamp-2 text-xs leading-5 text-gray-600">
-                                      Tytuł źródłowy: {listing.name}
-                                    </div>
-
-                                    <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-gray-500">
-                                      {listingVariantLabel(listing) && (
-                                        <span className="rounded-full border border-violet-500/15 bg-violet-500/[0.04] px-2 py-1 text-violet-300/80">
-                                          {listingVariantLabel(listing)}
-                                        </span>
-                                      )}
-
-                                      <span className="rounded-full border border-white/[0.06] bg-white/[0.02] px-2 py-1">
-                                        {productConditionLabel(listing)}
-                                      </span>
-
-                                      <span className="rounded-full border border-white/[0.06] bg-white/[0.02] px-2 py-1">
-                                        {deliveryCostLabel(listing.delivery)}
-                                      </span>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-center gap-3 sm:justify-end">
-                                    <div className="text-right">
-                                      <div className="text-sm font-bold text-white">
-                                        {getPurchaseTotal(listing) !== null
-                                          ? formatPrice(
-                                              getPurchaseTotal(listing)
-                                            )
-                                          : listing.price !== null
-                                            ? `od ${formatPrice(listing.price)}`
-                                            : "Cena nieznana"}
-                                      </div>
-                                      <div className="mt-0.5 text-[10px] text-gray-600">
-                                        {getPurchaseTotal(listing) !== null
-                                          ? "łącznie"
-                                          : "bez potwierdzonej dostawy"}
-                                      </div>
-                                    </div>
-
-                                    {listing.url && (
-                                      <a
-                                        href={listing.url}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="inline-flex shrink-0 items-center justify-center rounded-lg border border-white/[0.08] px-3 py-2 text-xs font-medium text-gray-300 transition hover:bg-white/[0.05] hover:text-white"
-                                      >
-                                        Otwórz ↗
-                                      </a>
-                                    )}
-
-                                    <button
-                                      type="button"
-                                      onClick={() => void toggleFavorite(listing)}
-                                      title={
-                                        isFavorite(listing)
-                                          ? "Usuń z ulubionych"
-                                          : "Dodaj do ulubionych"
-                                      }
-                                      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-sm transition ${
-                                        isFavorite(listing)
-                                          ? "border-rose-500/25 bg-rose-500/[0.09] text-rose-200"
-                                          : "border-white/[0.08] text-gray-500 hover:text-white"
-                                      }`}
-                                    >
-                                      {isFavorite(listing) ? "♥" : "♡"}
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        getPriceWatch(listing)
-                                          ? void removePriceWatch(listing)
-                                          : openPriceWatchEditor(listing)
-                                      }
-                                      title={
-                                        getPriceWatch(listing)
-                                          ? "Wyłącz obserwowanie ceny"
-                                          : "Obserwuj cenę"
-                                      }
-                                      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-sm transition ${
-                                        getPriceWatch(listing)
-                                          ? "border-amber-500/25 bg-amber-500/[0.09] text-amber-200"
-                                          : "border-white/[0.08] text-gray-500 hover:text-white"
-                                      }`}
-                                    >
-                                      🔔
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                          </div>
-                        </details>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* SZYBKIE WYRÓŻNIENIA */}
-          {bestProduct && (
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-
-              {cheapestProduct && (
-                <div className="rounded-2xl border border-amber-500/15 bg-amber-500/[0.035] p-5">
-                  <div className="text-xs font-semibold text-amber-300">
-                    💰 {cheapestHasConfirmedTotal
-                      ? "NAJTAŃSZY POTWIERDZONY KOSZT ZAKUPU"
-                      : "NAJNIŻSZA CENA PRODUKTU"}
-                  </div>
-                  <div className="mt-2 line-clamp-1 font-medium">
-                    {cheapestProductFamily?.displayName ?? cheapestProduct.name}
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    <div className="rounded-xl border border-white/[0.06] bg-black/15 p-3">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-600">Produkt</div>
-                      <div className="mt-1 text-sm font-semibold">
-                        {formatPrice(cheapestProduct.price)}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-white/[0.06] bg-black/15 p-3">
-                      <div className="text-[10px] uppercase tracking-wide text-gray-600">Dostawa</div>
-                      <div className="mt-1 text-sm font-semibold">
-                        {deliveryCostLabel(cheapestProduct.delivery)}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-amber-500/15 bg-amber-500/[0.05] p-3">
-                      <div className="text-[10px] uppercase tracking-wide text-amber-400/70">Razem</div>
-                      <div className="mt-1 text-sm font-bold text-amber-200">
-                        {purchaseTotalLabel(cheapestProduct)}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-end justify-between gap-4">
-                    <div className="text-xs text-gray-600">
-                      {typeof cheapestProduct.dealScore === "number"
-                        ? `ASARVO Score ${cheapestProduct.dealScore}/100`
-                        : cheapestProduct.store}
-                      {" • "}
-                      {riskLabel(cheapestProduct.riskLevel)}
-                    </div>
-                    {cheapestProduct.url && (
-                      <a
-                        href={cheapestProduct.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm font-medium text-amber-300 hover:text-amber-200"
-                      >
-                        Zobacz ↗
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {safestProduct && (
-                <div className="rounded-2xl border border-cyan-500/15 bg-cyan-500/[0.035] p-5">
-                  <div className="text-xs font-semibold text-cyan-300">
-                    🛡️ NAJBEZPIECZNIEJSZA
-                  </div>
-                  <div className="mt-2 line-clamp-1 font-medium">
-                    {safestProductFamily?.displayName ?? safestProduct.name}
-                  </div>
-                  <div className="mt-3 flex items-end justify-between gap-4">
-                    <div>
-                      <div className="text-2xl font-bold">
-                        {purchaseTotalLabel(safestProduct)}
-                      </div>
-                      <div className="mt-1 text-xs text-gray-600">
-                        {getPurchaseTotal(safestProduct) !== null ? "łącznie z dostawą • " : "cena od • "}
-                        {riskLabel(safestProduct.riskLevel)}
-                      </div>
-                    </div>
-                    {safestProduct.url && (
-                      <a
-                        href={safestProduct.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-sm font-medium text-cyan-300 hover:text-cyan-200"
-                      >
-                        Zobacz ↗
-                      </a>
-                    )}
-                  </div>
-                </div>
-              )}
-
-            </div>
-          )}
-
-          {/* KOD RABATOWY */}
-          {bestProduct && couponLoading && (
-            <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.015] p-5">
-              <div className="flex items-center gap-3">
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/10 border-t-emerald-400" />
-                <div>
-                  <div className="text-sm font-medium">
-                    Szukamy aktualnych kodów rabatowych...
-                  </div>
-                  <div className="mt-1 text-xs text-gray-600">
-                    Sprawdzamy internetowe źródła promocji.
+                  <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-400/10 bg-emerald-400/[0.025] px-3 py-2.5 text-[10px] leading-4 text-gray-500">
+                    <span className="text-emerald-300">✓</span>
+                    ASARVO nie rozluźnia Twoich wymagań bez Twojej decyzji.
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {bestProduct && bestDiscount && discountedPrice !== null && (
-            <div className="mt-6 overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.08] to-transparent">
+          {/* ASARVO_RESULTS_UI_V4_1: oferty tego produktu scalone z kartą główną */}
 
-              <div className="p-6 sm:p-7">
-
-                <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
-
-                  <div>
-
-                    <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/[0.08] px-4 py-2 text-xs font-semibold text-emerald-400">
-                      🏷️ ZNALEZIONO KOD RABATOWY
-                    </div>
-
-                    <h2 className="mt-4 text-xl font-bold sm:text-2xl">
-                      Możesz zapłacić mniej
-                    </h2>
-
-                    <p className="mt-2 text-sm leading-6 text-gray-400">
-                      Kod pasuje do sklepu{" "}
-                      <span className="font-medium text-gray-300">
-                        {bestDiscount.store}
-                      </span>{" "}
-                      i może obniżyć cenę tego zakupu.
-                    </p>
-
-                  </div>
-
-                  <div className="shrink-0 text-left sm:text-right">
-
-                    <div className="text-3xl font-bold text-emerald-400">
-                      -{bestDiscount.discountPercent}%
-                    </div>
-
-                    <div className="mt-1 text-xs text-gray-500">
-                      rabatu
-                    </div>
-
-                  </div>
-
-                </div>
-
-                {/* KOD */}
-                <div className="mt-6 rounded-2xl border border-white/10 bg-black/20 p-4">
-
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-
-                    <div>
-
-                      <div className="text-xs text-gray-500">
-                        KOD RABATOWY
-                      </div>
-
-                      <div className="mt-1 font-mono text-2xl font-bold tracking-wider text-white">
-                        {bestDiscount.code}
-                      </div>
-
-                    </div>
-
-                    <button
-                      onClick={() =>
-                        handleCopyCode(bestDiscount.code)
-                      }
-                      className="rounded-xl bg-emerald-500 px-6 py-3 font-semibold text-black transition hover:bg-emerald-400 active:scale-[0.98]"
-                    >
-                      {copiedCode === bestDiscount.code
-                        ? "✓ Skopiowano"
-                        : "Kopiuj kod"}
-                    </button>
-
-                  </div>
-
-                </div>
-
-                {/* CENA PO RABACIE */}
-                <div className="mt-5 grid gap-3 sm:grid-cols-3">
-
-                  <div className="rounded-2xl border border-white/[0.06] bg-black/10 p-4">
-
-                    <div className="text-xs text-gray-500">
-                      Cena produktu
-                    </div>
-
-                    <div className="mt-1 text-lg font-semibold">
-                      {formatPrice(bestProduct.price)}
-                    </div>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-white/[0.06] bg-black/10 p-4">
-
-                    <div className="text-xs text-gray-500">
-                      Oszczędzasz
-                    </div>
-
-                    <div className="mt-1 text-lg font-semibold text-emerald-400">
-                      -
-                      {(
-                        (bestProduct.price ?? 0) -
-                        discountedPrice
-                      )
-                        .toFixed(2)
-                        .replace(".", ",")}{" "}
-                      zł
-                    </div>
-
-                  </div>
-
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
-
-                    <div className="text-xs text-emerald-400">
-                      Cena po rabacie
-                    </div>
-
-                    <div className="mt-1 text-xl font-bold text-emerald-400">
-                      {discountedPrice
-                        .toFixed(2)
-                        .replace(".", ",")}{" "}
-                      zł
-                    </div>
-
-                  </div>
-
-                </div>
-
-                {/* WARUNKI */}
-                <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs text-gray-500">
-
-                  <span>
-                    ✓ Min. zamówienie:{" "}
-                    {bestDiscount.minPrice !== null ? `${bestDiscount.minPrice} zł` : "brak danych"}
-                  </span>
-
-                  <span>
-                    ✓ Ważny do:{" "}
-                    {bestDiscount.expires ?? "brak danych"}
-                  </span>
-
-                  <span>
-                    ✓ {bestDiscount.description}
-                  </span>
-
-                  {bestDiscount.sourceUrl && (
-                    <a
-                      href={bestDiscount.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-emerald-400 hover:text-emerald-300"
-                    >
-                      ↗ {bestDiscount.sourceTitle}
-                    </a>
-                  )}
-
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* BRAK KODU */}
-          {bestProduct && !bestDiscount && !couponLoading && (
-            <div className="mt-6 rounded-2xl border border-white/[0.06] bg-white/[0.015] p-5">
-
-              <div className="flex items-center gap-3">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.04]">
-                  🏷️
-                </div>
-
-                <div>
-
-                  <div className="text-sm font-medium">
-                    Nie znaleziono kodu rabatowego
-                  </div>
-
-                  <div className="mt-1 text-xs text-gray-600">
-                    Automatyczne sprawdzanie kuponów jest obecnie
-                    wyłączone, aby nie używać płatnego API.
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-          )}
+          {/* ASARVO_RESULTS_UI_V4_1: panel kuponów ukryty do czasu ponownego włączenia źródła */}
 
           {compareFamilies.length > 0 && (
             <div className="mt-8 overflow-hidden rounded-3xl border border-blue-500/20 bg-blue-500/[0.035]">
@@ -5199,6 +6290,11 @@ function SearchPageContent() {
                   </h2>
                   <p className="mt-1 text-xs text-gray-500">
                     Wybrano {compareFamilies.length}/3. Porównujesz różne produkty, nie duplikaty ofert tego samego produktu.
+                    {compareHasRelevanceExcludedFamily && (
+                      <span className="mt-2 block rounded-xl border border-amber-500/20 bg-amber-500/[0.055] px-3 py-2 text-amber-200">
+                        ⚠ Inny typ produktu — Relevance Shield wykrył co najmniej jedną podejrzaną pozycję. Nadal możesz ją porównać, ale nie bierze udziału w wyborze liderów metryk.
+                      </span>
+                    )}
                     {compareFamilies.length > 1 && (
                       <span className="mt-1 block text-emerald-300/80">
                         ★ Wyróżniamy najlepszą znaną wartość w każdej metryce. Remis może oznaczać kilka wyróżnień.
@@ -5269,6 +6365,13 @@ function SearchPageContent() {
                       <div className="mt-1 text-xs text-gray-500">
                         Liderzy poszczególnych metryk — bez wybierania jednego zwycięzcy całości.
                       </div>
+                      <div className="mt-2 text-[11px] leading-relaxed text-gray-600">
+                        Zielony lider oznacza najlepszą wartość tylko w danej metryce.
+                        Remis pozostaje remisem, a pozycje oznaczone przez Relevance Shield nie wpływają na liderów.
+                      </div>
+                      <div className="mt-1 text-[11px] leading-relaxed text-gray-600">
+                        Trade-off na kartach pokazuje, ile dany produkt traci względem lidera ceny, Score i ryzyka.
+                      </div>
                     </div>
                   </div>
 
@@ -5292,6 +6395,13 @@ function SearchPageContent() {
                                 remis
                               </span>
                             )}
+                          </div>
+                          <div className="mt-1 text-[10px] text-gray-500">
+                            {comparePriceLeaders.length > 1
+                              ? "Remis cenowy"
+                              : compareDecisionPriceGap !== null
+                                ? `Przewaga: ${formatPrice(compareDecisionPriceGap)}`
+                                : "Brak pełnych danych do różnicy"}
                           </div>
                         </div>
                       )}
@@ -5362,6 +6472,13 @@ function SearchPageContent() {
                               </span>
                             )}
                           </div>
+                          <div className="mt-1 text-[10px] text-gray-500">
+                            {compareDealScoreLeaders.length > 1
+                              ? "Remis punktowy"
+                              : compareDecisionDealScoreGap !== null
+                                ? `Przewaga: ${compareDecisionDealScoreGap.toFixed(0)} pkt`
+                                : "Brak pełnych danych do różnicy"}
+                          </div>
                         </div>
                       )}
 
@@ -5387,8 +6504,188 @@ function SearchPageContent() {
                               </span>
                             )}
                           </div>
+                          <div className="mt-1 text-[10px] text-gray-500">
+                            {compareRiskLeaders.length > 1
+                              ? "Remis ryzyka"
+                              : compareDecisionRiskGap !== null
+                                ? `Przewaga: ${compareDecisionRiskGap.toFixed(0)} pkt ryzyka`
+                                : "Brak pełnych danych do różnicy"}
+                          </div>
                         </div>
                       )}
+                  </div>
+                </div>
+              )}
+
+              {/* ASARVO_COMPARE_V24_SPEC_DIFFERENCE_FOCUS */}
+              {compareFamilies.length > 1 && (
+                <div className="border-b border-white/[0.05] px-6 py-5">
+                  <div className="mb-4">
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-400">
+                      Różnice specyfikacji
+                    </div>
+                    <div className="mt-1 text-xs text-gray-500">
+                      Parametry są odczytywane z nazw produktów. „Różnica” oznacza różne rozpoznane wartości; „niepełne dane” oznacza, że przynajmniej jednej wartości nie udało się pewnie rozpoznać. Dla RAM, SSD i Hz wyróżniamy najwyższą rozpoznaną wartość tylko wtedy, gdy istnieje realna różnica — bez oceniania CPU ani GPU po samej nazwie. Nad tabelą pokazujemy skrót najważniejszych różnic.
+                    </div>
+                    {compareDifferencesOnly && (
+                      <div className="mt-1 text-[11px] text-blue-300/70">
+                        Tryb „Tylko różnice” ukrywa identyczne wiersze specyfikacji.
+                      </div>
+                    )}
+                  </div>
+
+                  {/* ASARVO_COMPARE_V26_KEY_DIFFERENCES_SUMMARY */}
+                  {compareKeyDifferences.length > 0 && (
+                    <div className="mb-4 rounded-2xl border border-blue-500/15 bg-blue-500/[0.03] px-4 py-4">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-300">
+                        Najważniejsze różnice
+                      </div>
+
+                      <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                        {compareKeyDifferences.map((item) => (
+                          <div
+                            key={`key-diff-${item.label}`}
+                            className="rounded-xl border border-white/[0.06] bg-white/[0.015] px-3.5 py-3"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+                                {item.label}
+                              </span>
+
+                              {item.incomplete && (
+                                <span className="text-[9px] font-semibold uppercase tracking-wide text-amber-300/80">
+                                  niepełne dane
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-white">
+                              {item.values.map((value, index) => (
+                                <span
+                                  key={`${item.label}-${value}`}
+                                  className="inline-flex items-center gap-1.5"
+                                >
+                                  {index > 0 && (
+                                    <span className="text-gray-600">
+                                      ↔
+                                    </span>
+                                  )}
+                                  <span>{value}</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-3 text-[10px] leading-relaxed text-gray-600">
+                        To skrót rozpoznanych różnic. Nie oznacza wyboru jednego najlepszego produktu ani rankingu CPU/GPU.
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-2xl border border-white/[0.07]">
+                    <div
+                      className="grid min-w-[760px]"
+                      style={{
+                        gridTemplateColumns: `150px repeat(${compareFamilies.length}, minmax(190px, 1fr))`,
+                      }}
+                    >
+                      <div className="border-b border-r border-white/[0.06] bg-white/[0.025] px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-gray-500">
+                        Parametr
+                      </div>
+
+                      {compareFamilies.map((family) => (
+                        <div
+                          key={`spec-head-${family.key}`}
+                          className="border-b border-r border-white/[0.06] bg-white/[0.025] px-4 py-3 text-xs font-semibold text-white last:border-r-0"
+                          title={family.representative.name}
+                        >
+                          <div className="line-clamp-2">
+                            {family.representative.name}
+                          </div>
+                          {!compareFamilyEligibleForLeaders(family) && (
+                            <div className="mt-1 text-[9px] font-semibold uppercase tracking-wide text-amber-300">
+                              Inny typ produktu
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {visibleCompareSpecRows.map((row) => (
+                        <div key={row.label} className="contents">
+                          <div
+                            className={
+                              "border-b border-r border-white/[0.06] px-4 py-3 text-xs font-medium " +
+                              (row.differs
+                                ? "bg-blue-500/[0.035] text-blue-200"
+                                : row.incomplete
+                                  ? "bg-amber-500/[0.02] text-amber-200/80"
+                                  : "text-gray-500")
+                            }
+                          >
+                            {row.label}
+                            {row.differs ? (
+                              <span className="ml-2 text-[9px] font-semibold uppercase text-blue-400">
+                                różnica
+                              </span>
+                            ) : row.incomplete ? (
+                              <span className="ml-2 text-[9px] font-semibold uppercase text-amber-300/80">
+                                niepełne dane
+                              </span>
+                            ) : (
+                              <span className="ml-2 text-[9px] font-semibold uppercase text-gray-600">
+                                zgodne
+                              </span>
+                            )}
+                          </div>
+
+                          {row.values.map((value, index) => {
+                            const numericValue =
+                              row.numericValues[index];
+
+                            const isKnownNumericLeader =
+                              row.differs &&
+                              row.bestNumeric !== null &&
+                              numericValue !== null &&
+                              Math.abs(
+                                numericValue - row.bestNumeric
+                              ) < 0.0001;
+
+                            return (
+                              <div
+                                key={`${row.label}-${compareFamilies[index]?.key ?? index}`}
+                                className={
+                                  "border-b border-r border-white/[0.06] px-4 py-3 text-xs last:border-r-0 " +
+                                  (isKnownNumericLeader
+                                    ? "bg-emerald-500/[0.045] font-semibold text-emerald-100"
+                                    : row.differs
+                                      ? "bg-blue-500/[0.02] font-semibold text-white"
+                                      : row.incomplete
+                                        ? "bg-amber-500/[0.015] text-gray-300"
+                                        : "text-gray-400")
+                                }
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span>{value ?? "Brak danych"}</span>
+                                  {isKnownNumericLeader && (
+                                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.06] px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wide text-emerald-300">
+                                      najwyższa rozpoznana wartość
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+
+                    {visibleCompareSpecRows.length === 0 && (
+                      <div className="px-5 py-6 text-center text-xs text-gray-500">
+                        Brak rozpoznanych różnic specyfikacji dla tych produktów.
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -5469,6 +6766,205 @@ function SearchPageContent() {
                       </div>
 
                       <div className="mt-5 space-y-3 text-xs">
+                        {/* ASARVO_COMPARE_V22_DECISION_CLARITY */}
+                        <div className="mb-3 flex flex-wrap gap-1.5">
+                          {!compareFamilyEligibleForLeaders(family) ? (
+                            <span className="rounded-full border border-amber-500/25 bg-amber-500/[0.07] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-amber-200">
+                              Poza liderami
+                            </span>
+                          ) : (
+                            <>
+                              {lowestPriceIsBest && (
+                                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.055] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-200">
+                                  Lider ceny
+                                </span>
+                              )}
+                              {dealScoreIsBest && (
+                                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.055] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-200">
+                                  Lider Score
+                                </span>
+                              )}
+                              {riskScoreIsBest && (
+                                <span className="rounded-full border border-emerald-500/20 bg-emerald-500/[0.055] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-200">
+                                  Lider ryzyka
+                                </span>
+                              )}
+                              {!lowestPriceIsBest &&
+                                !dealScoreIsBest &&
+                                !riskScoreIsBest && (
+                                  <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1 text-[9px] font-medium uppercase tracking-wide text-gray-500">
+                                    Bez lidera głównych metryk
+                                  </span>
+                                )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* ASARVO_COMPARE_V27_SPEC_COMPLETENESS_CONFIDENCE */}
+                        {(() => {
+                          const completeness =
+                            compareSpecCompletenessByKey.get(
+                              family.key
+                            );
+
+                          if (!completeness) {
+                            return null;
+                          }
+
+                          const completenessLabel =
+                            completeness.ratio >= 0.85
+                              ? "Dane prawie kompletne"
+                              : completeness.ratio >= 0.6
+                                ? "Dane częściowe"
+                                : "Dużo brakujących danych";
+
+                          return (
+                            <div className="mb-4 rounded-xl border border-white/[0.07] bg-white/[0.018] px-3.5 py-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-gray-500">
+                                  Kompletność specyfikacji
+                                </div>
+
+                                <div className="text-xs font-semibold text-white">
+                                  {completeness.known}/{completeness.total} rozpoznanych
+                                </div>
+                              </div>
+
+                              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                                <div
+                                  className="h-full rounded-full bg-emerald-400/70"
+                                  style={{
+                                    width: `${Math.round(
+                                      completeness.ratio * 100
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+
+                              <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
+                                <span
+                                  className={
+                                    completeness.ratio >= 0.85
+                                      ? "text-emerald-300"
+                                      : completeness.ratio >= 0.6
+                                        ? "text-amber-200"
+                                        : "text-orange-300"
+                                  }
+                                >
+                                  {completenessLabel}
+                                </span>
+
+                                {completeness.missingLabels.length > 0 && (
+                                  <span
+                                    className="text-gray-600"
+                                    title={completeness.missingLabels.join(", ")}
+                                  >
+                                    Braki: {completeness.missingLabels.join(", ")}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* ASARVO_COMPARE_V23_TRADEOFF_INSIGHT */}
+                        <div className="mb-4 rounded-xl border border-blue-500/15 bg-blue-500/[0.035] px-3.5 py-3">
+                          <div className="text-[9px] font-semibold uppercase tracking-[0.14em] text-blue-300">
+                            Trade-off względem liderów
+                          </div>
+
+                          {!compareFamilyEligibleForLeaders(family) ? (
+                            <div className="mt-2 text-[11px] leading-relaxed text-amber-200/80">
+                              Pozycja jest poza analizą liderów przez Relevance Shield.
+                            </div>
+                          ) : (
+                            <div className="mt-2 grid gap-1.5 text-[11px] text-gray-400">
+                              <div className="flex items-center justify-between gap-3">
+                                <span>Cena</span>
+                                <span className={
+                                  family.lowestPrice !== null &&
+                                  compareBestLowestPrice !== null &&
+                                  Math.abs(
+                                    family.lowestPrice -
+                                      compareBestLowestPrice
+                                  ) < 0.0001
+                                    ? "font-semibold text-emerald-300"
+                                    : "font-medium text-gray-300"
+                                }>
+                                  {family.lowestPrice === null ||
+                                  compareBestLowestPrice === null
+                                    ? "brak porównania"
+                                    : Math.abs(
+                                          family.lowestPrice -
+                                            compareBestLowestPrice
+                                        ) < 0.0001
+                                      ? "remis z liderem"
+                                      : `+${formatPrice(
+                                          Math.abs(
+                                            family.lowestPrice -
+                                              compareBestLowestPrice
+                                          )
+                                        )} vs lider`}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3">
+                                <span>ASARVO Score</span>
+                                <span className={
+                                  dealScore !== null &&
+                                  compareBestDealScore !== null &&
+                                  Math.abs(
+                                    dealScore -
+                                      compareBestDealScore
+                                  ) < 0.0001
+                                    ? "font-semibold text-emerald-300"
+                                    : "font-medium text-gray-300"
+                                }>
+                                  {dealScore === null ||
+                                  compareBestDealScore === null
+                                    ? "brak porównania"
+                                    : Math.abs(
+                                          dealScore -
+                                            compareBestDealScore
+                                        ) < 0.0001
+                                      ? "remis z liderem"
+                                      : `-${Math.abs(
+                                          compareBestDealScore -
+                                            dealScore
+                                        ).toFixed(0)} pkt vs lider`}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between gap-3">
+                                <span>Ryzyko</span>
+                                <span className={
+                                  riskScore !== null &&
+                                  compareBestRiskScore !== null &&
+                                  Math.abs(
+                                    riskScore -
+                                      compareBestRiskScore
+                                  ) < 0.0001
+                                    ? "font-semibold text-emerald-300"
+                                    : "font-medium text-gray-300"
+                                }>
+                                  {riskScore === null ||
+                                  compareBestRiskScore === null
+                                    ? "brak porównania"
+                                    : Math.abs(
+                                          riskScore -
+                                            compareBestRiskScore
+                                        ) < 0.0001
+                                      ? "remis z liderem"
+                                      : `+${Math.abs(
+                                          riskScore -
+                                            compareBestRiskScore
+                                        ).toFixed(0)} pkt ryzyka vs lider`}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
                         {(!compareDifferencesOnly || comparePriceDiff) && (
                           <div
                             className={
@@ -5622,373 +7118,238 @@ function SearchPageContent() {
             </div>
           )}
 
-          {/* INNE DOPASOWANE PRODUKTY — PRODUCT → VARIANTS → OFFERS */}
+          {/* ASARVO_RESULTS_UI_V4_7 — PREMIUM GRID + MODEL DEDUPE */}
           {otherProductFamilies.length > 0 && (
-            <div className="mt-10">
-              <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="mt-10 border-t border-white/[0.045] pt-8 sm:mt-12 sm:pt-10">
+              <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                 <div>
-                  <h2 className="text-xl font-bold">
-                    Inne dopasowane produkty
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-400">
+                    Więcej możliwości
+                  </div>
+                  <h2 className="mt-1 text-xl font-bold sm:text-2xl">
+                    Inne pasujące produkty
                   </h2>
                   <p className="mt-1 text-xs text-gray-600">
-                    Każda karta to jeden produkt. W środku ASARVO pokazuje warianty i oferty różnych sklepów.
+                    Pozostałe modele pasujące do Twojego zapytania.
                   </p>
                 </div>
 
                 <div className="inline-flex w-fit rounded-full border border-blue-500/15 bg-blue-500/[0.04] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-300">
-                  {otherProductFamilies.length}{" "}
-                  {otherProductFamilies.length === 1
-                    ? "produkt"
-                    : "produkty"}
+                  {countLabel(otherProductFamilies.length, "produkt", "produkty", "produktów")}
                 </div>
               </div>
 
-              <div className="space-y-4">
-                {otherProductFamilies.map((family) => {
-                  const familyCheapest = familyHasProduct(
-                    family,
-                    cheapestProduct
-                  );
-                  const familySafest = familyHasProduct(
-                    family,
-                    safestProduct
-                  );
+              <div
+                className={`grid gap-4 ${
+                  otherProductFamilies.length === 1
+                    ? "mx-auto max-w-4xl grid-cols-1"
+                    : otherProductFamilies.length === 2
+                      ? "md:grid-cols-2"
+                      : "md:grid-cols-2 xl:grid-cols-6"
+                }`}
+              >
+                {otherProductFamilies.map((family, familyIndex) => {
+                  const representative = family.representative;
+                  const familyCheapest = familyHasProduct(family, cheapestProduct);
+                  const familySafest = familyHasProduct(family, safestProduct);
+                  const displayCost =
+                    family.lowestConfirmedTotal !== null
+                      ? formatPrice(family.lowestConfirmedTotal)
+                      : family.lowestPrice !== null
+                        ? `od ${formatPrice(family.lowestPrice)}`
+                        : "Cena nieznana";
+                  const cardTitle = productFamilyUiIdentity(family);
+                  const cardSpecs = productFamilyUiSpecs(family).slice(0, 4);
 
                   return (
-                    <div
+                    <article
                       key={family.key}
-                      className="overflow-hidden rounded-3xl border border-white/[0.08] bg-white/[0.012] transition hover:border-white/[0.14]"
+                      className={`group relative flex h-full flex-col overflow-hidden rounded-[24px] border border-white/[0.08] bg-[linear-gradient(145deg,rgba(10,17,29,0.97),rgba(4,8,13,0.995))] p-5 shadow-[0_18px_58px_rgba(0,0,0,0.20)] ring-1 ring-inset ring-white/[0.016] transition duration-300 hover:-translate-y-1 hover:border-blue-400/35 hover:shadow-[0_30px_90px_rgba(37,99,235,0.13)] motion-reduce:transform-none motion-reduce:transition-none ${
+                        otherProductFamilies.length === 1
+                          ? "sm:p-6"
+                          : otherProductFamilies.length > 2
+                            ? `xl:col-span-2 ${
+                                otherProductFamilies.length % 3 === 1 &&
+                                familyIndex === otherProductFamilies.length - 1
+                                  ? "xl:col-start-3"
+                                  : otherProductFamilies.length % 3 === 2 &&
+                                      familyIndex === otherProductFamilies.length - 2
+                                    ? "xl:col-start-2"
+                                    : ""
+                              }`
+                            : ""
+                      }`}
                     >
-                      <div className="flex flex-col gap-5 px-6 py-6 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="pointer-events-none absolute -right-20 -top-20 h-48 w-48 rounded-full bg-blue-500/[0.055] blur-3xl" />
+
+                      <div className="relative flex items-start gap-3 sm:gap-4">
+                        <ProductVisual product={representative} label={cardTitle} compact />
+
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap gap-1.5">
                             {familyCheapest && (
-                              <span className="rounded-full border border-amber-500/20 bg-amber-500/[0.07] px-2.5 py-1 text-[10px] font-semibold text-amber-300">
-                                💰 {cheapestHasConfirmedTotal
-                                  ? "NAJTAŃSZY KOSZT"
-                                  : "NAJNIŻSZA CENA"}
+                              <span className="rounded-full border border-amber-400/20 bg-amber-400/[0.07] px-2 py-1 text-[9px] font-semibold text-amber-300">
+                                💰 NAJTAŃSZY Z WYNIKÓW
                               </span>
                             )}
-
                             {familySafest && (
-                              <span className="rounded-full border border-cyan-500/20 bg-cyan-500/[0.07] px-2.5 py-1 text-[10px] font-semibold text-cyan-300">
-                                🛡️ NAJBEZPIECZNIEJSZA
+                              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/[0.07] px-2 py-1 text-[9px] font-semibold text-cyan-300">
+                                🛡 BEZPIECZNY
                               </span>
                             )}
-
-                            {typeof family.representative.dealScore ===
-                              "number" && (
-                              <span className="rounded-full border border-blue-500/15 bg-blue-500/[0.06] px-2.5 py-1 text-[10px] font-semibold text-blue-300">
-                                AI {family.representative.dealScore}/100
+                            {typeof representative.dealScore === "number" && (
+                              <span className="rounded-full border border-blue-400/15 bg-blue-500/[0.06] px-2 py-1 text-[9px] font-semibold text-blue-300">
+                                ASARVO {representative.dealScore}/100
                               </span>
                             )}
-
-                            {family.colors.length > 0 && (
-                              <span className="rounded-full border border-violet-500/20 bg-violet-500/[0.06] px-2.5 py-1 text-[10px] font-semibold text-violet-300">
-                                ◈ {family.colors.length}{" "}
-                                {family.colors.length === 1
-                                  ? "kolor"
-                                  : "kolory"}
-                              </span>
-                            )}
-
-                            <span className="rounded-full border border-white/[0.08] bg-white/[0.025] px-2.5 py-1 text-[10px] text-gray-400">
-                              🏪 {family.storeCount}{" "}
-                              {family.storeCount === 1
-                                ? "źródło"
-                                : "źródła"}
-                            </span>
-
-                            <span className="rounded-full border border-white/[0.08] bg-white/[0.025] px-2.5 py-1 text-[10px] text-gray-500">
-                              {family.offers.length}{" "}
-                              {family.offers.length === 1
-                                ? "oferta"
-                                : "ofert"}
-                            </span>
                           </div>
 
-                          <h3 className="mt-3 text-lg font-semibold leading-6">
-                            {family.displayName}
-                          </h3>
-
-                          {family.colors.length > 0 && (
-                            <div className="mt-2 text-xs text-violet-300/75">
-                              Warianty: {family.colors.join(" · ")}
+                          {familyCheapest && productNeedsCaution(representative) && (
+                            <div className="mt-2 inline-flex rounded-full border border-amber-400/15 bg-amber-400/[0.055] px-2 py-1 text-[9px] font-medium text-amber-200">
+                              ⚠ sprawdź wiarygodność
                             </div>
                           )}
 
-                          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-600">
-                            <span>
-                              {productConditionLabel(
-                                family.representative
-                              )}
-                            </span>
-                            <span>
-                              {originalityLabel(
-                                family.representative
-                                  .originalityConfidence ?? "unknown"
-                              )}
-                            </span>
-                            <span>
-                              {riskLabel(
-                                family.representative.riskLevel
-                              )}
-                            </span>
-                          </div>
-                        </div>
-
-                        <div className="min-w-[210px] text-left sm:text-right">
-                          <div className="text-xs text-gray-600">
-                            Najniższa cena produktu
-                          </div>
-                          <div className="mt-1 text-sm font-medium text-gray-400">
-                            {formatPrice(family.lowestPrice)}
-                          </div>
-
-                          <div className="mt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-400">
-                            Najlepszy znany koszt
-                          </div>
-                          <div className="mt-1 text-2xl font-bold">
-                            {family.lowestConfirmedTotal !== null
-                              ? formatPrice(
-                                  family.lowestConfirmedTotal
-                                )
-                              : family.lowestPrice !== null
-                                ? `od ${formatPrice(
-                                    family.lowestPrice
-                                  )}`
-                                : "Niepotwierdzony"}
-                          </div>
-
-                          <div className="mt-4 grid grid-cols-2 gap-2 sm:ml-auto sm:max-w-[240px]">
-                            <button
-                              type="button"
-                              disabled={
-                                libraryActionBusyKey ===
-                                `favorite:${productStorageKey(
-                                  family.representative
-                                )}`
-                              }
-                              onClick={() =>
-                                void toggleFavorite(
-                                  family.representative
-                                )
-                              }
-                              className={`rounded-xl border px-3 py-2.5 text-[11px] font-medium transition disabled:cursor-wait disabled:opacity-60 ${
-                                isFavorite(family.representative)
-                                  ? "border-rose-500/30 bg-rose-500/[0.10] text-rose-200"
-                                  : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:bg-white/[0.05] hover:text-white"
-                              }`}
-                            >
-                              {isFavorite(family.representative)
-                                ? "♥ Ulubione"
-                                : "♡ Ulubione"}
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={
-                                libraryActionBusyKey ===
-                                `watch:${productStorageKey(
-                                  family.representative
-                                )}`
-                              }
-                              onClick={() =>
-                                getPriceWatch(
-                                  family.representative
-                                )
-                                  ? void removePriceWatch(
-                                      family.representative
-                                    )
-                                  : openPriceWatchEditor(
-                                      family.representative
-                                    )
-                              }
-                              className={`rounded-xl border px-3 py-2.5 text-[11px] font-medium transition disabled:cursor-wait disabled:opacity-60 ${
-                                getPriceWatch(
-                                  family.representative
-                                )
-                                  ? "border-amber-500/30 bg-amber-500/[0.10] text-amber-200"
-                                  : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:bg-white/[0.05] hover:text-white"
-                              }`}
-                            >
-                              🔔{" "}
-                              {getPriceWatch(
-                                family.representative
-                              )
-                                ? "Obserwujesz"
-                                : "Obserwuj"}
-                            </button>
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={
-                              !isFamilyCompared(family) &&
-                              compareFamilyKeys.length >= 3
-                            }
-                            onClick={() =>
-                              toggleCompareFamily(family)
-                            }
-                            className={`mt-2 w-full rounded-xl border px-3 py-2.5 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
-                              isFamilyCompared(family)
-                                ? "border-blue-500/35 bg-blue-500/[0.12] text-blue-200"
-                                : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:bg-white/[0.05] hover:text-white"
-                            }`}
+                          <h3
+                            className="mt-2.5 line-clamp-2 min-h-[44px] text-[15px] font-bold leading-[1.32] tracking-[-0.01em] text-white sm:text-base"
                           >
-                            {isFamilyCompared(family)
-                              ? "✓ W porównaniu"
-                              : compareFamilyKeys.length >= 3
-                                ? "Limit 3 produktów"
-                                : "⇄ Porównaj"}
-                          </button>
+                            {cardTitle}
+                          </h3>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void shareFamily(family)
-                            }
-                            className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-[11px] font-medium text-gray-400 transition hover:bg-white/[0.05] hover:text-white"
-                          >
-                            ↗ Udostępnij tylko tę ofertę
-                          </button>
+                          {cardSpecs.length > 0 && (
+                            <div className="mt-2 flex max-h-[24px] flex-wrap gap-1 overflow-hidden">
+                              {cardSpecs.map((spec) => (
+                                <span
+                                  key={spec}
+                                  className="rounded-md border border-blue-400/12 bg-blue-500/[0.05] px-2 py-1 text-[9px] font-semibold leading-none text-blue-100/80"
+                                >
+                                  {spec}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+                            <span className="truncate text-[10px] font-medium text-blue-300/80">
+                              {representative.store}
+                            </span>
+                            <span
+                              className={`rounded-full border px-1.5 py-0.5 text-[7px] font-semibold uppercase tracking-[0.07em] ${sourceKindChipTone(
+                                representative.store
+                              )}`}
+                            >
+                              {sourceKindLabel(representative.store)}
+                            </span>
+                          </div>
+
+                          <div className="mt-1.5 text-[22px] font-bold tracking-tight text-white sm:text-[26px]">
+                            {displayCost}
+                          </div>
+
+                          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-gray-500">
+                            {representative.delivery !== null && (
+                              <>
+                                <span className={representative.delivery === 0 ? "text-emerald-400" : "text-gray-500"}>
+                                  {representative.delivery === 0 ? "Darmowa dostawa" : `Dostawa ${formatPrice(representative.delivery)}`}
+                                </span>
+                                <span>·</span>
+                              </>
+                            )}
+                            <span>{countLabel(family.storeCount, "źródło", "źródła", "źródeł")}</span>
+                            <span>·</span>
+                            <span>{countLabel(family.offers.length, "oferta", "oferty", "ofert")}</span>
+                            {family.colors.length > 0 && (
+                              <>
+                                <span>·</span>
+                                <span>{countLabel(family.colors.length, "kolor", "kolory", "kolorów")}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
                       </div>
 
-                      <div className="border-t border-white/[0.055] bg-black/10">
-                        {family.storeOffers
-                          .slice(0, 4)
-                          .map((storeOffer) => {
-                            const offer =
-                              storeOffer.costRepresentative;
-
-                            return (
-                              <div
-                                key={storeOffer.key}
-                                className="grid gap-3 border-b border-white/[0.045] px-6 py-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto_minmax(190px,auto)] sm:items-center"
-                              >
-                                <div className="min-w-0">
-                                  <div className="text-sm font-medium text-gray-300">
-                                    🏪 {storeOffer.store}
-                                  </div>
-
-                                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-600">
-                                    <span>
-                                      {productConditionLabel(
-                                        offer
-                                      )}
-                                    </span>
-
-                                    {storeOffer.colors.length >
-                                      0 && (
-                                      <span className="text-violet-300/65">
-                                        {storeOffer.colors.join(
-                                          " · "
-                                        )}
-                                      </span>
-                                    )}
-
-                                    {storeOffer.offers.length >
-                                      1 && (
-                                      <span>
-                                        {storeOffer.offers.length} ofert
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-
-                                <div className="text-left sm:min-w-[180px] sm:text-right">
-                                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-700">
-                                    Produkt + dostawa
-                                  </div>
-                                  <div className="mt-1 font-semibold">
-                                    {storeOffer.lowestConfirmedTotal !==
-                                    null
-                                      ? formatPrice(
-                                          storeOffer.lowestConfirmedTotal
-                                        )
-                                      : storeOffer.lowestPrice !==
-                                          null
-                                        ? `od ${formatPrice(
-                                            storeOffer.lowestPrice
-                                          )}`
-                                        : purchaseTotalLabel(
-                                            offer
-                                          )}
-                                  </div>
-                                </div>
-
-                                <div className="flex flex-col gap-2 sm:pl-2">
-                                  {offer.url ? (
-                                    <a
-                                      href={offer.url}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex w-full items-center justify-center rounded-xl border border-white/10 px-4 py-2.5 text-xs transition hover:bg-white/[0.05]"
-                                    >
-                                      Zobacz ↗
-                                    </a>
-                                  ) : (
-                                    <button className="inline-flex w-full items-center justify-center rounded-xl border border-white/10 px-4 py-2.5 text-xs transition hover:bg-white/[0.05]">
-                                      Zobacz
-                                    </button>
-                                  )}
-
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        libraryActionBusyKey ===
-                                        `favorite:${productStorageKey(offer)}`
-                                      }
-                                      onClick={() =>
-                                        void toggleFavorite(offer)
-                                      }
-                                      className={`rounded-xl border px-3 py-2.5 text-[11px] font-medium transition disabled:cursor-wait disabled:opacity-60 ${
-                                        isFavorite(offer)
-                                          ? "border-rose-500/30 bg-rose-500/[0.10] text-rose-200"
-                                          : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:bg-white/[0.05] hover:text-white"
-                                      }`}
-                                    >
-                                      {isFavorite(offer) ? "♥ Ulubione" : "♡ Ulubione"}
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        libraryActionBusyKey ===
-                                        `watch:${productStorageKey(offer)}`
-                                      }
-                                      onClick={() =>
-                                        getPriceWatch(offer)
-                                          ? void removePriceWatch(offer)
-                                          : openPriceWatchEditor(offer)
-                                      }
-                                      className={`rounded-xl border px-3 py-2.5 text-[11px] font-medium transition disabled:cursor-wait disabled:opacity-60 ${
-                                        getPriceWatch(offer)
-                                          ? "border-amber-500/30 bg-amber-500/[0.10] text-amber-200"
-                                          : "border-white/[0.08] bg-white/[0.02] text-gray-400 hover:bg-white/[0.05] hover:text-white"
-                                      }`}
-                                    >
-                                      🔔 {getPriceWatch(offer) ? "Obserwujesz" : "Obserwuj"}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                        {family.storeOffers.length > 4 && (
-                          <div className="px-6 py-3 text-center text-[11px] text-gray-600">
-                            + {family.storeOffers.length - 4} kolejne{" "}
-                            {family.storeOffers.length - 4 === 1
-                              ? "źródło"
-                              : "źródła"}{" "}
-                            tego produktu
-                          </div>
+                      <div className="relative mt-4 flex flex-wrap gap-2 text-[10px]">
+                        {(representative.condition || representative.assessedCondition === "new" || representative.assessedCondition === "used") && (
+                          <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1.5 text-gray-400">
+                            {productConditionLabel(representative)}
+                          </span>
                         )}
+                        <span className="rounded-full border border-white/[0.07] bg-white/[0.025] px-2.5 py-1.5 text-gray-400">
+                          {riskLabel(representative.riskLevel)}
+                        </span>
+                        {representative.originalityConfidence &&
+                          representative.originalityConfidence !== "unknown" && (
+                            <span className={`rounded-full border px-2.5 py-1.5 ${originalityChipTone(
+                              representative.originalityConfidence
+                            )}`}>
+                              {originalityChipIcon(representative.originalityConfidence)}{" "}
+                              {originalityUiLabel(representative.originalityConfidence)}
+                            </span>
+                          )}
                       </div>
-                    </div>
+
+                      <div className="relative mt-auto grid grid-cols-[minmax(0,1fr)_auto] gap-2 pt-4">
+                        {representative.url ? (
+                          <a
+                            href={representative.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-gradient-to-r from-blue-600 via-blue-500 to-cyan-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_10px_28px_rgba(37,99,235,0.18)] transition duration-300 hover:-translate-y-0.5 hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300/50 motion-reduce:transform-none"
+                          >
+                            Zobacz ofertę →
+                          </a>
+                        ) : (
+                          <button className="min-h-10 rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold text-white">
+                            Zobacz produkt
+                          </button>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={libraryActionBusyKey === `favorite:${productStorageKey(representative)}`}
+                          onClick={() => void toggleFavorite(representative)}
+                          aria-label={isFavorite(representative) ? "Usuń z ulubionych" : "Dodaj do ulubionych"}
+                          className={`flex h-11 w-11 items-center justify-center rounded-xl border text-sm transition disabled:cursor-wait disabled:opacity-60 ${
+                            isFavorite(representative)
+                              ? "border-rose-500/30 bg-rose-500/[0.10] text-rose-200"
+                              : "border-white/[0.08] bg-white/[0.025] text-gray-400 hover:bg-white/[0.06] hover:text-white"
+                          }`}
+                        >
+                          {isFavorite(representative) ? "♥" : "♡"}
+                        </button>
+                      </div>
+
+                      <div className="relative mt-2 grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
+                        <button
+                          type="button"
+                          disabled={libraryActionBusyKey === `watch:${productStorageKey(representative)}`}
+                          onClick={() =>
+                            getPriceWatch(representative)
+                              ? void removePriceWatch(representative)
+                              : openPriceWatchEditor(representative)
+                          }
+                          className={`rounded-xl border px-3 py-2 text-[10px] font-medium transition disabled:cursor-wait disabled:opacity-60 ${
+                            getPriceWatch(representative)
+                              ? "border-amber-500/30 bg-amber-500/[0.10] text-amber-200"
+                              : "border-white/[0.08] bg-white/[0.025] text-gray-400 hover:border-blue-300/[0.14] hover:bg-white/[0.055] hover:text-white"
+                          }`}
+                        >
+                          🔔 {getPriceWatch(representative) ? "Obserwujesz" : "Obserwuj"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => toggleCompareFamily(family)}
+                          className={`rounded-xl border px-3 py-2 text-[10px] font-medium transition ${
+                            isFamilyCompared(family)
+                              ? "border-blue-500/35 bg-blue-500/[0.12] text-blue-200"
+                              : "border-white/[0.08] bg-white/[0.025] text-gray-400 hover:border-blue-300/[0.14] hover:bg-white/[0.055] hover:text-white"
+                          }`}
+                        >
+                          {isFamilyCompared(family) ? "✓ W porównaniu" : "⇄ Porównaj"}
+                        </button>
+                      </div>
+                    </article>
                   );
                 })}
               </div>
@@ -5998,20 +7359,36 @@ function SearchPageContent() {
           {/* LICZNIK */}
                     {/* ASARVO_SEARCH_CANCEL_V1_FIX2 */}
           {!searchWasCancelled && (
-            <div className="mt-7 text-center text-sm text-gray-600">
-                        Znaleziono {productFamilies.length}{" "}
-                        {productFamilies.length === 1 ? "produkt" : "produktów"}
-                        {" "}w {filteredProducts.length}{" "}
-                        {filteredProducts.length === 1 ? "ofercie" : "ofertach"}
-                        {totalStoreCount > 0 && (
-                          <>
-                            {" "}z {totalStoreCount}{" "}
-                            {totalStoreCount === 1
-                              ? "źródła"
-                              : "źródeł / sklepów"}
-                          </>
-                        )}
-                      </div>
+            productFamilies.length === 1 ? (
+              <div
+                data-asarvo-v6-single-copy="true"
+                className="mx-auto mt-8 max-w-3xl rounded-2xl border border-blue-400/[0.08] bg-blue-500/[0.018] px-5 py-3.5 text-center"
+              >
+                <div className="text-sm font-semibold text-blue-100/90">
+                  Nie znaleźliśmy drugiego modelu o porównywalnej jakości
+                </div>
+                <p className="mt-1 text-xs leading-5 text-gray-500">
+                  ASARVO nie dodaje słabszych dopasowań tylko po to, żeby wydłużyć listę.
+                  {filteredProducts.length > 1 && (
+                    <> Ten model ma {countLabel(filteredProducts.length, "ofertę", "oferty", "ofert")} w aktualnych wynikach.</>
+                  )}
+                </p>
+              </div>
+            ) : (
+              <div className="mt-8 flex justify-center">
+                <div className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-white/[0.06] bg-white/[0.018] px-4 py-2 text-xs text-gray-600">
+                  <span>{countLabel(productFamilies.length, "produkt", "produkty", "produktów")}</span>
+                  <span className="text-gray-800">·</span>
+                  <span>{countLabel(filteredProducts.length, "oferta", "oferty", "ofert")}</span>
+                  {totalStoreCount > 0 && (
+                    <>
+                      <span className="text-gray-800">·</span>
+                      <span>{countLabel(totalStoreCount, "źródło", "źródła", "źródeł")}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )
           )}
 
         </section>
@@ -6127,7 +7504,7 @@ function SearchPageContent() {
         )}
 
         {/* STOPKA */}
-        <footer className="border-t border-white/[0.06] py-6 text-center text-xs text-gray-700">
+        <footer className="border-t border-white/[0.06] py-7 text-center text-xs text-gray-600">
           ASARVO · Znajdź. Porównaj. Kup lepiej.
         </footer>
 

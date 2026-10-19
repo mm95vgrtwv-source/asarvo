@@ -677,6 +677,8 @@ type UniversalProductIntent = {
   qualifierTerms: string[];
   required: UniversalRequirement[];
   preferred: UniversalRequirement[];
+  anyOfRequired: UniversalRequirement[][];
+  alternativeIdentityGroups: string[][];
   forbiddenTerms: string[];
   accessoryIntent: boolean;
   damagedIntent: boolean;
@@ -1122,6 +1124,248 @@ function getCategorySecondaryRetailerDomains(
   return [...(V34_CATEGORY_SECONDARY_RETAILER_DOMAINS[category] ?? [])];
 }
 
+// ASARVO_MEGA25_CATEGORY_STORE_MATRIX_V1
+// 25 broad shopping categories. Each category owns up to 100 already configured
+// commerce domains. This is a routing/directory layer, not a 2500-request fanout.
+// Fair Mesh still selects a bounded set of direct adapters per request.
+type AsarvoMega25CategoryProfile = {
+  id: string;
+  label: string;
+  categories: readonly string[];
+  signals: readonly string[];
+  domains: readonly string[];
+  primaryDomains: readonly string[];
+  directLimit: number;
+};
+
+const ASARVO_MEGA25_CATEGORY_PROFILES: readonly AsarvoMega25CategoryProfile[] = [
+  {
+    id: "elektryka_instalacje",
+    label: "Elektryka i instalacje",
+    categories: ["power_tool", "network", "printer"],
+    signals: ["elektryka", "instalacja elektryczna", "gniazdko", "wyłącznik", "przewód elektryczny", "kabel elektryczny", "rozdzielnica", "bezpiecznik", "oświetlenie", "lampa", "żarówka"],
+    domains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "bricomarche.pl", "vidaxl.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl", "homegarden.com.pl", "meblobranie.pl", "bricoman.pl", "lazienkaplus.pl", "kammar24.pl", "tools4pro.pl", "narzedziak.pl", "fixero.com", "dedra.pl", "swiatnarzedzi.pl", "elektro-met.pl", "domni.pl", "in360.pl", "viverto.pl", "plytki.pl", "e-floor.com.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com", "tonerpartner.pl", "dobretonery.pl", "papierniczy.pl", "dalprint.pl", "123drukuj.pl", "inkhouse.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de"],
+    primaryDomains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "narzedzia.pl", "domitech.pl", "bricomarche.pl", "mexen.pl", "mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net"],
+    directLimit: 20,
+  },
+  {
+    id: "kuchnia_agd",
+    label: "Kuchnia i AGD",
+    categories: ["coffee_machine", "dishwasher", "fridge", "microwave", "kettle", "air_fryer", "cookware_pan"],
+    signals: ["kuchnia", "agd kuchenne", "ekspres do kawy", "zmywarka", "lodówka", "mikrofalówka", "czajnik", "air fryer", "patelnia", "garnek", "robot kuchenny"],
+    domains: ["mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl", "leroymerlin.pl", "obi.pl", "agatameble.pl", "brw.pl", "vidaxl.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "meblobranie.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "temu.com", "etsy.com", "westwing.pl", "komfort.pl", "abra-meble.pl", "vox.pl", "beliani.pl", "meble.pl", "halmar.pl", "fabrykaform.pl", "9design.pl", "selsey.pl", "meble-bogart.pl", "meblewojcik.com.pl", "forte.com.pl", "home.biedronka.pl", "jula.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl"],
+    primaryDomains: ["mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "oleole.pl", "neonet.pl", "jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl"],
+    directLimit: 20,
+  },
+  {
+    id: "garderoba_moda",
+    label: "Garderoba i moda",
+    categories: ["clothing", "shoes", "chair"],
+    signals: ["garderoba", "odzież", "ubrania", "buty", "kurtka", "spodnie", "koszula", "sukienka", "szafa", "komoda na ubrania"],
+    domains: ["zalando.pl", "vinted.pl", "zalando-lounge.pl", "eobuwie.com.pl", "eobuwie.pl", "modivo.pl", "answear.com", "aboutyou.pl", "jdsports.pl", "sklep.sizeer.com", "sizeer.com", "ccc.eu", "astratex.pl", "kontri.pl", "casu.pl", "butsklep.pl", "lancerto.com", "ombre.pl", "telimena.pl", "bonprix.pl", "4f.com.pl", "nike.com", "adidas.pl", "newbalance.pl", "eu.puma.com", "puma.com", "reserved.com", "hm.com", "zara.com", "peek-cloppenburg.pl", "temu.com", "etsy.com", "limango.pl", "vitkac.com", "moliera2.com", "sneakerstudio.pl", "runcolors.pl", "distance.pl", "footshop.pl", "deezee.pl", "wojas.pl", "kazar.com", "rylko.com", "ecco.com", "sinsay.com", "cropp.com", "housebrand.com", "mohito.com", "medicine.pl", "monnari.com.pl", "diverse-system.com", "bigstar.pl", "vistula.pl", "bytom.com.pl", "wittchen.com", "ochnik.com", "van-graaf.com", "jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl", "leroymerlin.pl", "obi.pl", "agatameble.pl", "brw.pl", "vidaxl.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "meblobranie.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "westwing.pl", "komfort.pl", "abra-meble.pl", "vox.pl", "beliani.pl", "meble.pl", "halmar.pl", "fabrykaform.pl", "9design.pl", "selsey.pl", "meble-bogart.pl", "meblewojcik.com.pl", "forte.com.pl", "home.biedronka.pl", "zegarek.net", "crazytime.pl", "yes.pl", "apart.pl", "wkruk.pl"],
+    primaryDomains: ["zalando.pl", "vinted.pl", "zalando-lounge.pl", "nike.com", "adidas.pl", "newbalance.pl", "eu.puma.com", "eobuwie.com.pl", "modivo.pl", "jdsports.pl", "sizeer.com", "ccc.eu"],
+    directLimit: 24,
+  },
+  {
+    id: "lazienka",
+    label: "Łazienka",
+    categories: ["faucet"],
+    signals: ["łazienka", "bateria umywalkowa", "bateria prysznicowa", "prysznic", "wanna", "umywalka", "wc", "toaleta", "płytki łazienkowe"],
+    domains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "bricomarche.pl", "vidaxl.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl", "homegarden.com.pl", "meblobranie.pl", "bricoman.pl", "lazienkaplus.pl", "kammar24.pl", "tools4pro.pl", "narzedziak.pl", "fixero.com", "dedra.pl", "swiatnarzedzi.pl", "elektro-met.pl", "domni.pl", "in360.pl", "viverto.pl", "plytki.pl", "e-floor.com.pl", "jysk.pl", "ikea.com", "agatameble.pl", "brw.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "temu.com", "etsy.com", "westwing.pl", "komfort.pl", "abra-meble.pl", "vox.pl", "beliani.pl", "meble.pl", "halmar.pl", "fabrykaform.pl", "9design.pl", "selsey.pl", "meble-bogart.pl", "meblewojcik.com.pl", "forte.com.pl", "home.biedronka.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl"],
+    primaryDomains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "narzedzia.pl", "domitech.pl", "bricomarche.pl", "mexen.pl", "jysk.pl", "ikea.com", "agatameble.pl", "brw.pl"],
+    directLimit: 20,
+  },
+  {
+    id: "ogrod",
+    label: "Ogród",
+    categories: ["power_tool"],
+    signals: ["ogród", "ogrodowy", "kosiarka", "podkaszarka", "doniczka", "wąż ogrodowy", "grill", "meble ogrodowe", "nawadnianie"],
+    domains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "bricomarche.pl", "vidaxl.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl", "homegarden.com.pl", "meblobranie.pl", "bricoman.pl", "lazienkaplus.pl", "kammar24.pl", "tools4pro.pl", "narzedziak.pl", "fixero.com", "dedra.pl", "swiatnarzedzi.pl", "elektro-met.pl", "domni.pl", "in360.pl", "viverto.pl", "plytki.pl", "e-floor.com.pl", "decathlon.pl", "sportano.pl", "sportano.com", "8a.pl", "skalnik.pl", "e-horyzont.pl", "centrumrowerowe.pl", "rowertour.com", "hop-sport.pl", "e-insportline.pl", "martessport.com.pl", "intersport.pl", "supersklep.pl", "4f.com.pl", "fitanu.com", "ski-team.pl", "snowshop.pl", "militaria.pl", "dadelo.pl", "sprint-rowery.pl", "bikeman.pl", "sport-shop.pl", "sklep-presto.pl", "prosportowy.pl", "bieganie.pl", "runnersclub.pl", "rowerystylowe.pl", "dobrerowery.pl", "bikeatelier.pl", "rowerplus.pl", "jysk.pl", "ikea.com", "agatameble.pl", "brw.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "temu.com", "etsy.com", "westwing.pl", "komfort.pl", "abra-meble.pl", "vox.pl", "beliani.pl", "meble.pl", "halmar.pl", "fabrykaform.pl"],
+    primaryDomains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "narzedzia.pl", "domitech.pl", "bricomarche.pl", "mexen.pl", "decathlon.pl", "sportano.pl", "8a.pl", "skalnik.pl"],
+    directLimit: 20,
+  },
+  {
+    id: "narzedzia_warsztat",
+    label: "Narzędzia i warsztat",
+    categories: ["power_tool", "auto_part"],
+    signals: ["narzędzia", "warsztat", "wiertarka", "wkrętarka", "szlifierka", "pilarka", "klucz nasadowy", "kompresor", "spawarka"],
+    domains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "bricomarche.pl", "vidaxl.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl", "homegarden.com.pl", "meblobranie.pl", "bricoman.pl", "lazienkaplus.pl", "kammar24.pl", "tools4pro.pl", "narzedziak.pl", "fixero.com", "dedra.pl", "swiatnarzedzi.pl", "elektro-met.pl", "domni.pl", "in360.pl", "viverto.pl", "plytki.pl", "e-floor.com.pl", "intercars.pl", "iparts.pl", "motointegrator.com", "autodoc.pl", "ucando.pl", "motostacja.com", "motos.pl", "strefakierowcy.pl", "topracingshop.pl", "2407.pl", "motochemia.pl", "e-autoparts.pl", "motoneo.pl", "aparts.pl", "autofixer.com", "hamulce.net", "haparts.pl", "autosklep24.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "allegro.pl"],
+    primaryDomains: ["castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "narzedzia.pl", "domitech.pl", "bricomarche.pl", "mexen.pl", "intercars.pl", "iparts.pl", "motointegrator.com", "autodoc.pl"],
+    directLimit: 20,
+  },
+  {
+    id: "komputery_laptopy",
+    label: "Komputery i laptopy",
+    categories: ["laptop", "gpu", "cpu", "monitor", "storage", "memory_ram", "mouse", "keyboard", "network"],
+    signals: ["komputer", "laptop", "notebook", "pc gaming", "karta graficzna", "procesor", "monitor", "ssd", "ram", "router"],
+    domains: ["mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com", "tonerpartner.pl", "dobretonery.pl", "papierniczy.pl", "dalprint.pl", "123drukuj.pl", "inkhouse.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "oleole.pl", "neonet.pl", "ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com"],
+    directLimit: 24,
+  },
+  {
+    id: "telefony_mobile",
+    label: "Telefony i mobile",
+    categories: ["phone", "tablet", "smartwatch"],
+    signals: ["telefon", "smartfon", "iphone", "galaxy", "tablet", "ipad", "smartwatch", "apple watch", "powerbank", "ładowarka"],
+    domains: ["mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "zegarek.net", "crazytime.pl", "yes.pl", "apart.pl", "wkruk.pl", "kraina-czasu.pl", "happytime.com.pl", "karkosik.pl", "labizu.pl", "marmad.pl", "energetix.com.pl", "mennicaswidnicka.pl", "time24.pl", "etsy.com", "zegarownia.pl", "timetrend.pl", "swiss.com.pl", "e-zegarki.pl", "aniakruk.pl", "pandora.net", "tous.com", "lilou.pl", "jubilersezam.pl", "zegarki.pl", "watchard.com", "otozegarki.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "oleole.pl", "neonet.pl", "zegarek.net", "crazytime.pl", "yes.pl", "apart.pl"],
+    directLimit: 24,
+  },
+  {
+    id: "rtv_audio_video",
+    label: "RTV, audio i video",
+    categories: ["tv", "speaker", "headphones", "projector", "camera"],
+    signals: ["rtv", "telewizor", "audio", "głośnik", "słuchawki", "kino domowe", "projektor", "kamera", "aparat"],
+    domains: ["mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "cyfrowe.pl", "fotoforma.pl", "fotoplus.pl", "abfoto.pl", "beafoto.pl", "interfoto.eu", "fotojoker.pl", "notopstryk.pl", "foto-tip.pl", "foto-net.pl", "e-oko.pl", "fotosoft.pl", "fototechnika.com", "fotopoker.pl", "riff.net.pl", "muzyczny.pl", "musicexpress.pl", "thomann.de", "guitarcenter.pl", "pasja.com.pl", "musicstore.de", "midi.pl", "audiostacja.pl", "megamusic.pl", "musiccenter.pl", "musicdealer.pl", "soundshop.pl", "supersound.pl", "fxmusic.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "oleole.pl", "neonet.pl", "cyfrowe.pl", "fotoforma.pl", "fotoplus.pl", "abfoto.pl"],
+    directLimit: 24,
+  },
+  {
+    id: "duze_agd",
+    label: "Duże AGD",
+    categories: ["washing_machine", "dishwasher", "fridge"],
+    signals: ["duże agd", "pralka", "zmywarka", "lodówka", "zamrażarka", "suszarka bębnowa", "piekarnik", "płyta indukcyjna"],
+    domains: ["mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "bricomarche.pl", "vidaxl.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl", "homegarden.com.pl", "meblobranie.pl", "bricoman.pl", "lazienkaplus.pl", "kammar24.pl", "tools4pro.pl", "narzedziak.pl", "fixero.com", "dedra.pl", "swiatnarzedzi.pl", "elektro-met.pl", "domni.pl", "in360.pl", "viverto.pl", "plytki.pl", "e-floor.com.pl", "jysk.pl", "ikea.com", "agatameble.pl", "brw.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "temu.com"],
+    primaryDomains: ["mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "oleole.pl", "neonet.pl", "castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl"],
+    directLimit: 20,
+  },
+  {
+    id: "male_agd",
+    label: "Małe AGD",
+    categories: ["coffee_machine", "microwave", "kettle", "air_fryer", "vacuum"],
+    signals: ["małe agd", "czajnik", "toster", "blender", "mikser", "air fryer", "ekspres", "odkurzacz", "frytkownica"],
+    domains: ["mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl", "leroymerlin.pl", "obi.pl", "agatameble.pl", "brw.pl", "vidaxl.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "meblobranie.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "temu.com", "etsy.com", "westwing.pl", "komfort.pl", "abra-meble.pl", "vox.pl", "beliani.pl", "meble.pl", "halmar.pl", "fabrykaform.pl", "9design.pl", "selsey.pl", "meble-bogart.pl", "meblewojcik.com.pl", "forte.com.pl", "home.biedronka.pl", "jula.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl"],
+    primaryDomains: ["mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "oleole.pl", "neonet.pl", "jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl"],
+    directLimit: 20,
+  },
+  {
+    id: "meble_wnetrza",
+    label: "Meble i wnętrza",
+    categories: ["chair", "desk"],
+    signals: ["meble", "wnętrza", "stół", "krzesło", "biurko", "sofa", "kanapa", "łóżko", "szafa", "komoda", "regał"],
+    domains: ["jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl", "leroymerlin.pl", "obi.pl", "agatameble.pl", "brw.pl", "vidaxl.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "meblobranie.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "temu.com", "etsy.com", "westwing.pl", "komfort.pl", "abra-meble.pl", "vox.pl", "beliani.pl", "meble.pl", "halmar.pl", "fabrykaform.pl", "9design.pl", "selsey.pl", "meble-bogart.pl", "meblewojcik.com.pl", "forte.com.pl", "home.biedronka.pl", "jula.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl", "homegarden.com.pl", "bricoman.pl", "lazienkaplus.pl", "kammar24.pl", "tools4pro.pl", "narzedziak.pl", "fixero.com", "dedra.pl", "swiatnarzedzi.pl", "elektro-met.pl", "domni.pl", "in360.pl", "viverto.pl", "plytki.pl", "e-floor.com.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl", "leroymerlin.pl", "obi.pl", "agatameble.pl", "brw.pl", "vidaxl.pl", "kulina.pl", "jula.pl", "narzedzia.pl"],
+    directLimit: 24,
+  },
+  {
+    id: "sport_fitness",
+    label: "Sport i fitness",
+    categories: ["sports_supplement", "shoes"],
+    signals: ["sport", "fitness", "siłownia", "trening", "bieganie", "kreatyna", "białko", "buty sportowe", "odzież sportowa"],
+    domains: ["decathlon.pl", "sportano.pl", "sportano.com", "8a.pl", "skalnik.pl", "e-horyzont.pl", "centrumrowerowe.pl", "rowertour.com", "hop-sport.pl", "e-insportline.pl", "martessport.com.pl", "intersport.pl", "supersklep.pl", "4f.com.pl", "fitanu.com", "ski-team.pl", "snowshop.pl", "militaria.pl", "dadelo.pl", "sprint-rowery.pl", "bikeman.pl", "sport-shop.pl", "sklep-presto.pl", "prosportowy.pl", "bieganie.pl", "runnersclub.pl", "rowerystylowe.pl", "dobrerowery.pl", "bikeatelier.pl", "rowerplus.pl", "sfd.pl", "kfd.pl", "olimpstore.pl", "trec.pl", "bodypak.pl", "gymbeam.pl", "muscle-zone.pl", "allnutrition.pl", "strefamocy.pl", "ostrovit.com", "nutrend.pl", "biotechusa.pl", "scitec.pl", "activlab.pl", "formotiva.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "eobuwie.com.pl", "eobuwie.pl", "modivo.pl", "answear.com", "aboutyou.pl", "jdsports.pl", "sklep.sizeer.com", "sizeer.com", "ccc.eu", "astratex.pl", "kontri.pl", "casu.pl", "butsklep.pl", "lancerto.com", "ombre.pl", "telimena.pl", "bonprix.pl", "nike.com", "adidas.pl", "newbalance.pl", "eu.puma.com", "puma.com", "reserved.com", "hm.com", "zara.com", "peek-cloppenburg.pl", "temu.com", "etsy.com", "limango.pl", "vitkac.com", "moliera2.com", "sneakerstudio.pl", "runcolors.pl", "distance.pl", "footshop.pl", "deezee.pl", "wojas.pl", "kazar.com", "rylko.com", "ecco.com", "sinsay.com", "cropp.com", "housebrand.com", "mohito.com", "medicine.pl", "monnari.com.pl", "diverse-system.com", "bigstar.pl", "vistula.pl", "bytom.com.pl", "wittchen.com", "ochnik.com"],
+    primaryDomains: ["decathlon.pl", "sportano.pl", "8a.pl", "skalnik.pl", "e-horyzont.pl", "centrumrowerowe.pl", "rowertour.com", "hop-sport.pl", "sfd.pl", "kfd.pl", "olimpstore.pl", "trec.pl"],
+    directLimit: 20,
+  },
+  {
+    id: "rowery_outdoor",
+    label: "Rowery i outdoor",
+    categories: ["bike", "scooter", "shoes"],
+    signals: ["rower", "gravel", "mtb", "outdoor", "trekking", "hulajnoga", "namiot", "buty trekkingowe", "turystyka"],
+    domains: ["decathlon.pl", "sportano.pl", "sportano.com", "8a.pl", "skalnik.pl", "e-horyzont.pl", "centrumrowerowe.pl", "rowertour.com", "hop-sport.pl", "e-insportline.pl", "martessport.com.pl", "intersport.pl", "supersklep.pl", "4f.com.pl", "fitanu.com", "ski-team.pl", "snowshop.pl", "militaria.pl", "dadelo.pl", "sprint-rowery.pl", "bikeman.pl", "sport-shop.pl", "sklep-presto.pl", "prosportowy.pl", "bieganie.pl", "runnersclub.pl", "rowerystylowe.pl", "dobrerowery.pl", "bikeatelier.pl", "rowerplus.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "eobuwie.com.pl", "eobuwie.pl", "modivo.pl", "answear.com", "aboutyou.pl", "jdsports.pl", "sklep.sizeer.com", "sizeer.com", "ccc.eu", "astratex.pl", "kontri.pl", "casu.pl", "butsklep.pl", "lancerto.com", "ombre.pl", "telimena.pl", "bonprix.pl", "nike.com", "adidas.pl", "newbalance.pl", "eu.puma.com", "puma.com", "reserved.com", "hm.com", "zara.com", "peek-cloppenburg.pl", "temu.com", "etsy.com", "limango.pl", "vitkac.com", "moliera2.com", "sneakerstudio.pl", "runcolors.pl", "distance.pl", "footshop.pl", "deezee.pl", "wojas.pl", "kazar.com", "rylko.com", "ecco.com", "sinsay.com", "cropp.com", "housebrand.com", "mohito.com", "medicine.pl", "monnari.com.pl", "diverse-system.com", "bigstar.pl", "vistula.pl", "bytom.com.pl", "wittchen.com", "ochnik.com", "van-graaf.com", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["decathlon.pl", "sportano.pl", "8a.pl", "skalnik.pl", "e-horyzont.pl", "centrumrowerowe.pl", "rowertour.com", "hop-sport.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "nike.com"],
+    directLimit: 20,
+  },
+  {
+    id: "motoryzacja_czesci",
+    label: "Motoryzacja i części",
+    categories: ["auto_part", "auto_battery"],
+    signals: ["części samochodowe", "motoryzacja", "klocki hamulcowe", "tarcze hamulcowe", "amortyzator", "filtr", "akumulator samochodowy"],
+    domains: ["intercars.pl", "iparts.pl", "motointegrator.com", "autodoc.pl", "ucando.pl", "motostacja.com", "motos.pl", "strefakierowcy.pl", "topracingshop.pl", "2407.pl", "motochemia.pl", "e-autoparts.pl", "motoneo.pl", "aparts.pl", "autofixer.com", "hamulce.net", "haparts.pl", "autosklep24.pl", "oponeo.pl", "sklepopon.com", "felgeo.pl", "oponytanio.pl", "tirendo.pl", "123opony.pl", "lideropon.pl", "oponyexpress.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["intercars.pl", "iparts.pl", "motointegrator.com", "autodoc.pl", "ucando.pl", "motostacja.com", "motos.pl", "strefakierowcy.pl", "oponeo.pl", "sklepopon.com", "mediaexpert.pl", "euro.com.pl"],
+    directLimit: 16,
+  },
+  {
+    id: "opony_felgi",
+    label: "Opony i felgi",
+    categories: ["tire"],
+    signals: ["opona", "opony", "felga", "felgi", "koła samochodowe", "opona zimowa", "opona letnia"],
+    domains: ["oponeo.pl", "sklepopon.com", "intercars.pl", "iparts.pl", "autodoc.pl", "motos.pl", "motointegrator.com", "strefakierowcy.pl", "felgeo.pl", "oponytanio.pl", "tirendo.pl", "123opony.pl", "lideropon.pl", "oponyexpress.pl", "ucando.pl", "motostacja.com", "topracingshop.pl", "2407.pl", "motochemia.pl", "e-autoparts.pl", "motoneo.pl", "aparts.pl", "autofixer.com", "hamulce.net", "haparts.pl", "autosklep24.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["oponeo.pl", "sklepopon.com", "intercars.pl", "iparts.pl", "autodoc.pl", "motos.pl", "motointegrator.com", "ucando.pl", "motostacja.com", "strefakierowcy.pl", "mediaexpert.pl", "euro.com.pl"],
+    directLimit: 14,
+  },
+  {
+    id: "uroda_perfumy",
+    label: "Uroda i perfumy",
+    categories: ["perfume", "shampoo", "deodorant"],
+    signals: ["uroda", "kosmetyki", "perfumy", "szampon", "dezodorant", "makijaż", "pielęgnacja", "krem do twarzy"],
+    domains: ["rossmann.pl", "hebe.pl", "empik.com", "notino.pl", "douglas.pl", "sephora.pl", "superpharm.pl", "e-zebra.pl", "ezebra.pl", "makeup.pl", "cosibella.pl", "hairstore.pl", "topestetic.pl", "pachnidelko.pl", "brasty.pl", "bodyland.pl", "mojezapachy.pl", "cocolita.pl", "drogerienatura.pl", "kontigo.com.pl", "flaconi.pl", "tagomago.pl", "ekobieca.pl", "ladymakeup.pl", "drogeriapigment.pl", "e-glamour.pl", "parfumdreams.pl", "horex.pl", "perfumeria.pl", "nabea.pl", "trena.pl", "fryzomania.pl", "loczek.pl", "sklepziaja.pl", "doz.pl", "gemini.pl", "drmax.pl", "wapteka.pl", "aptekaolmed.pl", "i-apteka.pl", "zikoapteka.pl", "apteka-melissa.pl", "aptekazawiszy.pl", "apteline.pl", "cefarm24.pl", "aptekacodzienna.pl", "apteka123.pl", "aptekaslonik.pl", "aptekagalena.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "eobuwie.com.pl", "eobuwie.pl", "modivo.pl", "answear.com", "aboutyou.pl", "jdsports.pl", "sklep.sizeer.com", "sizeer.com", "ccc.eu", "astratex.pl", "kontri.pl", "casu.pl", "butsklep.pl", "lancerto.com", "ombre.pl", "telimena.pl", "bonprix.pl", "4f.com.pl", "nike.com", "adidas.pl", "newbalance.pl", "eu.puma.com", "puma.com", "reserved.com", "hm.com", "zara.com", "peek-cloppenburg.pl", "temu.com", "etsy.com", "limango.pl", "vitkac.com", "moliera2.com", "sneakerstudio.pl", "runcolors.pl", "distance.pl", "footshop.pl", "deezee.pl", "wojas.pl", "kazar.com", "rylko.com", "ecco.com", "sinsay.com", "cropp.com", "housebrand.com", "mohito.com", "medicine.pl", "monnari.com.pl", "diverse-system.com"],
+    primaryDomains: ["rossmann.pl", "hebe.pl", "empik.com", "notino.pl", "douglas.pl", "sephora.pl", "superpharm.pl", "e-zebra.pl", "makeup.pl", "doz.pl", "gemini.pl", "drmax.pl"],
+    directLimit: 18,
+  },
+  {
+    id: "zdrowie_apteka",
+    label: "Zdrowie i apteka",
+    categories: [],
+    signals: ["apteka", "zdrowie", "termometr", "ciśnieniomierz", "inhalator", "nebulizator", "opatrunek", "higiena"],
+    domains: ["doz.pl", "gemini.pl", "drmax.pl", "wapteka.pl", "aptekaolmed.pl", "i-apteka.pl", "zikoapteka.pl", "apteka-melissa.pl", "aptekazawiszy.pl", "apteline.pl", "cefarm24.pl", "aptekacodzienna.pl", "apteka123.pl", "aptekaslonik.pl", "aptekagalena.pl", "rossmann.pl", "hebe.pl", "empik.com", "notino.pl", "douglas.pl", "sephora.pl", "superpharm.pl", "e-zebra.pl", "ezebra.pl", "makeup.pl", "cosibella.pl", "hairstore.pl", "topestetic.pl", "pachnidelko.pl", "brasty.pl", "bodyland.pl", "mojezapachy.pl", "cocolita.pl", "drogerienatura.pl", "kontigo.com.pl", "flaconi.pl", "tagomago.pl", "ekobieca.pl", "ladymakeup.pl", "drogeriapigment.pl", "e-glamour.pl", "parfumdreams.pl", "horex.pl", "perfumeria.pl", "nabea.pl", "trena.pl", "fryzomania.pl", "loczek.pl", "sklepziaja.pl", "sfd.pl", "kfd.pl", "olimpstore.pl", "trec.pl", "bodypak.pl", "gymbeam.pl", "muscle-zone.pl", "allnutrition.pl", "decathlon.pl", "sportano.pl", "strefamocy.pl", "ostrovit.com", "nutrend.pl", "biotechusa.pl", "scitec.pl", "activlab.pl", "formotiva.pl", "frisco.pl", "carrefour.pl", "auchan.pl", "olini.pl", "grizly.pl", "planteon.pl", "nierafinowane.pl", "swiat-orkiszu.pl", "saluti.pl", "sklepkawa.pl", "cosdlazdrowia.pl", "selgros24.pl", "leclerc24.net", "bee.pl", "polskikoszyk.pl", "sklep.kaufland.pl", "delio.com.pl", "barbora.pl", "organic24.pl", "biofuturo.pl", "biosklep.com.pl", "zdrowesmaczki.pl", "e-spar.com.pl", "sklep.lidl.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["doz.pl", "gemini.pl", "drmax.pl", "wapteka.pl", "aptekaolmed.pl", "i-apteka.pl", "zikoapteka.pl", "apteka-melissa.pl", "rossmann.pl", "hebe.pl", "empik.com", "notino.pl"],
+    directLimit: 14,
+  },
+  {
+    id: "dzieci_niemowleta",
+    label: "Dzieci i niemowlęta",
+    categories: ["stroller", "child_car_seat", "construction_toy"],
+    signals: ["niemowlę", "dziecko", "wózek dziecięcy", "fotelik samochodowy", "ubranka dziecięce", "akcesoria dla dzieci"],
+    domains: ["smyk.com", "bobowozki.com.pl", "51015kids.eu", "empik.com", "mediaexpert.pl", "lego.com", "lionelo.pl", "klocki.edu.pl", "fabrykabodziakow.pl", "elfi.pl", "pinkorblue.pl", "tantis.pl", "bee.pl", "temu.com", "etsy.com", "babyhit.pl", "tosia.pl", "abcgps.pl", "3kiwi.pl", "mamissima.pl", "albee.pl", "marko-baby.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "eobuwie.com.pl", "eobuwie.pl", "modivo.pl", "answear.com", "aboutyou.pl", "jdsports.pl", "sklep.sizeer.com", "sizeer.com", "ccc.eu", "astratex.pl", "kontri.pl", "casu.pl", "butsklep.pl", "lancerto.com", "ombre.pl", "telimena.pl", "bonprix.pl", "4f.com.pl", "nike.com", "adidas.pl", "newbalance.pl", "eu.puma.com", "puma.com", "reserved.com", "hm.com", "zara.com", "peek-cloppenburg.pl", "limango.pl", "vitkac.com", "moliera2.com", "sneakerstudio.pl", "runcolors.pl", "distance.pl", "footshop.pl", "deezee.pl", "wojas.pl", "kazar.com", "rylko.com", "ecco.com", "sinsay.com", "cropp.com", "housebrand.com", "mohito.com", "medicine.pl", "monnari.com.pl", "diverse-system.com", "bigstar.pl", "vistula.pl", "bytom.com.pl", "wittchen.com", "ochnik.com", "van-graaf.com", "taniaksiazka.pl", "swiatksiazki.pl", "bonito.pl", "matfel.pl", "pwn.pl", "gandalf.com.pl", "rebel.pl", "czytam.pl", "aros.pl", "planszomania.pl", "aleplanszowki.pl", "voiceshop.pl", "colorland.pl", "znak.com.pl", "dvdmax.pl", "booktime.pl", "helion.pl", "literia.pl", "muza.com.pl", "wydawnictwoliterackie.pl", "czarnaowca.pl", "fabrykaslow.com.pl", "wydawnictwoalbatros.com"],
+    primaryDomains: ["smyk.com", "bobowozki.com.pl", "empik.com", "lego.com", "lionelo.pl", "klocki.edu.pl", "pinkorblue.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "nike.com", "adidas.pl"],
+    directLimit: 18,
+  },
+  {
+    id: "zabawki_hobby",
+    label: "Zabawki i hobby",
+    categories: ["construction_toy", "book", "console"],
+    signals: ["zabawka", "lego", "klocki", "gra planszowa", "puzzle", "hobby", "kolekcjonerskie", "model do składania"],
+    domains: ["smyk.com", "bobowozki.com.pl", "51015kids.eu", "empik.com", "mediaexpert.pl", "lego.com", "lionelo.pl", "klocki.edu.pl", "fabrykabodziakow.pl", "elfi.pl", "pinkorblue.pl", "tantis.pl", "bee.pl", "temu.com", "etsy.com", "babyhit.pl", "tosia.pl", "abcgps.pl", "3kiwi.pl", "mamissima.pl", "albee.pl", "marko-baby.pl", "taniaksiazka.pl", "swiatksiazki.pl", "bonito.pl", "matfel.pl", "pwn.pl", "gandalf.com.pl", "rebel.pl", "czytam.pl", "aros.pl", "planszomania.pl", "aleplanszowki.pl", "voiceshop.pl", "colorland.pl", "znak.com.pl", "dvdmax.pl", "booktime.pl", "helion.pl", "literia.pl", "muza.com.pl", "wydawnictwoliterackie.pl", "czarnaowca.pl", "fabrykaslow.com.pl", "wydawnictwoalbatros.com", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["smyk.com", "bobowozki.com.pl", "empik.com", "lego.com", "lionelo.pl", "klocki.edu.pl", "pinkorblue.pl", "al.to", "taniaksiazka.pl", "swiatksiazki.pl", "bonito.pl", "matfel.pl"],
+    directLimit: 18,
+  },
+  {
+    id: "ksiazki_media",
+    label: "Książki i media",
+    categories: ["book"],
+    signals: ["książka", "księgarnia", "ebook", "audiobook", "komiks", "manga", "winyl", "film blu ray", "media"],
+    domains: ["empik.com", "taniaksiazka.pl", "swiatksiazki.pl", "bonito.pl", "matfel.pl", "pwn.pl", "gandalf.com.pl", "rebel.pl", "tantis.pl", "czytam.pl", "aros.pl", "planszomania.pl", "aleplanszowki.pl", "voiceshop.pl", "colorland.pl", "etsy.com", "znak.com.pl", "dvdmax.pl", "booktime.pl", "helion.pl", "literia.pl", "muza.com.pl", "wydawnictwoliterackie.pl", "czarnaowca.pl", "fabrykaslow.com.pl", "wydawnictwoalbatros.com", "riff.net.pl", "muzyczny.pl", "musicexpress.pl", "thomann.de", "guitarcenter.pl", "pasja.com.pl", "musicstore.de", "midi.pl", "audiostacja.pl", "megamusic.pl", "musiccenter.pl", "musicdealer.pl", "soundshop.pl", "supersound.pl", "fxmusic.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "cyfrowe.pl", "fotoforma.pl", "fotoplus.pl", "abfoto.pl", "beafoto.pl", "interfoto.eu", "fotojoker.pl", "notopstryk.pl", "foto-tip.pl", "foto-net.pl", "e-oko.pl", "fotosoft.pl", "fototechnika.com", "fotopoker.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl"],
+    primaryDomains: ["empik.com", "taniaksiazka.pl", "swiatksiazki.pl", "bonito.pl", "matfel.pl", "pwn.pl", "gandalf.com.pl", "rebel.pl", "riff.net.pl", "muzyczny.pl", "musicexpress.pl", "thomann.de"],
+    directLimit: 16,
+  },
+  {
+    id: "biuro_szkola",
+    label: "Biuro i szkoła",
+    categories: ["printer", "desk"],
+    signals: ["biuro", "szkoła", "papier ksero", "długopis", "marker", "segregator", "notes", "toner", "tusz", "niszczarka", "laminator"],
+    domains: ["ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com", "tonerpartner.pl", "dobretonery.pl", "papierniczy.pl", "dalprint.pl", "123drukuj.pl", "inkhouse.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "empik.com", "taniaksiazka.pl", "swiatksiazki.pl", "bonito.pl", "matfel.pl", "pwn.pl", "gandalf.com.pl", "rebel.pl", "tantis.pl", "czytam.pl", "aros.pl", "planszomania.pl", "aleplanszowki.pl", "voiceshop.pl", "colorland.pl", "etsy.com", "znak.com.pl", "dvdmax.pl", "booktime.pl", "helion.pl", "literia.pl", "muza.com.pl", "wydawnictwoliterackie.pl", "czarnaowca.pl", "fabrykaslow.com.pl", "wydawnictwoalbatros.com", "jysk.pl", "ikea.com", "castorama.pl", "bricomarche.pl", "leroymerlin.pl", "obi.pl", "agatameble.pl", "brw.pl", "vidaxl.pl", "kulina.pl", "edaxo.pl", "mirat.eu", "homla.com.pl", "duka.com", "tefal.pl", "gerlach.pl", "drewmax-online.pl", "home-you.com", "dekoria.pl", "sfmeble.pl", "meblobranie.pl", "tanieprezenty.pl", "verk.sklep.pl", "zona-design.pl", "temu.com"],
+    primaryDomains: ["ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com", "tonerpartner.pl", "dobretonery.pl", "mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl"],
+    directLimit: 16,
+  },
+  {
+    id: "zwierzeta",
+    label: "Zwierzęta",
+    categories: ["pet_food"],
+    signals: ["zwierzęta", "pies", "kot", "karma dla psa", "karma dla kota", "żwirek", "drapak", "legowisko", "szelki"],
+    domains: ["zooplus.pl", "maxizoo.pl", "fera.pl", "kakadu.pl", "zooart.com.pl", "unizoo.pl", "petkarma.pl", "zoopers.pl", "kuchniapupila.pl", "karusek.com.pl", "apetete.pl", "telekarma.pl", "petissimo.pl", "johndog.pl", "alezwierzaki.pl", "zoo24.pl", "hubun.pl", "frisco.pl", "carrefour.pl", "auchan.pl", "olini.pl", "grizly.pl", "planteon.pl", "nierafinowane.pl", "swiat-orkiszu.pl", "saluti.pl", "sklepkawa.pl", "cosdlazdrowia.pl", "selgros24.pl", "leclerc24.net", "bee.pl", "polskikoszyk.pl", "sklep.kaufland.pl", "delio.com.pl", "barbora.pl", "organic24.pl", "biofuturo.pl", "biosklep.com.pl", "zdrowesmaczki.pl", "e-spar.com.pl", "sklep.lidl.pl", "castorama.pl", "leroymerlin.pl", "obi.pl", "jula.pl", "bricomarche.pl", "vidaxl.pl", "narzedzia.pl", "domitech.pl", "mexen.pl", "zaciskowe.pl", "lazienkabezbarier.com.pl", "technoland.com.pl", "askot.krakow.pl", "dom-lazienka.pl", "centrumizolacji.com.pl", "sklepbaterie.pl", "intago.com.pl", "makita.sklep.pl", "imakita.pl", "makitamarket.pl", "bosch-professional.com", "ogrodosfera.pl", "rolmarket.pl", "24garden.pl", "sklepogrodniczy.pl", "sklepfarmera.pl", "homegarden.com.pl", "meblobranie.pl", "bricoman.pl", "lazienkaplus.pl", "kammar24.pl", "tools4pro.pl", "narzedziak.pl", "fixero.com", "dedra.pl", "swiatnarzedzi.pl", "elektro-met.pl", "domni.pl", "in360.pl", "viverto.pl", "plytki.pl", "e-floor.com.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["zooplus.pl", "maxizoo.pl", "fera.pl", "kakadu.pl", "zooart.com.pl", "unizoo.pl", "petkarma.pl", "zoopers.pl", "frisco.pl", "carrefour.pl", "auchan.pl", "olini.pl"],
+    directLimit: 14,
+  },
+  {
+    id: "bizuteria_zegarki",
+    label: "Biżuteria i zegarki",
+    categories: ["smartwatch"],
+    signals: ["biżuteria", "zegarek", "naszyjnik", "łańcuszek", "bransoletka", "kolczyki", "pierścionek", "jubiler"],
+    domains: ["zegarek.net", "crazytime.pl", "yes.pl", "apart.pl", "wkruk.pl", "kraina-czasu.pl", "happytime.com.pl", "karkosik.pl", "labizu.pl", "marmad.pl", "energetix.com.pl", "mennicaswidnicka.pl", "time24.pl", "etsy.com", "zegarownia.pl", "timetrend.pl", "swiss.com.pl", "e-zegarki.pl", "aniakruk.pl", "pandora.net", "tous.com", "lilou.pl", "jubilersezam.pl", "zegarki.pl", "watchard.com", "otozegarki.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "eobuwie.com.pl", "eobuwie.pl", "modivo.pl", "answear.com", "aboutyou.pl", "jdsports.pl", "sklep.sizeer.com", "sizeer.com", "ccc.eu", "astratex.pl", "kontri.pl", "casu.pl", "butsklep.pl", "lancerto.com", "ombre.pl", "telimena.pl", "bonprix.pl", "4f.com.pl", "nike.com", "adidas.pl", "newbalance.pl", "eu.puma.com", "puma.com", "reserved.com", "hm.com", "zara.com", "peek-cloppenburg.pl", "temu.com", "limango.pl", "vitkac.com", "moliera2.com", "sneakerstudio.pl", "runcolors.pl", "distance.pl", "footshop.pl", "deezee.pl", "wojas.pl", "kazar.com", "rylko.com", "ecco.com", "sinsay.com", "cropp.com", "housebrand.com", "mohito.com", "medicine.pl", "monnari.com.pl", "diverse-system.com", "bigstar.pl", "vistula.pl", "bytom.com.pl", "wittchen.com", "ochnik.com", "van-graaf.com", "rossmann.pl", "hebe.pl", "empik.com", "notino.pl", "douglas.pl", "sephora.pl", "superpharm.pl", "e-zebra.pl", "ezebra.pl", "makeup.pl", "cosibella.pl", "hairstore.pl", "topestetic.pl", "pachnidelko.pl", "brasty.pl", "bodyland.pl", "mojezapachy.pl", "cocolita.pl"],
+    primaryDomains: ["zegarek.net", "crazytime.pl", "yes.pl", "apart.pl", "wkruk.pl", "kraina-czasu.pl", "happytime.com.pl", "karkosik.pl", "zalando.pl", "vinted.pl", "zalando-lounge.pl", "nike.com"],
+    directLimit: 16,
+  },
+  {
+    id: "instrumenty_studio",
+    label: "Instrumenty i studio",
+    categories: ["guitar", "speaker", "headphones"],
+    signals: ["instrument muzyczny", "gitara", "keyboard", "pianino", "mikrofon studyjny", "interfejs audio", "monitor studyjny", "kontroler midi", "perkusja"],
+    domains: ["riff.net.pl", "muzyczny.pl", "musicexpress.pl", "thomann.de", "guitarcenter.pl", "pasja.com.pl", "musicstore.de", "midi.pl", "audiostacja.pl", "megamusic.pl", "musiccenter.pl", "musicdealer.pl", "soundshop.pl", "supersound.pl", "fxmusic.pl", "mediaexpert.pl", "euro.com.pl", "oleole.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl", "neonet.pl", "avans.pl", "electro.pl", "maxelektro.pl", "proline.pl", "sferis.pl", "proshop.pl", "al.to", "alsen.pl", "delkom.pl", "notebooki.pl", "bestcena.pl", "rtveuroagd.pl", "amso.pl", "botland.com.pl", "neo24.pl", "hard-pc.pl", "foxkomputer.pl", "techlord.pl", "krsystem.pl", "senetic.pl", "itnes.pl", "zadowolenie.pl", "agdhome.pl", "tme.eu", "kamami.pl", "eltrox.pl", "dipol.com.pl", "komputerymarkowe.pl", "komputery.pl", "samsung.com", "apple.com", "cyfrowe.pl", "fotoforma.pl", "fotoplus.pl", "abfoto.pl", "beafoto.pl", "interfoto.eu", "fotojoker.pl", "notopstryk.pl", "foto-tip.pl", "foto-net.pl", "e-oko.pl", "fotosoft.pl", "fototechnika.com", "fotopoker.pl", "ofix.pl", "biurowe-zakupy.pl", "office-media.pl", "lyreco.com", "tonerpartner.pl", "dobretonery.pl", "papierniczy.pl", "dalprint.pl", "123drukuj.pl", "inkhouse.pl", "allegro.pl", "allegrolokalnie.pl", "ceneo.pl", "erli.pl", "amazon.pl", "ebay.pl", "arena.pl", "olx.pl", "amazon.de", "ebay.de"],
+    primaryDomains: ["riff.net.pl", "muzyczny.pl", "musicexpress.pl", "thomann.de", "guitarcenter.pl", "pasja.com.pl", "mediaexpert.pl", "euro.com.pl", "x-kom.pl", "morele.net", "mediamarkt.pl", "komputronik.pl"],
+    directLimit: 14,
+  }
+];
+
 type RetailVerticalProfile = {
   id: string;
   categories: readonly string[];
@@ -1190,7 +1434,7 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
   },
   {
     id: "outdoor_sport",
-    categories: ["bike", "scooter"],
+    categories: ["bike", "scooter", "shoes"],
     signals: [
       "plecak turystyczny", "plecak trekkingowy", "turystyczny", "trekking",
       "outdoor", "namiot", "spiwor", "karimata", "camping", "kemping",
@@ -1586,8 +1830,9 @@ const V28_RETAIL_VERTICAL_PROFILES: readonly RetailVerticalProfile[] = [
   },
   {
     id: "home_furniture",
-    categories: ["chair", "desk", "cookware_pan"],
-    signals: [
+    categories: ["table", "chair", "desk", "cookware_pan"],
+    signals: ["stolik", "stoliki", 
+      "stol", "stół", "stoly", "stoły", "stol jadalniany", "stół jadalniany", "dining table", "table",
       "fotel biurowy", "krzeslo", "biurko", "sofa", "kanapa", "lozko",
       "szafa", "materac", "dywan", "komoda", "meble", "patelnia", "garnek",
       "zastawa", "wyposazenie domu", "dekoracje", "posciel",
@@ -1803,6 +2048,56 @@ function hasTechnologyBrandRetailIntent(parsed: ParsedQuery): boolean {
   return hasModelLikeToken || hasMultiTokenProductFootprint;
 }
 
+
+// ASARVO_DESCRIPTION_INTELLIGENCE_V1_FIX2
+// Discovery-only semantic normalization for colloquial tool-disc searches.
+// It does not accept any offer and does not weaken VERIFIED/HARD gates.
+function asarvoToolDiscSemanticDiscoveryAlternates(
+  parsed: ParsedQuery
+): string[] {
+  const query = normalizeMatchText(parsed.queryText);
+
+  const requestsDisc =
+    /\btarcz\w*\b/iu.test(query) &&
+    /\b(?:diax\w*|flex\w*|katow\w*|kątow\w*|szlifier\w*)\b/iu.test(query);
+
+  if (!requestsDisc) return [];
+
+  const hardLength = parsed.intent.required.find(
+    (item) => item.hard && item.key === "length"
+  );
+
+  let sizeMm: number | null = null;
+  if (hardLength) {
+    const value = normalizeMatchText(hardLength.value);
+    const match = value.match(/\b(\d{1,4}(?:[.,]\d+)?)\s*(mm|cm)\b/i);
+    if (match) {
+      const n = Number(match[1].replace(",", "."));
+      if (Number.isFinite(n) && n > 0) {
+        sizeMm =
+          match[2].toLowerCase() === "cm"
+            ? Math.round(n * 10)
+            : Math.round(n);
+      }
+    }
+  }
+
+  const size = sizeMm !== null ? `${sizeMm} mm` : "";
+
+  return Array.from(new Set([
+    normalizeText(`tarcza do szlifierki kątowej ${size}`),
+    normalizeText(`tarcza ${size} do szlifierki kątowej`),
+    normalizeText(`tarcza ${size} do flexa`),
+  ].filter(Boolean))).slice(0, 3);
+}
+
+function asarvoToolDiscVerticalBoost(
+  parsed: ParsedQuery,
+  profileId: string
+): number {
+  if (profileId !== "home_diy_garden") return 0;
+  return asarvoToolDiscSemanticDiscoveryAlternates(parsed).length > 0 ? 24 : 0;
+}
 function getRetailVerticalMatches(
   parsed: ParsedQuery
 ): Array<{ profile: RetailVerticalProfile; score: number }> {
@@ -1811,8 +2106,24 @@ function getRetailVerticalMatches(
     `${parsed.intent.identityTerms.join(" ")} ${parsed.queryText}`
   );
 
+  // ASARVO_BATCH79_PRIMARY_SPRAYER_GARDEN_ROUTING_V1
+  // A primary sprayer is a garden product even when category is null.
+  // Use the parsed primary product, never a raw accessory relation or a host override.
+  const primarySprayerGardenIntent =
+    !parsed.intent.accessoryIntent &&
+    !/\b(?:do|dla)\s+opryskiwacz(?:a|y|e|em|om|ami|ach|ow)?\b/i.test(
+      normalizeMatchText(parsed.queryText)
+    ) &&
+    /^opryskiwacz(?:e|a|y|em|ami|ach|om|ow)?(?:\s|$)/i.test(
+      normalizeMatchText(parsed.intent.productPhrase || parsed.product)
+    );
+
   const matches = V28_RETAIL_VERTICAL_PROFILES.map((profile) => {
     let score = profile.categories.includes(parsed.category ?? "") ? 18 : 0;
+    score += asarvoToolDiscVerticalBoost(parsed, profile.id);
+    if (profile.id === "home_diy_garden" && primarySprayerGardenIntent) {
+      score += 12;
+    }
 
     // V34.CORE131: branded office paper often omits the literal phrases
     // "papier ksero" / "papier do drukarki" ("Papier Navigator Universal A4...").
@@ -1851,6 +2162,57 @@ function getRetailVerticalMatches(
   return matches.slice(0, 2);
 }
 
+// ASARVO_MEGA25_CATEGORY_ROUTING_V1
+function getMega25CategoryMatches(
+  parsed: ParsedQuery
+): Array<{ profile: AsarvoMega25CategoryProfile; score: number }> {
+  const evidence = normalizeMatchText(
+    [
+      parsed.category ?? "",
+      parsed.intent.productPhrase,
+      parsed.intent.searchBase,
+      parsed.intent.identityTerms.join(" "),
+      parsed.queryText,
+    ].filter(Boolean).join(" ")
+  );
+
+  return ASARVO_MEGA25_CATEGORY_PROFILES
+    .map((profile) => {
+      let score = profile.categories.includes(parsed.category ?? "") ? 24 : 0;
+
+      for (const signalRaw of profile.signals) {
+        const signal = normalizeMatchText(signalRaw);
+
+        if (
+          signal &&
+          universalEvidenceHasBoundedIdentityTerm(signal, evidence)
+        ) {
+          score += signal.includes(" ") ? 10 : 5;
+        }
+      }
+
+      return { profile, score };
+    })
+    .filter((entry) => entry.score >= 5)
+    .sort(
+      (a, b) =>
+        b.score - a.score ||
+        a.profile.id.localeCompare(b.profile.id)
+    )
+    .slice(0, 3);
+}
+
+function getMega25CategoryDirectAdapterLimit(
+  parsed: ParsedQuery
+): number {
+  return Math.max(
+    0,
+    ...getMega25CategoryMatches(parsed).map(
+      (entry) => entry.profile.directLimit
+    )
+  );
+}
+
 function getRetailVerticalPrimaryDomains(profile: RetailVerticalProfile): string[] {
   const primary = profile.primaryDomains?.length
     ? profile.primaryDomains
@@ -1858,21 +2220,30 @@ function getRetailVerticalPrimaryDomains(profile: RetailVerticalProfile): string
   return Array.from(new Set(primary));
 }
 
-function getIntentVerticalAcceleratorDomains(parsed: ParsedQuery): string[] {
-  // Full directory: used by allow-listing, secondary coverage and rescue.
-  return Array.from(new Set(
-    getRetailVerticalMatches(parsed).flatMap(({ profile }) => profile.domains)
-  ));
+function getIntentVerticalAcceleratorDomains(
+  parsed: ParsedQuery
+): string[] {
+  return Array.from(new Set([
+    ...getRetailVerticalMatches(parsed)
+      .flatMap(({ profile }) => profile.domains),
+    ...getMega25CategoryMatches(parsed)
+      .flatMap(({ profile }) => profile.domains),
+  ]));
 }
 
-function getIntentPrimaryRetailerDomains(parsed: ParsedQuery): string[] {
-  // Primary mesh stays intentionally small even when the coverage directory
-  // grows to hundreds of stores. This is the key latency guard.
-  return Array.from(new Set(
-    getRetailVerticalMatches(parsed).flatMap(({ profile }) =>
-      getRetailVerticalPrimaryDomains(profile)
-    )
-  ));
+function getIntentPrimaryRetailerDomains(
+  parsed: ParsedQuery
+): string[] {
+  return Array.from(new Set([
+    ...getRetailVerticalMatches(parsed)
+      .flatMap(({ profile }) =>
+        getRetailVerticalPrimaryDomains(profile)
+      ),
+    ...getMega25CategoryMatches(parsed)
+      .flatMap(({ profile }) =>
+        profile.primaryDomains
+      ),
+  ]));
 }
 
 function getTargetedPrimaryRetailerDiscoveryDomains(parsed: ParsedQuery): string[] {
@@ -1918,15 +2289,32 @@ function hasBoundedSecondaryRetailerModelFootprint(parsed: ParsedQuery): boolean
   );
 }
 
-function getIntentSecondaryRetailerCoverageLimit(parsed: ParsedQuery): number {
+// ASARVO_MEGA25_PHYSICAL_SUCCESS_V1_GENERIC_SECONDARY_3
+// Batch21 proved that the 25-category directory is broad enough, but generic
+// category queries still leave the secondary retailer wave disabled unless an
+// exact-model footprint exists. Give a MEGA25 category match a bounded
+// three-store secondary wave. Existing deterministic rotation selects those
+// stores; HTML+RSS/site-search and every final verifier gate remain unchanged.
+// ASARVO_MEGA25_PHYSICAL_SUCCESS_V2_DIRECT_FIRST5
+// V2 keeps exact-model/HARD budgets unchanged. Only ordinary MEGA25 category
+// searches move from three to five secondary retailers.
+function getIntentSecondaryRetailerCoverageLimit(
+  parsed: ParsedQuery
+): number {
   const hardRequirementCount = parsed.intent.required.filter(
     (item) => item.hard
   ).length;
-  const hasModelFootprint = hasBoundedSecondaryRetailerModelFootprint(parsed);
+  const hasModelFootprint =
+    hasBoundedSecondaryRetailerModelFootprint(parsed);
+  const hasMega25CategoryMatch =
+    getMega25CategoryMatches(parsed).length > 0;
 
   if (hardRequirementCount >= 2) return 4;
   if (hasModelFootprint && hardRequirementCount >= 1) return 3;
   if (hasModelFootprint) return 2;
+
+  if (hasMega25CategoryMatch) return 5;
+
   return 0;
 }
 
@@ -1935,38 +2323,99 @@ function getIntentSecondaryRetailerDomains(
   limit = 4
 ): string[] {
   if (limit <= 0) return [];
+
   const primary = new Set(
-    getIntentPrimaryRetailerDomains(parsed).map((domain) => domain.toLowerCase())
+    getIntentPrimaryRetailerDomains(parsed).map(
+      (domain) => domain.toLowerCase()
+    )
+  );
+
+  const directAdapterHosts = new Set(
+    V28_DIRECT_RETAILER_CATALOG_ADAPTERS.map(
+      (adapter) => adapter.host
+    )
   );
 
   const candidates = [
     ...getCategorySecondaryRetailerDomains(parsed.category),
     ...getIntentVerticalAcceleratorDomains(parsed),
   ]
-    .map((domain) => domain.replace(/^www\./i, "").trim().toLowerCase())
+    .map((domain) =>
+      domain
+        .replace(/^www\./i, "")
+        .trim()
+        .toLowerCase()
+    )
     .filter(Boolean)
     .filter((domain) => !primary.has(domain))
     .filter((domain) =>
-      !V28_UNIVERSAL_MARKETPLACE_DOMAINS.some((marketplace) =>
-        retailerHostMatchesDomain(domain, String(marketplace))
+      !V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+        (marketplace) =>
+          retailerHostMatchesDomain(
+            domain,
+            String(marketplace)
+          )
       )
     )
-    .filter((domain, index, array) => array.indexOf(domain) === index);
+    .filter(
+      (domain, index, array) =>
+        array.indexOf(domain) === index
+    );
 
   if (candidates.length <= limit) return candidates;
 
-  // CORE126: keep two stable quality anchors, then diversify the remaining
-  // secondary slots deterministically from the full matched vertical catalog.
-  // This broadens real retailer coverage without turning one request into
-  // hundreds of site: queries or weakening any final acceptance gate.
-  const stableCount = Math.min(2, limit, candidates.length);
-  const stable = candidates.slice(0, stableCount);
-  const tail = candidates.slice(stableCount);
-  if (tail.length === 0) return stable.slice(0, limit);
+  const mega25GenericWave =
+    getMega25CategoryMatches(parsed).length > 0 &&
+    !hasBoundedSecondaryRetailerModelFootprint(parsed) &&
+    parsed.intent.required.filter(
+      (item) => item.hard
+    ).length < 2;
 
-  const offset = getStableRetailerRotationSeed(parsed) % tail.length;
-  const rotated = [...tail.slice(offset), ...tail.slice(0, offset)];
-  return Array.from(new Set([...stable, ...rotated])).slice(0, limit);
+  const orderedCandidates =
+    mega25GenericWave
+      ? [
+          ...candidates.filter(
+            (domain) =>
+              directAdapterHosts.has(domain)
+          ),
+          ...candidates.filter(
+            (domain) =>
+              !directAdapterHosts.has(domain)
+          ),
+        ]
+      : candidates;
+
+  const stableCount = Math.min(
+    2,
+    limit,
+    orderedCandidates.length
+  );
+
+  const stable =
+    orderedCandidates.slice(0, stableCount);
+
+  const tail =
+    orderedCandidates.slice(stableCount);
+
+  if (tail.length === 0) {
+    return stable.slice(0, limit);
+  }
+
+  const offset =
+    getStableRetailerRotationSeed(parsed) %
+    tail.length;
+
+  const rotated = [
+    ...tail.slice(offset),
+    ...tail.slice(0, offset),
+  ];
+
+  return Array.from(
+    new Set([
+      ...stable,
+      ...rotated,
+    ])
+  ).slice(0, limit);
 }
 
 function getRetailerProductSiteScope(domain: string): string {
@@ -1981,9 +2430,6 @@ function getCategoryAcceleratorDomains(category: string | null): string[] {
 let V32_CONFIGURED_COMMERCE_DOMAINS_CACHE: string[] | null = null;
 
 function getConfiguredCommerceDomains(): string[] {
-  // Lazy cache: this list is consulted by many hot-path URL gates. Rebuilding
-  // a 150+ domain Set for every result wastes CPU and makes large directories
-  // unnecessarily expensive.
   if (V32_CONFIGURED_COMMERCE_DOMAINS_CACHE) {
     return V32_CONFIGURED_COMMERCE_DOMAINS_CACHE;
   }
@@ -1992,6 +2438,7 @@ function getConfiguredCommerceDomains(): string[] {
     ...V27_CORE_PL_DOMAINS,
     ...Object.values(V27_CATEGORY_ACCELERATOR_DOMAINS).flat(),
     ...V28_RETAIL_VERTICAL_PROFILES.flatMap((profile) => profile.domains),
+    ...ASARVO_MEGA25_CATEGORY_PROFILES.flatMap((profile) => profile.domains),
     ...V28_DIRECT_RETAILER_CATALOG_ADAPTERS.map((adapter) => adapter.host),
     "bestcena.pl",
     "rtveuroagd.pl",
@@ -2222,6 +2669,45 @@ type RetailerRequestHealthState = {
   readerSuccesses: number;
   readerFailures: number;
   readerChallenges: number;
+  // ASARVO_BATCH40_READER_LIFECYCLE_DIAGNOSTICS_V1
+  readerEligible: number;
+  readerAttempts: number;
+  readerEmptyResults: number;
+  readerNonEmptyResults: number;
+  readerSkippedAborted: number;
+  readerAbortedAfterAttempt: number;
+  readerMaxTextLength: number;
+  // ASARVO_BATCH42_JINA_START_PIPELINE_DIAGNOSTICS_V1
+  readerQueueEntries: number;
+  readerSlotGrants: number;
+  readerHttpStarts: number;
+  readerHttpResponses: number;
+  readerAbortBeforeHttpStart: number;
+  readerAbortAfterHttpStart: number;
+  readerInternalErrors: number;
+  readerQueueWaitMaxMs: number;
+  readerHttpWaitMaxMs: number;
+  readerLastHttpStatus: number | null;
+  // ASARVO_BATCH44_JINA_HTTP_ABORT_SOURCE_DIAGNOSTICS_V1
+  readerAbortAdapterOnly: number;
+  readerAbortOuterOnly: number;
+  readerAbortAdapterAndOuter: number;
+  readerAbortSignalUnknown: number;
+  readerLocalTimeouts: number;
+  // ASARVO_BATCH46_READER_MARKDOWN_PARSER_FUNNEL_DIAGNOSTICS_V1_FIX1
+  readerMarkdownParseCalls: number;
+  readerMarkdownLinks: number;
+  readerMarkdownSameHostLinks: number;
+  readerMarkdownConcreteAnchors: number;
+  readerMarkdownClusters: number;
+  readerMarkdownNamedClusters: number;
+  readerMarkdownPriceCards: number;
+  readerMarkdownGateRejects: number;
+  readerMarkdownGateAccepts: number;
+  readerMarkdownProducts: number;
+  readerOriginalDiscoverySeenAtAbort: number;
+  readerOriginalPhaseSeenAtAbort: number;
+  readerOriginalBothSeenAtAbort: number;
   products: number;
   adapterTimedOut: boolean;
   lastDirectStatus: number | null;
@@ -2286,6 +2772,41 @@ function mutateRetailerRequestHealth(
     readerSuccesses: 0,
     readerFailures: 0,
     readerChallenges: 0,
+    readerEligible: 0,
+    readerAttempts: 0,
+    readerEmptyResults: 0,
+    readerNonEmptyResults: 0,
+    readerSkippedAborted: 0,
+    readerAbortedAfterAttempt: 0,
+    readerMaxTextLength: 0,
+    readerQueueEntries: 0,
+    readerSlotGrants: 0,
+    readerHttpStarts: 0,
+    readerHttpResponses: 0,
+    readerAbortBeforeHttpStart: 0,
+    readerAbortAfterHttpStart: 0,
+    readerInternalErrors: 0,
+    readerQueueWaitMaxMs: 0,
+    readerHttpWaitMaxMs: 0,
+    readerLastHttpStatus: null,
+    readerAbortAdapterOnly: 0,
+    readerAbortOuterOnly: 0,
+    readerAbortAdapterAndOuter: 0,
+    readerAbortSignalUnknown: 0,
+    readerLocalTimeouts: 0,
+      readerMarkdownParseCalls: 0,
+      readerMarkdownLinks: 0,
+      readerMarkdownSameHostLinks: 0,
+      readerMarkdownConcreteAnchors: 0,
+      readerMarkdownClusters: 0,
+      readerMarkdownNamedClusters: 0,
+      readerMarkdownPriceCards: 0,
+      readerMarkdownGateRejects: 0,
+      readerMarkdownGateAccepts: 0,
+      readerMarkdownProducts: 0,
+    readerOriginalDiscoverySeenAtAbort: 0,
+    readerOriginalPhaseSeenAtAbort: 0,
+    readerOriginalBothSeenAtAbort: 0,
     products: 0,
     adapterTimedOut: false,
     lastDirectStatus: null,
@@ -2295,6 +2816,101 @@ function mutateRetailerRequestHealth(
   state.updatedAt = Date.now();
   bucket.hosts.set(host, state);
 }
+
+// ASARVO_BATCH40_READER_LIFECYCLE_DIAGNOSTICS_V1
+
+
+// ASARVO_BATCH44_JINA_HTTP_ABORT_SOURCE_DIAGNOSTICS_V1
+function asarvoBatch44GetOriginalRescueSignalsAtAbort(parsed: ParsedQuery, hostRaw: string) {
+  const map = ASARVO_BATCH37_SIGNAL_SOURCE.get(asarvoBatch31DiagKey(parsed));
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  let state = map?.get(host) ?? null;
+  if (!state && map) {
+    for (const [candidate, candidateState] of map) {
+      if (candidate === host || candidate.endsWith(`.${host}`) || host.endsWith(`.${candidate}`)) { state = candidateState; break; }
+    }
+  }
+  return {
+    discovery: state?.discoveryAbortAt !== null && state?.discoveryAbortAt !== undefined,
+    phase: state?.phaseAbortAt !== null && state?.phaseAbortAt !== undefined,
+  };
+}
+async function asarvoBatch40ObserveReaderFetch(
+  parsed: ParsedQuery,
+  host: string,
+  url: string,
+  timeoutMs: number,
+  allowCache: boolean,
+  signal: AbortSignal,
+  priority = 0,
+  adapterDeadlineSignal?: AbortSignal,
+  outerSignal?: AbortSignal,
+  httpSignalOverride?: AbortSignal
+): Promise<string> {
+  mutateRetailerRequestHealth(parsed, host, (state) => {
+    state.readerAttempts += 1;
+  });
+    let asarvoBatch42QueueAt = 0;
+  let asarvoBatch42HttpAt = 0;
+  let asarvoBatch42HttpStarted = false;
+const text = await fetchViaJina(url, timeoutMs, allowCache, signal, (event, value) => {
+    const now = Date.now();
+    if (event === "queue-enter") {
+      asarvoBatch42QueueAt = typeof value === "number" ? value : now;
+      mutateRetailerRequestHealth(parsed, host, (state) => { state.readerQueueEntries += 1; });
+    } else if (event === "slot-granted") {
+      mutateRetailerRequestHealth(parsed, host, (state) => {
+        state.readerSlotGrants += 1;
+        if (asarvoBatch42QueueAt > 0) state.readerQueueWaitMaxMs = Math.max(state.readerQueueWaitMaxMs, now - asarvoBatch42QueueAt);
+      });
+    } else if (event === "http-start") {
+      asarvoBatch42HttpStarted = true;
+      asarvoBatch42HttpAt = typeof value === "number" ? value : now;
+      mutateRetailerRequestHealth(parsed, host, (state) => { state.readerHttpStarts += 1; });
+    } else if (event === "http-response") {
+      mutateRetailerRequestHealth(parsed, host, (state) => {
+        state.readerHttpResponses += 1;
+        state.readerLastHttpStatus = typeof value === "number" ? value : null;
+        if (asarvoBatch42HttpAt > 0) state.readerHttpWaitMaxMs = Math.max(state.readerHttpWaitMaxMs, now - asarvoBatch42HttpAt);
+      });
+    } else if (event === "internal-error") {
+      mutateRetailerRequestHealth(parsed, host, (state) => { state.readerInternalErrors += 1; });
+    } else if (event === "local-timeout") {
+      mutateRetailerRequestHealth(parsed, host, (state) => { state.readerLocalTimeouts += 1; });
+    }
+  }, priority, httpSignalOverride);
+  if (signal.aborted) {
+    const asarvoBatch44AdapterAborted = adapterDeadlineSignal?.aborted === true;
+    const asarvoBatch44OuterAborted = outerSignal?.aborted === true;
+    const asarvoBatch44Original = asarvoBatch44GetOriginalRescueSignalsAtAbort(parsed, host);
+    mutateRetailerRequestHealth(parsed, host, (state) => {
+      if (asarvoBatch44AdapterAborted && asarvoBatch44OuterAborted) state.readerAbortAdapterAndOuter += 1;
+      else if (asarvoBatch44AdapterAborted) state.readerAbortAdapterOnly += 1;
+      else if (asarvoBatch44OuterAborted) state.readerAbortOuterOnly += 1;
+      else state.readerAbortSignalUnknown += 1;
+      if (asarvoBatch44Original.discovery && asarvoBatch44Original.phase) state.readerOriginalBothSeenAtAbort += 1;
+      else if (asarvoBatch44Original.discovery) state.readerOriginalDiscoverySeenAtAbort += 1;
+      else if (asarvoBatch44Original.phase) state.readerOriginalPhaseSeenAtAbort += 1;
+    });
+  }
+  if (signal.aborted) {
+    mutateRetailerRequestHealth(parsed, host, (state) => {
+      if (asarvoBatch42HttpStarted) state.readerAbortAfterHttpStart += 1;
+      else state.readerAbortBeforeHttpStart += 1;
+    });
+  }
+  mutateRetailerRequestHealth(parsed, host, (state) => {
+    if (signal.aborted) state.readerAbortedAfterAttempt += 1;
+    if (text) {
+      state.readerNonEmptyResults += 1;
+      state.readerMaxTextLength = Math.max(state.readerMaxTextLength, text.length);
+    } else {
+      state.readerEmptyResults += 1;
+    }
+  });
+  return text;
+}
+
 
 function shouldCircuitBreakDirectRetailerCrawl(
   parsed: ParsedQuery,
@@ -3107,6 +3723,6102 @@ const V28_DIRECT_RETAILER_CATALOG_ADAPTERS: readonly DirectRetailerCatalogAdapte
       );
     },
   },
+  {
+    // ASARVO_SOURCE_EXPANSION_V1_FIX1_LEROY_READER_TABLE_GUARD
+    // Direct Leroy search may return 403. Start one bounded first-party reader
+    // in parallel. For table intent, prefer the stable dining-table category
+    // collection as the first discovery surface. Every child product still
+    // passes the unchanged verifier.
+    host: "leroymerlin.pl",
+    categories: ["chair", "desk", "table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    // ASARVO_SOURCE_EXPANSION_V1_FIX2_LEROY_TIMEOUT_TOOL_TABLE_GUARD
+    // Measured reader smoke was ~16.7s, so 4.4s always timed out.
+    readerCatalogTimeoutMs: 18_500,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 2,
+    retryTransientDirectOnce: true,
+    buildSearchUrls: ({
+      category,
+      pivotSearchText,
+      exactSearchText,
+      secondaryPivotSearchText,
+      preciseSearchText,
+      compactSearchText,
+      relaxedSearchText,
+    }) => {
+      // ASARVO_SOURCE_EXPANSION_V1_FIX3G_LEROY_MARKDOWN_CARD_BRIDGE
+      // FIX3F proved that these first-party category/PLP reader surfaces expose
+      // concrete product-card markdown with direct product URLs and prices.
+      // /search remains 403-prone, so table intent uses category discovery.
+      const searchTexts = Array.from(
+        new Set([
+          pivotSearchText,
+          exactSearchText,
+          secondaryPivotSearchText,
+          preciseSearchText,
+          compactSearchText,
+          relaxedSearchText,
+        ].filter(Boolean))
+      );
+
+      if (category === "table") {
+        const scope = normalizeMatchText(searchTexts.join(" "));
+        const diningPlp =
+          "https://www.leroymerlin.pl/produkty/kuchnia-i-jadalnia/meble-kuchenne/stoly-i-krzesla/stoly/stol-jadalnia-p.html";
+        const woodTables =
+          "https://www.leroymerlin.pl/produkty/meble/meble-do-jadalni/stoly-i-krzesla/stoly/stoly-drewniane/";
+        const expandableTables =
+          "https://www.leroymerlin.pl/produkty/meble/meble-do-jadalni/stoly-i-krzesla/stoly/stoly-rozkladane/";
+
+        const categoryUrls: string[] = [];
+
+        if (/\brozklad/iu.test(scope)) {
+          categoryUrls.push(expandableTables);
+        }
+
+        if (/\b(?:drewn|dab)/iu.test(scope)) {
+          categoryUrls.push(woodTables);
+        }
+
+        // Highest-recall verified commerce surface from FIX3F.
+        categoryUrls.push(diningPlp);
+
+        return Array.from(new Set(categoryUrls)).slice(0, 2);
+      }
+
+      // Preserve the prior direct-search behavior for non-table categories.
+      return searchTexts
+        .slice(0, 1)
+        .map(
+          (searchText) =>
+            `https://www.leroymerlin.pl/search?q=${encodeURIComponent(searchText)}`
+        );
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_V1_LEROY_OBI_DIRECT
+    // OBI exposes stable retailer-owned search pages at /search/<query>/.
+    // Search pages are only discovery surfaces; normal offer verification is
+    // unchanged and remains authoritative.
+    host: "obi.pl",
+    categories: ["chair", "desk", "table"],
+    verticals: ["home_furniture"],
+    maxSearchUrls: 2,
+    retryTransientDirectOnce: true,
+    buildSearchUrls: ({
+      pivotSearchText,
+      exactSearchText,
+      secondaryPivotSearchText,
+      preciseSearchText,
+      compactSearchText,
+      relaxedSearchText,
+    }) =>
+      Array.from(
+        new Set([
+          pivotSearchText,
+          exactSearchText,
+          secondaryPivotSearchText,
+          preciseSearchText,
+          compactSearchText,
+          relaxedSearchText,
+        ].filter(Boolean))
+      )
+        .slice(0, 2)
+        .map(
+          (searchText) =>
+            `https://www.obi.pl/search/${encodeURIComponent(searchText)}/`
+        ),
+  },
+
+
+  // ASARVO_SOURCE_EXPANSION_V1_NEXT2_BRICOMARCHE_VIDAXL_DIRECT
+  {
+    // Bricomarché: the verified first-party surface is specifically garden /
+    // terrace / balcony tables. Do NOT use it for generic indoor dining-table
+    // intent, otherwise discovery would add the wrong product class.
+    host: "bricomarche.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 7_000,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    retryTransientDirectOnce: true,
+    buildSearchUrls: ({
+      productPhrase,
+      exactSearchText,
+      preciseSearchText,
+      compactSearchText,
+      relaxedSearchText,
+    }) => {
+      const scope = normalizeMatchText(
+        [
+          productPhrase,
+          exactSearchText,
+          preciseSearchText,
+          compactSearchText,
+          relaxedSearchText,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
+
+      const outdoorIntent =
+        /(?:^|[^a-z0-9])(?:ogrod|ogrodow|taras|tarasow|balkon|balkonow|kemping|camping|outdoor)(?=$|[^a-z0-9])/iu.test(
+          scope
+        );
+
+      if (!outdoorIntent) return [];
+
+      return [
+        "https://www.bricomarche.pl/ogrod/balkony-i-tarasy/meble-ogrodowe/stoly-i-stoliki",
+      ];
+    },
+  },
+  {
+    // vidaXL: verified reader surface exposes concrete dining-table product
+    // links. The page is discovery-only; final price/identity still come from
+    // the existing product-page hydration + universal verifier.
+    host: "vidaxl.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 8_000,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    retryTransientDirectOnce: true,
+    buildSearchUrls: ({
+      productPhrase,
+      exactSearchText,
+      preciseSearchText,
+      compactSearchText,
+      relaxedSearchText,
+    }) => {
+      const scope = normalizeMatchText(
+        [
+          productPhrase,
+          exactSearchText,
+          preciseSearchText,
+          compactSearchText,
+          relaxedSearchText,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      );
+
+      // The verified surface is indoor kitchen/dining tables. Outdoor table
+      // queries must not be redirected here.
+      const outdoorIntent =
+        /(?:^|[^a-z0-9])(?:ogrod|ogrodow|taras|tarasow|balkon|balkonow|kemping|camping|outdoor)(?=$|[^a-z0-9])/iu.test(
+          scope
+        );
+
+      if (outdoorIntent) return [];
+
+      return [
+        "https://www.vidaxl.pl/g/4355/stoly-do-kuchni-i-jadalni",
+      ];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH3_KULINA_EDAXO_MIRAT_DIRECT
+    // Stable first-party cookware category. Discovery only: all product cards
+    // still pass the existing category/HARD/price/availability verifier.
+    host: "kulina.pl",
+    categories: ["cookware_pan"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "cookware_pan") {
+        return ["https://www.kulina.pl/patelnie/"];
+      }
+      return [];
+    },
+  },
+  {
+    // Batch3: EDAXO public Shopify collections expose concrete /products/
+    // children with card prices. No product/SKU is hard-coded.
+    host: "edaxo.pl",
+    categories: ["table", "desk", "cookware_pan"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://edaxo.pl/collections/meble-i-dodatki_meble-do-salonu_stoliki-kawowe",
+        ];
+      }
+      if (category === "desk") {
+        return [
+          "https://edaxo.pl/collections/meble-i-dodatki_meble-do-salonu_konsole-i-biurka",
+        ];
+      }
+      if (category === "cookware_pan") {
+        return [
+          "https://edaxo.pl/collections/kuchnia_akcesoria-i-przybory-kuchenne_patelnie",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Batch3: MIRAT category grids expose concrete root-slug product links.
+    // Existing configured-root FIX3 handles those links generically.
+    host: "mirat.eu",
+    categories: ["table", "desk", "chair"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return ["https://mirat.eu/stoly-do-jadalni"];
+      }
+      if (category === "desk") {
+        return ["https://mirat.eu/biurka-do-biura"];
+      }
+      if (category === "chair") {
+        return ["https://mirat.eu/krzesla-do-jadalni"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH4_HOMLA_DUKA_HOMEYOU_WESTWING_KOMFORT
+    // Stable public coffee-table catalog. Discovery only.
+    host: "homla.com.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://homla.com.pl/meble/stoliki-kawowe.html",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Batch4 cookware source.
+    host: "duka.com",
+    categories: ["cookware_pan"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "cookware_pan") {
+        return [
+          "https://duka.com/pl/kuchnia/gotowanie/patelnie-i-woki",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Batch4 marketplace-style furniture catalog, constrained to desks.
+    host: "home-you.com",
+    categories: ["desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "desk") {
+        return [
+          "https://home-you.com/pl/c/meble/stoly-i-biurka/biurka",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Batch4 first-party chair catalog.
+    host: "westwing.pl",
+    categories: ["chair"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "chair") {
+        return [
+          "https://www.westwing.pl/krzesla/",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Batch4 desk catalog.
+    host: "komfort.pl",
+    categories: ["desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "desk") {
+        return [
+          "https://komfort.pl/k/pozostale-meble-f-biurka",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH5_SELSEY_VOX_FORTE_BELIANI_MEBLEPL
+    host: "selsey.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://selsey.pl/collections/stoliki-kawowe-z-polkami",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "vox.pl",
+    categories: ["chair"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "chair") {
+        return [
+          "https://vox.pl/meble/krzesla",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "forte.com.pl",
+    categories: ["desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "desk") {
+        return [
+          "https://www.forte.com.pl/biurka",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "beliani.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://www.beliani.pl/stoly/",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "meble.pl",
+    categories: ["desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "desk") {
+        return [
+          "https://www.meble.pl/meble/biurka/",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH6_9DESIGN_ABRA_DEKORIA_FABRYKAFORM_BOGART
+    host: "9design.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://9design.pl/stoliki-kawowe",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "abra-meble.pl",
+    categories: ["desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "desk") {
+        return [
+          "https://www.abra-meble.pl/wszystkie-biurka",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "dekoria.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://www.dekoria.pl/meble/stoliki-i-lawy",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "fabrykaform.pl",
+    categories: ["chair"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "chair") {
+        return [
+          "https://fabrykaform.pl/krzesla",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "meble-bogart.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://www.meble-bogart.pl/stoliki-kawowe-c-1247.html",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH7_ALL13_HOME_FURNITURE_DIRECT
+    // Drewmax is a home/furniture supply store rather than a finished-furniture
+    // specialist. Keep it narrow; universal relevance verification decides
+    // whether any concrete table-family card is usable.
+    host: "drewmax-online.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return ["https://drewmax-online.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // Etsy Poland marketplace surface for coffee tables.
+    host: "etsy.com",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://www.etsy.com/pl/market/stolik_kawowy",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Current first-party Gerlach frying-pan PLP.
+    host: "gerlach.pl",
+    categories: ["cookware_pan"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "cookware_pan") {
+        return ["https://gerlach.pl/patelnie"];
+      }
+      return [];
+    },
+  },
+  {
+    // Current Halmar desks/consoles catalog with prices and availability.
+    host: "halmar.pl",
+    categories: ["desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "desk") {
+        return [
+          "https://halmar.pl/pl/biurka_i_konsolki/",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Biedronka Home uses concrete HTML product cards; root is safer than
+    // hard-coding a single SKU or an unstable search endpoint.
+    host: "home.biedronka.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return ["https://home.biedronka.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // Legacy configured domain currently redirects to the canonical Wójcik
+    // surface; keep the configured host so vertical routing remains aligned.
+    host: "meblewojcik.com.pl",
+    categories: ["desk"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "desk") {
+        return [
+          "https://www.meblewojcik.com.pl/typ-mebla/biurka/",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    host: "meblobranie.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://www.meblobranie.pl/stoliki-kawowe",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Current SF Meble category exposes hundreds of priced coffee-table cards.
+    host: "sfmeble.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://www.sfmeble.pl/c/stoliki-kawowe-do-salonu/",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // TaniePrezenty has concrete furniture cards but no stable broad table
+    // category exposed in discovery; use the shop root and let relevance gates
+    // reject unrelated products.
+    host: "tanieprezenty.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return ["https://www.tanieprezenty.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // Current first-party Tefal frying-pan catalog.
+    host: "tefal.pl",
+    categories: ["cookware_pan"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "cookware_pan") {
+        return [
+          "https://www.tefal.pl/tefal/garnki-patelnie-i-akcesoria-kuchenne/patelnie",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // Temu is intentionally isolated to table intent. The search landing is
+    // discovery-only; concrete results still pass the existing verifier.
+    host: "temu.com",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return [
+          "https://www.temu.com/pl/search_result.html?search_key=stolik%20kawowy",
+        ];
+      }
+      return [];
+    },
+  },
+  {
+    // VERK root is used conservatively because its current category routes are
+    // not stable in public indexing.
+    host: "verk.sklep.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return ["https://verk.sklep.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // Zona Design exposes a large coffee-table catalog from its main furniture
+    // surface. Root discovery avoids coupling to a transient filter URL.
+    host: "zona-design.pl",
+    categories: ["table"],
+    verticals: ["home_furniture"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "table") {
+        return ["https://zona-design.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH8_ELECTRONICS15_LAPTOP_DIRECT
+    host: "proline.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://proline.pl/?g=Laptopy"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "proshop.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.proshop.pl/Laptopy"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "al.to",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.al.to/g-2/c/159-laptopy.html"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "avans.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.avans.pl/komputery-i-tablety/laptopy-i-ultrabooki/laptopy"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "electro.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.electro.pl/komputery-i-tablety/laptopy-i-ultrabooki/laptopy"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "alsen.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.alsen.pl/komputery/laptopy"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH9_ELECTRONICS15_LAPTOP_DIRECT
+    host: "amso.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://amso.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "apple.com",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.apple.com/pl/shop/buy-mac"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "bestcena.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://bestcena.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "foxkomputer.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://foxkomputer.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "hard-pc.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://hard-pc.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "itnes.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://itnes.pl/laptopy/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "komputery.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://komputery.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "komputerymarkowe.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://komputerymarkowe.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "krsystem.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.krsystem.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "maxelektro.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://maxelektro.pl/sklep/laptopy%2C206"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "neo24.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://neo24.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "neonet.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.neonet.pl/g-7/c/4618-laptopy.html"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "notebooki.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://notebooki.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "rtveuroagd.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.rtveuroagd.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "techlord.pl",
+    categories: ["laptop"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://techlord.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH10_ELECTRONICS_LAST9_DIRECT
+    host: "agdhome.pl",
+    categories: ["fridge","washing_machine","dishwasher","microwave"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "fridge") {
+        return ["https://agdhome.pl/"];
+      }
+      if (category === "washing_machine") {
+        return ["https://agdhome.pl/"];
+      }
+      if (category === "dishwasher") {
+        return ["https://agdhome.pl/"];
+      }
+      if (category === "microwave") {
+        return ["https://agdhome.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "botland.com.pl",
+    categories: ["network"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "network") {
+        return ["https://botland.com.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "dipol.com.pl",
+    categories: ["network","camera"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "network") {
+        return ["https://www.dipol.com.pl/"];
+      }
+      if (category === "camera") {
+        return ["https://www.dipol.com.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "eltrox.pl",
+    categories: ["camera","network"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "camera") {
+        return ["https://www.eltrox.pl/"];
+      }
+      if (category === "network") {
+        return ["https://www.eltrox.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "kamami.pl",
+    categories: ["network"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "network") {
+        return ["https://kamami.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "samsung.com",
+    categories: ["tv","smartphone","smartwatch"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tv") {
+        return ["https://www.samsung.com/pl/tvs/"];
+      }
+      if (category === "smartphone") {
+        return ["https://www.samsung.com/pl/smartphones/"];
+      }
+      if (category === "smartwatch") {
+        return ["https://www.samsung.com/pl/watches/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "senetic.pl",
+    categories: ["laptop","printer","network"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.senetic.pl/"];
+      }
+      if (category === "printer") {
+        return ["https://www.senetic.pl/"];
+      }
+      if (category === "network") {
+        return ["https://www.senetic.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "tme.eu",
+    categories: ["network"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "network") {
+        return ["https://www.tme.eu/pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "zadowolenie.pl",
+    categories: ["laptop","tv"],
+    verticals: ["electronics_tech"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "laptop") {
+        return ["https://www.zadowolenie.pl/"];
+      }
+      if (category === "tv") {
+        return ["https://www.zadowolenie.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH11_FASHION15_SHOES_DIRECT
+    host: "zalando.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.zalando.pl/obuwie/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "eobuwie.com.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://eobuwie.com.pl/c/buty"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "modivo.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://modivo.pl/c/modivo-footwear"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "answear.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://answear.com/k/ona/obuwie"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "aboutyou.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.aboutyou.pl/c/kobiety/buty-20207"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sklep.sizeer.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://sklep.sizeer.com/buty"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "ccc.eu",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://ccc.eu/pl/buty"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "4f.com.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://4f.com.pl/buty.html"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "nike.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.nike.com/pl/w/buty-v660zy7ok"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "adidas.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.adidas.pl/buty"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "newbalance.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://newbalance.pl/buty"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "eu.puma.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://eu.puma.com/pl/pl/unisex/shoes"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "reserved.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.reserved.com/pl/pl/mezczyzna/akcesoria/buty"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "hm.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www2.hm.com/pl_pl/men/shoes/view-all.html"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "zara.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.zara.com/pl/pl/mezczyzna-buty-l769.html"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH12_MEGA42_ALL_MISSING_FASHION_OUTDOOR_AUTO
+    host: "zalando-lounge.pl",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://www.zalando-lounge.pl/"];
+      }
+      if (category === "shoes") {
+        return ["https://www.zalando-lounge.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "eobuwie.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://eobuwie.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sizeer.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://sizeer.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "astratex.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://www.astratex.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "kontri.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://www.kontri.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "casu.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.casu.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "butsklep.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://butsklep.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "lancerto.com",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://www.lancerto.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "ombre.pl",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://ombre.pl/"];
+      }
+      if (category === "shoes") {
+        return ["https://ombre.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "telimena.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://telimena.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "bonprix.pl",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://www.bonprix.pl/"];
+      }
+      if (category === "shoes") {
+        return ["https://www.bonprix.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "puma.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.puma.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "peek-cloppenburg.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://www.peek-cloppenburg.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sportano.pl",
+    categories: ["shoes","bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://sportano.pl/"];
+      }
+      if (category === "bike") {
+        return ["https://sportano.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sportano.com",
+    categories: ["shoes","bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://sportano.com/"];
+      }
+      if (category === "bike") {
+        return ["https://sportano.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "8a.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://8a.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "skalnik.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.skalnik.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "e-horyzont.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.e-horyzont.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "centrumrowerowe.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://www.centrumrowerowe.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "rowertour.com",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://rowertour.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "hop-sport.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://hop-sport.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "e-insportline.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://www.e-insportline.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "martessport.com.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://martessport.com.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "intersport.pl",
+    categories: ["shoes","bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://www.intersport.pl/"];
+      }
+      if (category === "bike") {
+        return ["https://www.intersport.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "supersklep.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://supersklep.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "fitanu.com",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://fitanu.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "ski-team.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://ski-team.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "snowshop.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://snowshop.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "militaria.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://militaria.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "intercars.pl",
+    categories: ["auto_part","tire"],
+    verticals: ["automotive_parts","automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://intercars.pl/"];
+      }
+      if (category === "tire") {
+        return ["https://intercars.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "iparts.pl",
+    categories: ["auto_part","tire"],
+    verticals: ["automotive_parts","automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://www.iparts.pl/"];
+      }
+      if (category === "tire") {
+        return ["https://www.iparts.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "motointegrator.com",
+    categories: ["auto_part","tire"],
+    verticals: ["automotive_parts","automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://motointegrator.com/pl/pl/"];
+      }
+      if (category === "tire") {
+        return ["https://motointegrator.com/pl/pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "autodoc.pl",
+    categories: ["auto_part","tire"],
+    verticals: ["automotive_parts","automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://www.autodoc.pl/"];
+      }
+      if (category === "tire") {
+        return ["https://www.autodoc.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "ucando.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://www.ucando.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "motostacja.com",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://motostacja.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "motos.pl",
+    categories: ["auto_part","tire"],
+    verticals: ["automotive_parts","automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://motos.pl/"];
+      }
+      if (category === "tire") {
+        return ["https://motos.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "strefakierowcy.pl",
+    categories: ["auto_part","tire"],
+    verticals: ["automotive_parts","automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://strefakierowcy.pl/"];
+      }
+      if (category === "tire") {
+        return ["https://strefakierowcy.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "topracingshop.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://topracingshop.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "2407.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://2407.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "motochemia.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://motochemia.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "e-autoparts.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://e-autoparts.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sklepopon.com",
+    categories: ["tire"],
+    verticals: ["automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tire") {
+        return ["https://www.sklepopon.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH13_MEGA49_ALL_REMAINING_CONFIGURED
+    host: "limango.pl",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://limango.pl/"];
+      }
+      if (category === "shoes") {
+        return ["https://limango.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "vitkac.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://vitkac.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://vitkac.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "moliera2.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://moliera2.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://moliera2.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sneakerstudio.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://sneakerstudio.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "runcolors.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://runcolors.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "distance.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://distance.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "footshop.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://footshop.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "deezee.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://deezee.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "wojas.pl",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://wojas.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "kazar.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://kazar.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "rylko.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://rylko.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "ecco.com",
+    categories: ["shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://ecco.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sinsay.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://sinsay.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://sinsay.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "cropp.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://cropp.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://cropp.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "housebrand.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://housebrand.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://housebrand.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "mohito.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://mohito.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://mohito.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "medicine.pl",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://medicine.pl/"];
+      }
+      if (category === "shoes") {
+        return ["https://medicine.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "monnari.com.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://monnari.com.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "diverse-system.com",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://diverse-system.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "bigstar.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://bigstar.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "vistula.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://vistula.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "bytom.com.pl",
+    categories: ["clothing"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://bytom.com.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "wittchen.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://wittchen.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://wittchen.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "ochnik.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://ochnik.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://ochnik.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "van-graaf.com",
+    categories: ["clothing","shoes"],
+    verticals: ["fashion"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "clothing") {
+        return ["https://van-graaf.com/"];
+      }
+      if (category === "shoes") {
+        return ["https://van-graaf.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "dadelo.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://dadelo.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sprint-rowery.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://sprint-rowery.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "bikeman.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://bikeman.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sport-shop.pl",
+    categories: ["shoes","bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://sport-shop.pl/"];
+      }
+      if (category === "bike") {
+        return ["https://sport-shop.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "sklep-presto.pl",
+    categories: ["shoes","bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://sklep-presto.pl/"];
+      }
+      if (category === "bike") {
+        return ["https://sklep-presto.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "prosportowy.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://prosportowy.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "bieganie.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://bieganie.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "runnersclub.pl",
+    categories: ["shoes"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "shoes") {
+        return ["https://runnersclub.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "rowerystylowe.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://rowerystylowe.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "dobrerowery.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://dobrerowery.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "bikeatelier.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://bikeatelier.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "rowerplus.pl",
+    categories: ["bike"],
+    verticals: ["outdoor_sport"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "bike") {
+        return ["https://rowerplus.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "motoneo.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://motoneo.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "aparts.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://aparts.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "autofixer.com",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://autofixer.com/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "hamulce.net",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://hamulce.net/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "haparts.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://haparts.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "autosklep24.pl",
+    categories: ["auto_part"],
+    verticals: ["automotive_parts"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "auto_part") {
+        return ["https://autosklep24.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "felgeo.pl",
+    categories: ["tire"],
+    verticals: ["automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tire") {
+        return ["https://felgeo.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "oponytanio.pl",
+    categories: ["tire"],
+    verticals: ["automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tire") {
+        return ["https://oponytanio.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "tirendo.pl",
+    categories: ["tire"],
+    verticals: ["automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tire") {
+        return ["https://tirendo.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "123opony.pl",
+    categories: ["tire"],
+    verticals: ["automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tire") {
+        return ["https://123opony.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "lideropon.pl",
+    categories: ["tire"],
+    verticals: ["automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tire") {
+        return ["https://lideropon.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    
+    host: "oponyexpress.pl",
+    categories: ["tire"],
+    verticals: ["automotive_tires"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: ({ category }) => {
+      if (category === "tire") {
+        return ["https://oponyexpress.pl/"];
+      }
+      return [];
+    },
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH14_HOME_DIY_MEGA40
+    host: "jula.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://jula.pl/"],
+  },
+  {
+    
+    host: "narzedzia.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://narzedzia.pl/"],
+  },
+  {
+    
+    host: "domitech.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://domitech.pl/"],
+  },
+  {
+    
+    host: "mexen.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://mexen.pl/"],
+  },
+  {
+    
+    host: "zaciskowe.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zaciskowe.pl/"],
+  },
+  {
+    
+    host: "lazienkabezbarier.com.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://lazienkabezbarier.com.pl/"],
+  },
+  {
+    
+    host: "technoland.com.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://technoland.com.pl/"],
+  },
+  {
+    
+    host: "askot.krakow.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://askot.krakow.pl/"],
+  },
+  {
+    
+    host: "dom-lazienka.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://dom-lazienka.pl/"],
+  },
+  {
+    
+    host: "centrumizolacji.com.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://centrumizolacji.com.pl/"],
+  },
+  {
+    
+    host: "sklepbaterie.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sklepbaterie.pl/"],
+  },
+  {
+    
+    host: "intago.com.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://intago.com.pl/"],
+  },
+  {
+    
+    host: "makita.sklep.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://makita.sklep.pl/"],
+  },
+  {
+    
+    host: "imakita.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://imakita.pl/"],
+  },
+  {
+    
+    host: "makitamarket.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://makitamarket.pl/"],
+  },
+  {
+    
+    host: "bosch-professional.com",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://bosch-professional.com/"],
+  },
+  {
+    
+    host: "ogrodosfera.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://ogrodosfera.pl/"],
+  },
+  {
+    
+    host: "rolmarket.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://rolmarket.pl/"],
+  },
+  {
+    
+    host: "24garden.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: asarvoBatch75Build24GardenCatalogUrls,
+  },
+  {
+    
+    host: "sklepogrodniczy.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sklepogrodniczy.pl/"],
+  },
+  {
+    
+    host: "sklepfarmera.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sklepfarmera.pl/"],
+  },
+  {
+    
+    host: "homegarden.com.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://homegarden.com.pl/"],
+  },
+  {
+    
+    host: "bricoman.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://bricoman.pl/"],
+  },
+  {
+    
+    host: "lazienkaplus.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://lazienkaplus.pl/"],
+  },
+  {
+    
+    host: "kammar24.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://kammar24.pl/"],
+  },
+  {
+    
+    host: "tools4pro.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://tools4pro.pl/"],
+  },
+  {
+    
+    host: "narzedziak.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://narzedziak.pl/"],
+  },
+  {
+    
+    host: "fixero.com",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fixero.com/"],
+  },
+  {
+    
+    host: "dedra.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://dedra.pl/"],
+  },
+  {
+    
+    host: "swiatnarzedzi.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://swiatnarzedzi.pl/"],
+  },
+  {
+    
+    host: "elektro-met.pl",
+    categories: ["power_tool"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://elektro-met.pl/"],
+  },
+  {
+    
+    host: "domni.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://domni.pl/"],
+  },
+  {
+    
+    host: "in360.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://in360.pl/"],
+  },
+  {
+    
+    host: "viverto.pl",
+    categories: ["faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://viverto.pl/"],
+  },
+  {
+    
+    host: "plytki.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://plytki.pl/"],
+  },
+  {
+    
+    host: "e-floor.com.pl",
+    categories: ["power_tool","faucet"],
+    verticals: ["home_diy_garden"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://e-floor.com.pl/"],
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH15_BEAUTY_PHOTO_MEGA48
+    host: "hebe.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://hebe.pl/"],
+  },
+  {
+    
+    host: "empik.com",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://empik.com/"],
+  },
+  {
+    
+    host: "douglas.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://douglas.pl/"],
+  },
+  {
+    
+    host: "superpharm.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://superpharm.pl/"],
+  },
+  {
+    
+    host: "e-zebra.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://e-zebra.pl/"],
+  },
+  {
+    
+    host: "ezebra.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://ezebra.pl/"],
+  },
+  {
+    
+    host: "makeup.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://makeup.pl/"],
+  },
+  {
+    
+    host: "cosibella.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://cosibella.pl/"],
+  },
+  {
+    
+    host: "hairstore.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://hairstore.pl/"],
+  },
+  {
+    
+    host: "topestetic.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://topestetic.pl/"],
+  },
+  {
+    
+    host: "pachnidelko.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://pachnidelko.pl/"],
+  },
+  {
+    
+    host: "brasty.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://brasty.pl/"],
+  },
+  {
+    
+    host: "bodyland.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://bodyland.pl/"],
+  },
+  {
+    
+    host: "mojezapachy.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://mojezapachy.pl/"],
+  },
+  {
+    
+    host: "cocolita.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://cocolita.pl/"],
+  },
+  {
+    
+    host: "drogerienatura.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://drogerienatura.pl/"],
+  },
+  {
+    
+    host: "kontigo.com.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://kontigo.com.pl/"],
+  },
+  {
+    
+    host: "flaconi.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://flaconi.pl/"],
+  },
+  {
+    
+    host: "tagomago.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://tagomago.pl/"],
+  },
+  {
+    
+    host: "ekobieca.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://ekobieca.pl/"],
+  },
+  {
+    
+    host: "ladymakeup.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://ladymakeup.pl/"],
+  },
+  {
+    
+    host: "drogeriapigment.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://drogeriapigment.pl/"],
+  },
+  {
+    
+    host: "e-glamour.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://e-glamour.pl/"],
+  },
+  {
+    
+    host: "parfumdreams.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://parfumdreams.pl/"],
+  },
+  {
+    
+    host: "horex.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://horex.pl/"],
+  },
+  {
+    
+    host: "perfumeria.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://perfumeria.pl/"],
+  },
+  {
+    
+    host: "nabea.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://nabea.pl/"],
+  },
+  {
+    
+    host: "trena.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://trena.pl/"],
+  },
+  {
+    
+    host: "fryzomania.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fryzomania.pl/"],
+  },
+  {
+    
+    host: "loczek.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://loczek.pl/"],
+  },
+  {
+    
+    host: "sklepziaja.pl",
+    categories: ["perfume","shampoo","deodorant"],
+    verticals: ["beauty"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sklepziaja.pl/"],
+  },
+  {
+    
+    host: "cyfrowe.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://cyfrowe.pl/"],
+  },
+  {
+    
+    host: "fotoforma.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fotoforma.pl/"],
+  },
+  {
+    
+    host: "fotoplus.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fotoplus.pl/"],
+  },
+  {
+    
+    host: "abfoto.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://abfoto.pl/"],
+  },
+  {
+    
+    host: "beafoto.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://beafoto.pl/"],
+  },
+  {
+    
+    host: "interfoto.eu",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://interfoto.eu/"],
+  },
+  {
+    
+    host: "fotojoker.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fotojoker.pl/"],
+  },
+  {
+    
+    host: "notopstryk.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://notopstryk.pl/"],
+  },
+  {
+    
+    host: "foto-tip.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://foto-tip.pl/"],
+  },
+  {
+    
+    host: "foto-net.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://foto-net.pl/"],
+  },
+  {
+    
+    host: "e-oko.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://e-oko.pl/"],
+  },
+  {
+    
+    host: "fotosoft.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fotosoft.pl/"],
+  },
+  {
+    
+    host: "fototechnika.com",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fototechnika.com/"],
+  },
+  {
+    
+    host: "fotopoker.pl",
+    categories: ["camera","lens"],
+    verticals: ["photo_video"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fotopoker.pl/"],
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH16_SPORTS_HEALTH_MEGA32
+    host: "sfd.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sfd.pl/"],
+  },
+  {
+    
+    host: "kfd.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://kfd.pl/"],
+  },
+  {
+    
+    host: "olimpstore.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://olimpstore.pl/"],
+  },
+  {
+    
+    host: "trec.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://trec.pl/"],
+  },
+  {
+    
+    host: "bodypak.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://bodypak.pl/"],
+  },
+  {
+    
+    host: "gymbeam.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://gymbeam.pl/"],
+  },
+  {
+    
+    host: "muscle-zone.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://muscle-zone.pl/"],
+  },
+  {
+    
+    host: "allnutrition.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://allnutrition.pl/"],
+  },
+  {
+    
+    host: "strefamocy.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://strefamocy.pl/"],
+  },
+  {
+    
+    host: "ostrovit.com",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://ostrovit.com/"],
+  },
+  {
+    
+    host: "nutrend.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://nutrend.pl/"],
+  },
+  {
+    
+    host: "biotechusa.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://biotechusa.pl/"],
+  },
+  {
+    
+    host: "scitec.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://scitec.pl/"],
+  },
+  {
+    
+    host: "activlab.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://activlab.pl/"],
+  },
+  {
+    
+    host: "formotiva.pl",
+    categories: ["sports_supplement"],
+    verticals: ["sports_nutrition"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://formotiva.pl/"],
+  },
+  {
+    
+    host: "doz.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://doz.pl/"],
+  },
+  {
+    
+    host: "gemini.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://gemini.pl/"],
+  },
+  {
+    
+    host: "drmax.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://drmax.pl/"],
+  },
+  {
+    
+    host: "wapteka.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://wapteka.pl/"],
+  },
+  {
+    
+    host: "aptekaolmed.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aptekaolmed.pl/"],
+  },
+  {
+    
+    host: "i-apteka.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://i-apteka.pl/"],
+  },
+  {
+    
+    host: "zikoapteka.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zikoapteka.pl/"],
+  },
+  {
+    
+    host: "apteka-melissa.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://apteka-melissa.pl/"],
+  },
+  {
+    
+    host: "aptekazawiszy.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aptekazawiszy.pl/"],
+  },
+  {
+    
+    host: "apteline.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://apteline.pl/"],
+  },
+  {
+    
+    host: "cefarm24.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://cefarm24.pl/"],
+  },
+  {
+    
+    host: "aptekacodzienna.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aptekacodzienna.pl/"],
+  },
+  {
+    
+    host: "apteka123.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://apteka123.pl/"],
+  },
+  {
+    
+    host: "aptekaslonik.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aptekaslonik.pl/"],
+  },
+  {
+    
+    host: "aptekagalena.pl",
+    categories: [],
+    verticals: ["health_pharmacy"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aptekagalena.pl/"],
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH17_BOOKS_KIDS_MEGA48
+    host: "taniaksiazka.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://taniaksiazka.pl/"],
+  },
+  {
+    
+    host: "swiatksiazki.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://swiatksiazki.pl/"],
+  },
+  {
+    
+    host: "bonito.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://bonito.pl/"],
+  },
+  {
+    
+    host: "matfel.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://matfel.pl/"],
+  },
+  {
+    
+    host: "pwn.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://pwn.pl/"],
+  },
+  {
+    
+    host: "gandalf.com.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://gandalf.com.pl/"],
+  },
+  {
+    
+    host: "rebel.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://rebel.pl/"],
+  },
+  {
+    
+    host: "tantis.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://tantis.pl/"],
+  },
+  {
+    
+    host: "czytam.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://czytam.pl/"],
+  },
+  {
+    
+    host: "aros.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aros.pl/"],
+  },
+  {
+    
+    host: "planszomania.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://planszomania.pl/"],
+  },
+  {
+    
+    host: "aleplanszowki.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aleplanszowki.pl/"],
+  },
+  {
+    
+    host: "voiceshop.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://voiceshop.pl/"],
+  },
+  {
+    
+    host: "colorland.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://colorland.pl/"],
+  },
+  {
+    
+    host: "znak.com.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://znak.com.pl/"],
+  },
+  {
+    
+    host: "dvdmax.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://dvdmax.pl/"],
+  },
+  {
+    
+    host: "booktime.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://booktime.pl/"],
+  },
+  {
+    
+    host: "helion.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://helion.pl/"],
+  },
+  {
+    
+    host: "literia.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://literia.pl/"],
+  },
+  {
+    
+    host: "muza.com.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://muza.com.pl/"],
+  },
+  {
+    
+    host: "wydawnictwoliterackie.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://wydawnictwoliterackie.pl/"],
+  },
+  {
+    
+    host: "czarnaowca.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://czarnaowca.pl/"],
+  },
+  {
+    
+    host: "fabrykaslow.com.pl",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fabrykaslow.com.pl/"],
+  },
+  {
+    
+    host: "wydawnictwoalbatros.com",
+    categories: ["book"],
+    verticals: ["books_hobby"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://wydawnictwoalbatros.com/"],
+  },
+  {
+    
+    host: "smyk.com",
+    categories: ["construction_toy"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://smyk.com/"],
+  },
+  {
+    
+    host: "bobowozki.com.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://bobowozki.com.pl/"],
+  },
+  {
+    
+    host: "51015kids.eu",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://51015kids.eu/"],
+  },
+  {
+    
+    host: "lego.com",
+    categories: ["construction_toy"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://lego.com/"],
+  },
+  {
+    
+    host: "lionelo.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://lionelo.pl/"],
+  },
+  {
+    
+    host: "klocki.edu.pl",
+    categories: ["construction_toy"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://klocki.edu.pl/"],
+  },
+  {
+    
+    host: "fabrykabodziakow.pl",
+    categories: ["construction_toy"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fabrykabodziakow.pl/"],
+  },
+  {
+    
+    host: "elfi.pl",
+    categories: ["construction_toy"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://elfi.pl/"],
+  },
+  {
+    
+    host: "pinkorblue.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://pinkorblue.pl/"],
+  },
+  {
+    
+    host: "tantis.pl",
+    categories: ["construction_toy"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://tantis.pl/"],
+  },
+  {
+    
+    host: "bee.pl",
+    categories: ["construction_toy"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://bee.pl/"],
+  },
+  {
+    
+    host: "babyhit.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://babyhit.pl/"],
+  },
+  {
+    
+    host: "tosia.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://tosia.pl/"],
+  },
+  {
+    
+    host: "abcgps.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://abcgps.pl/"],
+  },
+  {
+    
+    host: "3kiwi.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://3kiwi.pl/"],
+  },
+  {
+    
+    host: "mamissima.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://mamissima.pl/"],
+  },
+  {
+    
+    host: "albee.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://albee.pl/"],
+  },
+  {
+    
+    host: "marko-baby.pl",
+    categories: ["stroller","child_car_seat"],
+    verticals: ["children_toys"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://marko-baby.pl/"],
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH18_GROCERY_PETS_MEGA41
+    host: "frisco.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://frisco.pl/"],
+  },
+  {
+    
+    host: "carrefour.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://carrefour.pl/"],
+  },
+  {
+    
+    host: "auchan.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://auchan.pl/"],
+  },
+  {
+    
+    host: "olini.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://olini.pl/"],
+  },
+  {
+    
+    host: "grizly.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://grizly.pl/"],
+  },
+  {
+    
+    host: "planteon.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://planteon.pl/"],
+  },
+  {
+    
+    host: "nierafinowane.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://nierafinowane.pl/"],
+  },
+  {
+    
+    host: "swiat-orkiszu.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://swiat-orkiszu.pl/"],
+  },
+  {
+    
+    host: "saluti.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://saluti.pl/"],
+  },
+  {
+    
+    host: "sklepkawa.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sklepkawa.pl/"],
+  },
+  {
+    
+    host: "cosdlazdrowia.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://cosdlazdrowia.pl/"],
+  },
+  {
+    
+    host: "selgros24.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://selgros24.pl/"],
+  },
+  {
+    
+    host: "leclerc24.net",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://leclerc24.net/"],
+  },
+  {
+    
+    host: "polskikoszyk.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://polskikoszyk.pl/"],
+  },
+  {
+    
+    host: "sklep.kaufland.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sklep.kaufland.pl/"],
+  },
+  {
+    
+    host: "delio.com.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://delio.com.pl/"],
+  },
+  {
+    
+    host: "barbora.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://barbora.pl/"],
+  },
+  {
+    
+    host: "organic24.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://organic24.pl/"],
+  },
+  {
+    
+    host: "biofuturo.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://biofuturo.pl/"],
+  },
+  {
+    
+    host: "biosklep.com.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://biosklep.com.pl/"],
+  },
+  {
+    
+    host: "zdrowesmaczki.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zdrowesmaczki.pl/"],
+  },
+  {
+    
+    host: "e-spar.com.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://e-spar.com.pl/"],
+  },
+  {
+    
+    host: "sklep.lidl.pl",
+    categories: [],
+    verticals: ["grocery_household"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://sklep.lidl.pl/"],
+  },
+  {
+    
+    host: "zooplus.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zooplus.pl/"],
+  },
+  {
+    
+    host: "fera.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fera.pl/"],
+  },
+  {
+    
+    host: "kakadu.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://kakadu.pl/"],
+  },
+  {
+    
+    host: "zooart.com.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zooart.com.pl/"],
+  },
+  {
+    
+    host: "unizoo.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://unizoo.pl/"],
+  },
+  {
+    
+    host: "petkarma.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://petkarma.pl/"],
+  },
+  {
+    
+    host: "zoopers.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zoopers.pl/"],
+  },
+  {
+    
+    host: "kuchniapupila.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://kuchniapupila.pl/"],
+  },
+  {
+    
+    host: "karusek.com.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://karusek.com.pl/"],
+  },
+  {
+    
+    host: "apetete.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://apetete.pl/"],
+  },
+  {
+    
+    host: "telekarma.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://telekarma.pl/"],
+  },
+  {
+    
+    host: "petissimo.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://petissimo.pl/"],
+  },
+  {
+    
+    host: "johndog.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://johndog.pl/"],
+  },
+  {
+    
+    host: "alezwierzaki.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://alezwierzaki.pl/"],
+  },
+  {
+    
+    host: "zoo24.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zoo24.pl/"],
+  },
+  {
+    
+    host: "hubun.pl",
+    categories: ["pet_food"],
+    verticals: ["pets"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://hubun.pl/"],
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH19_WATCHES_OFFICE_MEGA36
+    host: "zegarek.net",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zegarek.net/"],
+  },
+  {
+    
+    host: "crazytime.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://crazytime.pl/"],
+  },
+  {
+    
+    host: "yes.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://yes.pl/"],
+  },
+  {
+    
+    host: "apart.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://apart.pl/"],
+  },
+  {
+    
+    host: "wkruk.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://wkruk.pl/"],
+  },
+  {
+    
+    host: "kraina-czasu.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://kraina-czasu.pl/"],
+  },
+  {
+    
+    host: "happytime.com.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://happytime.com.pl/"],
+  },
+  {
+    
+    host: "karkosik.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://karkosik.pl/"],
+  },
+  {
+    
+    host: "labizu.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://labizu.pl/"],
+  },
+  {
+    
+    host: "marmad.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://marmad.pl/"],
+  },
+  {
+    
+    host: "energetix.com.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://energetix.com.pl/"],
+  },
+  {
+    
+    host: "mennicaswidnicka.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://mennicaswidnicka.pl/"],
+  },
+  {
+    
+    host: "time24.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://time24.pl/"],
+  },
+  {
+    
+    host: "zegarownia.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zegarownia.pl/"],
+  },
+  {
+    
+    host: "timetrend.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://timetrend.pl/"],
+  },
+  {
+    
+    host: "swiss.com.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://swiss.com.pl/"],
+  },
+  {
+    
+    host: "e-zegarki.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://e-zegarki.pl/"],
+  },
+  {
+    
+    host: "aniakruk.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://aniakruk.pl/"],
+  },
+  {
+    
+    host: "pandora.net",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://pandora.net/"],
+  },
+  {
+    
+    host: "tous.com",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://tous.com/"],
+  },
+  {
+    
+    host: "lilou.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://lilou.pl/"],
+  },
+  {
+    
+    host: "jubilersezam.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://jubilersezam.pl/"],
+  },
+  {
+    
+    host: "zegarki.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://zegarki.pl/"],
+  },
+  {
+    
+    host: "watchard.com",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://watchard.com/"],
+  },
+  {
+    
+    host: "otozegarki.pl",
+    categories: [],
+    verticals: ["watches_jewelry"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://otozegarki.pl/"],
+  },
+  {
+    
+    host: "biurowe-zakupy.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://biurowe-zakupy.pl/"],
+  },
+  {
+    
+    host: "office-media.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://office-media.pl/"],
+  },
+  {
+    
+    host: "tonerpartner.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://tonerpartner.pl/"],
+  },
+  {
+    
+    host: "dobretonery.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://dobretonery.pl/"],
+  },
+  {
+    
+    host: "papierniczy.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://papierniczy.pl/"],
+  },
+  {
+    
+    host: "dalprint.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://dalprint.pl/"],
+  },
+  {
+    
+    host: "123drukuj.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://123drukuj.pl/"],
+  },
+  {
+    
+    host: "inkhouse.pl",
+    categories: [],
+    verticals: ["office_stationery"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://inkhouse.pl/"],
+  },
+  {
+    // ASARVO_SOURCE_EXPANSION_BATCH20_MUSIC15_FINAL_CONFIGURED
+    host: "riff.net.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://riff.net.pl/"],
+  },
+  {
+    
+    host: "muzyczny.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://muzyczny.pl/"],
+  },
+  {
+    
+    host: "musicexpress.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://musicexpress.pl/"],
+  },
+  {
+    
+    host: "thomann.de",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://thomann.de/"],
+  },
+  {
+    
+    host: "guitarcenter.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://guitarcenter.pl/"],
+  },
+  {
+    
+    host: "pasja.com.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://pasja.com.pl/"],
+  },
+  {
+    
+    host: "musicstore.de",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://musicstore.de/"],
+  },
+  {
+    
+    host: "midi.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://midi.pl/"],
+  },
+  {
+    
+    host: "audiostacja.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://audiostacja.pl/"],
+  },
+  {
+    
+    host: "megamusic.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://megamusic.pl/"],
+  },
+  {
+    
+    host: "musiccenter.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://musiccenter.pl/"],
+  },
+  {
+    
+    host: "musicdealer.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://musicdealer.pl/"],
+  },
+  {
+    
+    host: "soundshop.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://soundshop.pl/"],
+  },
+  {
+    
+    host: "supersound.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://supersound.pl/"],
+  },
+  {
+    
+    host: "fxmusic.pl",
+    categories: ["guitar"],
+    verticals: ["music_instruments"],
+    readerCatalogStrategy: "parallel",
+    readerCatalogTimeoutMs: 5_600,
+    readerCatalogMaxPages: 1,
+    maxSearchUrls: 1,
+    allowEmbeddedProductRouteFallback: true,
+    buildSearchUrls: () => ["https://fxmusic.pl/"],
+  }
+
+
+
+
+
 ];
 
 async function withDeadline<T>(
@@ -3272,6 +9984,14 @@ const STOP_WORDS = new Set([
 
 function normalizeText(value: unknown): string {
   return String(value ?? "")
+    .replace(
+      /[\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/gu,
+      ""
+    )
+    .replace(
+      /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/gu,
+      " "
+    )
     .replace(/\u00a0/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -3369,10 +10089,75 @@ function canonicalNumber(value: number): string {
   return String(Number(value.toFixed(4))).replace(".", ",");
 }
 
+// ASARVO_INTENT_CORE_V12_MEGA1M_ADVERSARIAL_QUERY_ROBUSTNESS
+//
+// Query-surface hardening for text copied from phones, social media, PDFs,
+// marketplaces and rich-text editors.
+//
+// Scope is deliberately lexical only. Product names/spec values are NOT
+// corrected or rewritten. We canonicalize Unicode presentation variants that
+// are semantically equivalent to ordinary ASCII punctuation/spacing.
+
+function asarvoIntentCoreV12NormalizeAdversarialQuerySurface(
+  valueRaw: string
+): string {
+  let value =
+    normalizeText(valueRaw);
+
+  // Full-width ASCII forms: ＡＢＣ１２３，：／（）
+  value = value.replace(
+    /[\uFF01-\uFF5E]/gu,
+    (character) =>
+      String.fromCharCode(
+        character.charCodeAt(0) -
+        0xfee0
+      )
+  );
+
+  return normalizeText(value)
+    // Unicode hyphens/minus -> ASCII hyphen. Important for V9 ranges.
+    .replace(
+      /[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63]/gu,
+      "-"
+    )
+    // Smart/fancy quote families.
+    .replace(
+      /[\u201C\u201D\u201E\u201F\u2033]/gu,
+      '"'
+    )
+    .replace(
+      /[\u2018\u2019\u201A\u201B\u02BC\u2032]/gu,
+      "'"
+    )
+    // Fraction slash and similar copied separators.
+    .replace(
+      /[\u2044\u2215]/gu,
+      "/"
+    )
+    // Full-height/box vertical bars used as copied OR separators.
+    .replace(
+      /[\u01C0\u2223\u2758\uFF5C]/gu,
+      "|"
+    )
+    // Ellipsis is punctuation, not part of a model/spec token.
+    .replace(
+      /\u2026/gu,
+      "..."
+    )
+    .replace(
+      /\s+/gu,
+      " "
+    )
+    .trim();
+}
+
 function normalizeOpenWorldShoppingQuery(queryRaw: string): string {
-  let text = normalizeText(queryRaw)
-    .replace(/[×]/g, "x")
-    .replace(/[“”„]/g, '"');
+  let text =
+    asarvoIntentCoreV12NormalizeAdversarialQuerySurface(
+      queryRaw
+    )
+      .replace(/[×]/g, "x")
+      .replace(/[“”„]/g, '"');
 
   // Colloquial Polish quantities. "kilo betonu" becomes "1 kg betonu".
   text = text
@@ -3528,6 +10313,20 @@ function detectOriginal(query: string): boolean | null {
 
 function detectCategory(query: string): string | null {
   const text = query.toLowerCase();
+
+  // ASARVO_SOURCE_EXPANSION_V1_TABLE_OUTDOOR_INTENT_FIX
+  if (
+    /\b(?:stolik|stoliki|stolika|stoliku|stolikiem|stolikach|stolikom|stolikow|stolików)\b/iu.test(text)
+  ) {
+    return "table";
+  }
+
+  // ASARVO_ROUTING_V1_TABLE_HOME_FURNITURE_FIX2_AST
+  if (
+    /\b(?:stół|stol|stoły|stoly|stołu|stolu|stołem|stolem|table|dining\s+table)\b/iu.test(text)
+  ) {
+    return "table";
+  }
 
   if (
     /\b(pad(?:a|y|em|ow|ów)?|kontroler\w*|controller\w*|gamepad\w*|dualshock|dualsense)\b/i.test(text)
@@ -4218,6 +11017,8 @@ function detectModel(query: string, platform: string | null): string | null {
 }
 
 function detectProduct(query: string, category: string | null): string {
+  if (category === "table") return "stół";
+
   if (category === "controller") return "pad";
   if (category === "shampoo") return "szampon";
   if (category === "deodorant") return "dezodorant";
@@ -4280,6 +11081,15 @@ function getSearchKeywords(
   model: string | null
 ): string[] {
   const keywords: string[] = [];
+
+  // ASARVO_TABLE_STOLIK_KEYWORDS
+  if (category === "table") {
+    keywords.push(
+      "stół", "stol", "stoły", "stoly", "stołu", "stolu",
+      "stolik", "stoliki", "stolika", "stoliku",
+      "table", "dining table"
+    );
+  }
 
   if (category === "controller") {
     keywords.push("pad", "kontroler", "controller", "gamepad");
@@ -4687,8 +11497,16 @@ function extractUniversalContextualRamCapacityValuesGb(valueRaw: string): number
     add(match[1], match[2]);
   }
 
+  for (
+    const value of
+    asarvoIntentCoreV3ExtractCompositeMemoryShorthand(text).ramGb
+  ) {
+    values.add(value);
+  }
+
   return Array.from(values);
 }
+
 
 function extractUniversalTypedStorageCapacityValuesGb(
   valueRaw: string,
@@ -4766,6 +11584,302 @@ function extractUniversalTypedStorageCapacityValuesGb(
   }
 
   return Array.from(values);
+}
+
+// ASARVO_INTENT_CORE_V3_MULTI_PARAMETER_ISOLATION
+//
+// Multi-core parameter isolation:
+// 1) RAM vs storage vs VRAM capacity evidence;
+// 2) common laptop shorthand "32GB 1TB";
+// 3) GPU-bound VRAM such as "RTX 4060 8GB GDDR6";
+// 4) display refresh-rate vs electrical mains frequency.
+
+type AsarvoIntentCoreV3MemoryShorthand = {
+  ramGb: number[];
+  storageGb: number[];
+};
+
+function asarvoIntentCoreV3CapacityToGb(
+  amountRaw: string,
+  unitRaw: string
+): number | null {
+  const amount = Number(amountRaw.replace(",", "."));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return unitRaw.toLowerCase() === "tb"
+    ? amount * 1024
+    : amount;
+}
+
+function asarvoIntentCoreV3ExtractCompositeMemoryShorthand(
+  valueRaw: string
+): AsarvoIntentCoreV3MemoryShorthand {
+  const text = normalizeMatchText(valueRaw);
+
+  if (
+    !/\b(?:laptop|notebook|ultrabook|macbook)\b/iu.test(text)
+  ) {
+    return { ramGb: [], storageGb: [] };
+  }
+
+  const candidates: number[] = [];
+
+  for (const match of text.matchAll(openWorldCapacityRegex("giu"))) {
+    if (typeof match.index !== "number") continue;
+
+    const start = match.index;
+    const end = start + match[0].length;
+    const localBefore = text.slice(Math.max(0, start - 28), start);
+    const local = text.slice(
+      Math.max(0, start - 36),
+      Math.min(text.length, end + 36)
+    );
+
+    if (
+      /\b(?:ram|ddr[345]|vram|gddr\d+|ssd|nvme|hdd|dysk|storage|pamiec\s+wewn|pamięć\s+wewn)\b/iu.test(local)
+    ) {
+      continue;
+    }
+
+    if (
+      /\b(?:rtx|gtx)\s*\d{3,4}(?:\s*(?:ti|super))?\s*$/iu.test(localBefore) ||
+      /\brx\s*\d{4}(?:\s*xt)?\s*$/iu.test(localBefore) ||
+      /\barc\s+[a-z]?\d{3}\s*$/iu.test(localBefore)
+    ) {
+      continue;
+    }
+
+    const value = asarvoIntentCoreV3CapacityToGb(
+      match[1],
+      match[2]
+    );
+    if (value !== null) candidates.push(value);
+  }
+
+  const distinct = Array.from(new Set(candidates))
+    .sort((a, b) => a - b);
+
+  if (distinct.length < 2) {
+    return { ramGb: [], storageGb: [] };
+  }
+
+  const smallest = distinct[0];
+  const largest = distinct[distinct.length - 1];
+
+  if (
+    smallest < 4 ||
+    smallest > 128 ||
+    largest < 128 ||
+    largest < smallest * 4
+  ) {
+    return { ramGb: [], storageGb: [] };
+  }
+
+  return {
+    ramGb: [smallest],
+    storageGb: [largest],
+  };
+}
+
+function asarvoIntentCoreV3ExtractContextualVramCapacityValuesGb(
+  valueRaw: string
+): number[] {
+  const text = normalizeMatchText(valueRaw);
+  const values = new Set<number>();
+  const cap = String.raw`(\d+(?:[.,]\d+)?)\s*(tb|gb)`;
+
+  const add = (amountRaw: string, unitRaw: string): void => {
+    const value =
+      asarvoIntentCoreV3CapacityToGb(amountRaw, unitRaw);
+    if (value !== null) values.add(value);
+  };
+
+  for (const match of text.matchAll(new RegExp(
+    String.raw`\b${cap}\s*(?:pamieci\s+|pamięci\s+)?(?:vram|gddr\d+[x]?|graphics\s+memory|pamiec\s+graf\w*|pamięć\s+graf\w*)\b`,
+    "giu"
+  ))) {
+    add(match[1], match[2]);
+  }
+
+  for (const match of text.matchAll(new RegExp(
+    String.raw`\b(?:vram|gddr\d+[x]?|graphics\s+memory|pamiec\s+graf\w*|pamięć\s+graf\w*)\s*[:=\-]?\s*${cap}\b`,
+    "giu"
+  ))) {
+    add(match[1], match[2]);
+  }
+
+  for (const pattern of [
+    new RegExp(
+      String.raw`\b(?:rtx|gtx)\s*\d{3,4}(?:\s*(?:ti|super))?\s+${cap}\b`,
+      "giu"
+    ),
+    new RegExp(
+      String.raw`\brx\s*\d{4}(?:\s*xt)?\s+${cap}\b`,
+      "giu"
+    ),
+    new RegExp(
+      String.raw`\barc\s+[a-z]?\d{3}\s+${cap}\b`,
+      "giu"
+    ),
+  ]) {
+    for (const match of text.matchAll(pattern)) {
+      add(match[1], match[2]);
+    }
+  }
+
+  return Array.from(values);
+}
+
+function asarvoIntentCoreV3ExtractContextualStorageCapacityValuesGb(
+  valueRaw: string
+): number[] {
+  const text = normalizeMatchText(valueRaw);
+  const values = new Set<number>();
+  const cap = String.raw`(\d+(?:[.,]\d+)?)\s*(tb|gb)`;
+
+  const add = (amountRaw: string, unitRaw: string): void => {
+    const value =
+      asarvoIntentCoreV3CapacityToGb(amountRaw, unitRaw);
+    if (value !== null) values.add(value);
+  };
+
+  for (const value of extractUniversalTypedStorageCapacityValuesGb(
+    text,
+    "ssd"
+  )) {
+    values.add(value);
+  }
+
+  for (const match of text.matchAll(new RegExp(
+    String.raw`\b${cap}\s*(?:dysk(?:u)?\s*)?(?:hdd|hard\s+disk|dysk\s+twardy|storage|internal\s+storage|internal\s+memory|pamiec\s+wewn\w*|pamięć\s+wewn\w*)\b`,
+    "giu"
+  ))) {
+    add(match[1], match[2]);
+  }
+
+  for (const match of text.matchAll(new RegExp(
+    String.raw`\b(?:hdd|hard\s+disk|dysk\s+twardy|storage|internal\s+storage|internal\s+memory|pamiec\s+wewn\w*|pamięć\s+wewn\w*)\s*[:=\-]?\s*${cap}\b`,
+    "giu"
+  ))) {
+    add(match[1], match[2]);
+  }
+
+  if (
+    /\b(?:iphone|ipad|galaxy\s+(?:s|a|m|f|z)|pixel\s+\d|redmi|poco|oneplus|smartfon|smartphone|telefon|tablet)\b/iu.test(text)
+  ) {
+    const bare: number[] = [];
+
+    for (const match of text.matchAll(openWorldCapacityRegex("giu"))) {
+      if (typeof match.index !== "number") continue;
+
+      const start = match.index;
+      const end = start + match[0].length;
+      const local = text.slice(
+        Math.max(0, start - 26),
+        Math.min(text.length, end + 26)
+      );
+
+      if (
+        /\b(?:ram|ddr[345]|vram|gddr\d+)\b/iu.test(local)
+      ) {
+        continue;
+      }
+
+      const value =
+        asarvoIntentCoreV3CapacityToGb(match[1], match[2]);
+
+      if (value !== null) bare.push(value);
+    }
+
+    // ASARVO_FIX23_UNIQUE_PHONE_CAPACITY: the same exact listing storage
+    // may occur in both title and description; reject DIFFERENT capacities.
+    const uniqueBareValues = Array.from(new Set(bare));
+    if (uniqueBareValues.length === 1) {
+      values.add(uniqueBareValues[0]);
+    }
+  }
+
+  for (
+    const value of
+    asarvoIntentCoreV3ExtractCompositeMemoryShorthand(text).storageGb
+  ) {
+    values.add(value);
+  }
+
+  return Array.from(values);
+}
+
+function asarvoIntentCoreV3ExtractDisplayRefreshRateValuesHz(
+  valueRaw: string
+): number[] {
+  const text = normalizeMatchText(valueRaw);
+  const values = new Set<number>();
+
+  for (const match of text.matchAll(
+    /\b(\d{2,3})\s*hz\b/giu
+  )) {
+    if (typeof match.index !== "number") continue;
+
+    const start = match.index;
+    const end = start + match[0].length;
+    const local = text.slice(
+      Math.max(0, start - 64),
+      Math.min(text.length, end + 64)
+    );
+
+    const explicitDisplayRate =
+      /\b(?:odswiez\w*|odśwież\w*|refresh(?:\s+rate)?|panel|display|screen|ekran|monitor|telewizor|tv)\b/iu.test(local);
+
+    const electricalFrequency =
+      /\b(?:ac|input|wejscie|wejście|zasilan\w*|mains|sieci\w*|frequency|czestotliwosc\s+sieci|częstotliwość\s+sieci|230\s*v|220\s*v|110\s*v)\b/iu.test(local);
+
+    if (electricalFrequency && !explicitDisplayRate) {
+      continue;
+    }
+
+    const value = Number(match[1]);
+    if (
+      Number.isFinite(value) &&
+      value >= 24 &&
+      value <= 500
+    ) {
+      values.add(value);
+    }
+  }
+
+  return Array.from(values);
+}
+
+function asarvoIntentCoreV3QueryHzIsDisplayRefresh(
+  textRaw: string,
+  matchStart: number,
+  matchEnd: number,
+  category: string | null
+): boolean {
+  const text = normalizeMatchText(textRaw);
+  const local = text.slice(
+    Math.max(0, matchStart - 58),
+    Math.min(text.length, matchEnd + 58)
+  );
+
+  const explicitDisplayRate =
+    /\b(?:odswiez\w*|odśwież\w*|refresh(?:\s+rate)?|panel|display|screen|ekran)\b/iu.test(local);
+
+  const electricalFrequency =
+    /\b(?:ac|input|wejscie|wejście|zasilan\w*|mains|sieci\w*|frequency|czestotliwosc\s+sieci|częstotliwość\s+sieci|230\s*v|220\s*v|110\s*v)\b/iu.test(local);
+
+  if (electricalFrequency && !explicitDisplayRate) {
+    return false;
+  }
+
+  if (explicitDisplayRate) return true;
+
+  return [
+    "tv",
+    "monitor",
+    "laptop",
+    "phone",
+    "tablet",
+  ].includes(category ?? "");
 }
 
 function storageMediumRequirementFromAll(
@@ -4847,26 +11961,62 @@ function requirementHasEvidenceInContext(
   if (requirement.key === "ram") {
     const requested = parseUniversalCapacityToGb(requirement.value);
     if (requested === null) return false;
-    const offered = extractUniversalContextualRamCapacityValuesGb(evidenceRaw);
-    return offered.some((value) => universalNumericComparisonSatisfied(
-      value,
-      requested,
-      universalRequirementComparison(requirement)
-    ));
-  }
 
-  if (requirement.key === "storage") {
-    const medium = storageMediumCanonicalValue(storageMediumRequirementFromAll(allRequirements));
-    if (medium) {
-      const requested = parseUniversalCapacityToGb(requirement.value);
-      if (requested === null) return false;
-      const offered = extractUniversalTypedStorageCapacityValuesGb(evidenceRaw, medium);
-      return offered.some((value) => universalNumericComparisonSatisfied(
+    const offered =
+      extractUniversalContextualRamCapacityValuesGb(evidenceRaw);
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
         value,
         requested,
         universalRequirementComparison(requirement)
-      ));
-    }
+      )
+    );
+  }
+
+  if (requirement.key === "vram") {
+    const requested = parseUniversalCapacityToGb(requirement.value);
+    if (requested === null) return false;
+
+    const offered =
+      asarvoIntentCoreV3ExtractContextualVramCapacityValuesGb(
+        evidenceRaw
+      );
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
+        value,
+        requested,
+        universalRequirementComparison(requirement)
+      )
+    );
+  }
+
+  if (requirement.key === "storage") {
+    const requested = parseUniversalCapacityToGb(requirement.value);
+    if (requested === null) return false;
+
+    const medium =
+      storageMediumCanonicalValue(
+        storageMediumRequirementFromAll(allRequirements)
+      );
+
+    const offered = medium
+      ? extractUniversalTypedStorageCapacityValuesGb(
+          evidenceRaw,
+          medium
+        )
+      : asarvoIntentCoreV3ExtractContextualStorageCapacityValuesGb(
+          evidenceRaw
+        );
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
+        value,
+        requested,
+        universalRequirementComparison(requirement)
+      )
+    );
   }
 
   return requirementHasEvidence(requirement, evidenceRaw);
@@ -5387,6 +12537,623 @@ function universalForbiddenSuffixIsExplicitInclusion(suffixRaw: string): boolean
   );
 }
 
+// ASARVO_INTENT_CORE_V9_MEGA3000_NUMERIC_RANGES_APPROX
+//
+// Continuous numeric intent without introducing a new comparison type.
+//
+// Range:
+//   "RAM 16-32 GB"
+// becomes:
+//   RAM >= 16 GB
+//   RAM <= 32 GB
+//
+// Approximate:
+//   "około 144 Hz"
+// becomes a bounded gte/lte window using a conservative per-family tolerance.
+//
+// This deliberately reuses existing gte/lte verification semantics so V3/V6/V7
+// evidence binding, conflict checks and canonical proof do not need parallel
+// special-case matchers.
+
+type AsarvoIntentCoreV9NumericRangeSpan = {
+  start: number;
+  end: number;
+  low: number;
+  high: number;
+  lowUnit: string;
+  highUnit: string;
+};
+
+function asarvoIntentCoreV9CanonicalNumber(
+  value: number
+): string {
+  if (!Number.isFinite(value)) return "";
+  return String(
+    Math.round(value * 1000) / 1000
+  );
+}
+
+function asarvoIntentCoreV9RequirementNumericValue(
+  requirement: UniversalRequirement
+): number | null {
+  const match =
+    normalizeMatchText(
+      requirement.value
+    ).match(
+      /\d+(?:[.,]\d+)?/
+    );
+
+  if (!match) return null;
+
+  const value =
+    Number(
+      match[0].replace(",", ".")
+    );
+
+  return Number.isFinite(value)
+    ? value
+    : null;
+}
+
+function asarvoIntentCoreV9UnitFamily(
+  valueRaw: string
+): string | null {
+  const value =
+    normalizeMatchText(valueRaw);
+
+  if (/\b(?:gb|tb)\b/iu.test(value)) return "capacity";
+  if (/\bhz\b/iu.test(value)) return "hz";
+  if (/\b(?:cal(?:i|e|a)?|inch(?:es)?|")\b/iu.test(value)) return "screen";
+  if (/\b(?:mah|ah)\b/iu.test(value)) return "battery";
+  if (/\b(?:kw|w)\b/iu.test(value)) return "power";
+  if (/\b(?:kg|g)\b/iu.test(value)) return "mass";
+  if (/\b(?:ml|l)\b/iu.test(value)) return "volume";
+  if (/\b(?:mm|cm|m)\b/iu.test(value)) return "length";
+  if (/\bv\b/iu.test(value)) return "voltage";
+  if (/\brpm\b/iu.test(value)) return "rpm";
+  if (/\bbar\b/iu.test(value)) return "pressure";
+  if (/\b(?:mbps|gbps)\b/iu.test(value)) return "speed";
+  if (/\bmp\b/iu.test(value)) return "megapixel";
+  if (/\bnit(?:s)?\b/iu.test(value)) return "brightness";
+  if (/\bmin(?:ut(?:a|y)?)?\b/iu.test(value)) return "duration";
+
+  return null;
+}
+
+function asarvoIntentCoreV9RawUnitFamily(
+  unitRaw: string
+): string | null {
+  const unit =
+    normalizeMatchText(unitRaw);
+
+  if (/^(?:gb|tb)$/iu.test(unit)) return "capacity";
+  if (/^hz$/iu.test(unit)) return "hz";
+  if (/^(?:cal(?:i|e|a)?|inch(?:es)?|")$/iu.test(unit)) return "screen";
+  if (/^(?:mah|ah)$/iu.test(unit)) return "battery";
+  if (/^(?:kw|w)$/iu.test(unit)) return "power";
+  if (/^(?:kg|g)$/iu.test(unit)) return "mass";
+  if (/^(?:ml|l)$/iu.test(unit)) return "volume";
+  if (/^(?:mm|cm|m)$/iu.test(unit)) return "length";
+  if (/^v$/iu.test(unit)) return "voltage";
+  if (/^rpm$/iu.test(unit)) return "rpm";
+  if (/^bar$/iu.test(unit)) return "pressure";
+  if (/^(?:mbps|gbps)$/iu.test(unit)) return "speed";
+  if (/^mp$/iu.test(unit)) return "megapixel";
+  if (/^nit(?:s)?$/iu.test(unit)) return "brightness";
+  if (/^min(?:ut(?:a|y)?)?$/iu.test(unit)) return "duration";
+
+  return null;
+}
+
+function asarvoIntentCoreV9NearlyEqual(
+  first: number,
+  second: number
+): boolean {
+  return Math.abs(first - second) <= 0.001;
+}
+
+function asarvoIntentCoreV9ReplaceRequirementNumber(
+  requirement: UniversalRequirement,
+  numericValue: number,
+  comparison: "gte" | "lte"
+): UniversalRequirement {
+  const numeric =
+    asarvoIntentCoreV9CanonicalNumber(
+      numericValue
+    );
+
+  const replace = (
+    valueRaw: string
+  ): string =>
+    valueRaw.replace(
+      /\d+(?:[.,]\d+)?/,
+      numeric
+    );
+
+  return {
+    ...requirement,
+    value: replace(
+      requirement.value
+    ),
+    aliases: uniqueNormalized(
+      requirement.aliases.map(
+        replace
+      )
+    ),
+    hard: true,
+    comparison,
+  };
+}
+
+function asarvoIntentCoreV9FindRequirementTemplate(
+  requirements: readonly UniversalRequirement[],
+  numericValue: number,
+  unitRaw: string,
+  preferredKey: string | null = null
+): UniversalRequirement | null {
+  const family =
+    asarvoIntentCoreV9RawUnitFamily(
+      unitRaw
+    );
+
+  if (!family) return null;
+
+  const candidates =
+    requirements.filter(
+      (requirement) => {
+        if (
+          !requirement.hard ||
+          requirement.kind === "feature"
+        ) {
+          return false;
+        }
+
+        if (
+          preferredKey &&
+          requirement.key !== preferredKey
+        ) {
+          return false;
+        }
+
+        const value =
+          asarvoIntentCoreV9RequirementNumericValue(
+            requirement
+          );
+
+        if (
+          value === null ||
+          !asarvoIntentCoreV9NearlyEqual(
+            value,
+            numericValue
+          )
+        ) {
+          return false;
+        }
+
+        return (
+          asarvoIntentCoreV9UnitFamily(
+            requirement.value
+          ) === family ||
+          requirement.aliases.some(
+            (alias) =>
+              asarvoIntentCoreV9UnitFamily(
+                alias
+              ) === family
+          )
+        );
+      }
+    );
+
+  return candidates[0] ?? null;
+}
+
+function asarvoIntentCoreV9RangePatterns(): RegExp[] {
+  const number =
+    String.raw`(\d+(?:[.,]\d+)?)`;
+
+  const unit =
+    String.raw`(gb|tb|hz|v|w|kw|mah|ah|kg|g|ml|l|mm|cm|m|cal(?:i|e|a)?|inch(?:es)?|"|rpm|bar|mp|mbps|gbps|nit(?:s)?|min(?:ut(?:a|y)?)?)`;
+
+  return [
+    new RegExp(
+      String.raw`(?:^|\s)(?:od|from)\s*${number}\s*${unit}?\s*(?:do|to)\s*${number}\s*${unit}\b`,
+      "giu"
+    ),
+    new RegExp(
+      String.raw`(?:^|\s)(?:mi[eę]dzy|between)\s*${number}\s*${unit}?\s*(?:a|and)\s*${number}\s*${unit}\b`,
+      "giu"
+    ),
+    new RegExp(
+      String.raw`(?:^|\s)${number}\s*${unit}\s*(?:-|–|—|do|to)\s*${number}\s*${unit}\b`,
+      "giu"
+    ),
+    new RegExp(
+      String.raw`(?:^|\s)${number}\s*(?:-|–|—)\s*${number}\s*${unit}\b`,
+      "giu"
+    ),
+  ];
+}
+
+function asarvoIntentCoreV9ExtractNumericRanges(
+  queryRaw: string
+): AsarvoIntentCoreV9NumericRangeSpan[] {
+  const query =
+    normalizeMatchText(queryRaw);
+
+  const ranges: AsarvoIntentCoreV9NumericRangeSpan[] = [];
+  const seen = new Set<string>();
+
+  for (
+    const pattern of
+    asarvoIntentCoreV9RangePatterns()
+  ) {
+    for (const match of query.matchAll(pattern)) {
+      if (
+        typeof match.index !== "number"
+      ) {
+        continue;
+      }
+
+      const captures =
+        match
+          .slice(1)
+          .filter(
+            (value): value is string =>
+              typeof value === "string"
+          );
+
+      const numbers =
+        captures.filter(
+          (value) =>
+            /^\d+(?:[.,]\d+)?$/u.test(
+              value
+            )
+        );
+
+      const units =
+        captures.filter(
+          (value) =>
+            Boolean(
+              asarvoIntentCoreV9RawUnitFamily(
+                value
+              )
+            )
+        );
+
+      if (
+        numbers.length < 2 ||
+        units.length < 1
+      ) {
+        continue;
+      }
+
+      const first =
+        Number(
+          numbers[0].replace(",", ".")
+        );
+
+      const second =
+        Number(
+          numbers[1].replace(",", ".")
+        );
+
+      if (
+        !Number.isFinite(first) ||
+        !Number.isFinite(second) ||
+        first <= 0 ||
+        second <= 0 ||
+        asarvoIntentCoreV9NearlyEqual(
+          first,
+          second
+        )
+      ) {
+        continue;
+      }
+
+      const low =
+        Math.min(first, second);
+
+      const high =
+        Math.max(first, second);
+
+      const highUnit =
+        units[units.length - 1];
+
+      const lowUnit =
+        units.length >= 2
+          ? units[0]
+          : highUnit;
+
+      if (
+        asarvoIntentCoreV9RawUnitFamily(
+          lowUnit
+        ) !==
+        asarvoIntentCoreV9RawUnitFamily(
+          highUnit
+        )
+      ) {
+        continue;
+      }
+
+      const key = [
+        low,
+        high,
+        normalizeMatchText(lowUnit),
+        normalizeMatchText(highUnit),
+      ].join(":");
+
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      ranges.push({
+        start: match.index,
+        end:
+          match.index +
+          match[0].length,
+        low,
+        high,
+        lowUnit,
+        highUnit,
+      });
+    }
+  }
+
+  return ranges.slice(0, 4);
+}
+
+function asarvoIntentCoreV9ApproxToleranceRatio(
+  requirement: UniversalRequirement
+): number {
+  if (
+    [
+      "refresh_rate",
+      "screen_size",
+      "voltage",
+      "focal_length",
+      "lens_aperture",
+    ].includes(requirement.key)
+  ) {
+    return 0.05;
+  }
+
+  if (
+    [
+      "ram",
+      "storage",
+      "vram",
+      "capacity",
+      "ram_total_capacity",
+      "battery_capacity",
+      "power",
+      "mass",
+      "package_weight",
+      "volume",
+    ].includes(requirement.key)
+  ) {
+    return 0.10;
+  }
+
+  return requirement.kind === "size"
+    ? 0.05
+    : 0.10;
+}
+
+function asarvoIntentCoreV9ApplyRangeAndApproxSemantics(
+  queryRaw: string,
+  requirementsInput: readonly UniversalRequirement[]
+): UniversalRequirement[] {
+  const query =
+    normalizeMatchText(queryRaw);
+
+  let requirements =
+    [...requirementsInput];
+
+  const removeEndpointRequirements = (
+    key: string,
+    values: readonly number[]
+  ): void => {
+    requirements =
+      requirements.filter(
+        (requirement) => {
+          if (requirement.key !== key) {
+            return true;
+          }
+
+          const value =
+            asarvoIntentCoreV9RequirementNumericValue(
+              requirement
+            );
+
+          if (value === null) return true;
+
+          return !values.some(
+            (endpoint) =>
+              asarvoIntentCoreV9NearlyEqual(
+                value,
+                endpoint
+              )
+          );
+        }
+      );
+  };
+
+  for (
+    const range of
+    asarvoIntentCoreV9ExtractNumericRanges(
+      query
+    )
+  ) {
+    const highTemplate =
+      asarvoIntentCoreV9FindRequirementTemplate(
+        requirementsInput,
+        range.high,
+        range.highUnit
+      );
+
+    const lowTemplate =
+      asarvoIntentCoreV9FindRequirementTemplate(
+        requirementsInput,
+        range.low,
+        range.lowUnit,
+        highTemplate?.key ?? null
+      );
+
+    const template =
+      highTemplate ??
+      lowTemplate;
+
+    if (!template) continue;
+
+    const sameFamily =
+      asarvoIntentCoreV9RawUnitFamily(
+        range.lowUnit
+      ) ===
+      asarvoIntentCoreV9RawUnitFamily(
+        range.highUnit
+      );
+
+    if (!sameFamily) continue;
+
+    // If units differ inside one family (e.g. 512 GB..1 TB), both endpoints
+    // must have been parsed explicitly so we do not fabricate a wrong unit.
+    if (
+      normalizeMatchText(
+        range.lowUnit
+      ) !==
+      normalizeMatchText(
+        range.highUnit
+      ) &&
+      (!lowTemplate || !highTemplate)
+    ) {
+      continue;
+    }
+
+    const lowerBase =
+      lowTemplate ?? template;
+
+    const upperBase =
+      highTemplate ?? template;
+
+    removeEndpointRequirements(
+      template.key,
+      [
+        range.low,
+        range.high,
+      ]
+    );
+
+    addUniversalRequirement(
+      requirements,
+      asarvoIntentCoreV9ReplaceRequirementNumber(
+        lowerBase,
+        range.low,
+        "gte"
+      )
+    );
+
+    addUniversalRequirement(
+      requirements,
+      asarvoIntentCoreV9ReplaceRequirementNumber(
+        upperBase,
+        range.high,
+        "lte"
+      )
+    );
+  }
+
+  const approxPattern =
+    /(?:^|[\s,;:()])(?:oko[lł]o|ok\.?|mniej\s+wi[eę]cej|w\s+przybli[zż]eniu|around|about|approximately|approx\.?|~)\s*(\d+(?:[.,]\d+)?)\s*(gb|tb|hz|v|w|kw|mah|ah|kg|g|ml|l|mm|cm|m|cal(?:i|e|a)?|inch(?:es)?|"|rpm|bar|mp|mbps|gbps|nit(?:s)?|min(?:ut(?:a|y)?)?)\b/giu;
+
+  for (
+    const match of
+    query.matchAll(
+      approxPattern
+    )
+  ) {
+    const center =
+      Number(
+        match[1].replace(",", ".")
+      );
+
+    const unit =
+      match[2];
+
+    if (
+      !Number.isFinite(center) ||
+      center <= 0
+    ) {
+      continue;
+    }
+
+    const template =
+      asarvoIntentCoreV9FindRequirementTemplate(
+        requirementsInput,
+        center,
+        unit
+      );
+
+    if (!template) continue;
+
+    // Do not reinterpret a value that already belongs to an explicit range.
+    if (
+      asarvoIntentCoreV9ExtractNumericRanges(
+        query
+      ).some(
+        (range) =>
+          asarvoIntentCoreV9NearlyEqual(
+            range.low,
+            center
+          ) ||
+          asarvoIntentCoreV9NearlyEqual(
+            range.high,
+            center
+          )
+      )
+    ) {
+      continue;
+    }
+
+    const ratio =
+      asarvoIntentCoreV9ApproxToleranceRatio(
+        template
+      );
+
+    const lower =
+      Math.max(
+        0,
+        center * (1 - ratio)
+      );
+
+    const upper =
+      center * (1 + ratio);
+
+    removeEndpointRequirements(
+      template.key,
+      [center]
+    );
+
+    addUniversalRequirement(
+      requirements,
+      asarvoIntentCoreV9ReplaceRequirementNumber(
+        template,
+        lower,
+        "gte"
+      )
+    );
+
+    addUniversalRequirement(
+      requirements,
+      asarvoIntentCoreV9ReplaceRequirementNumber(
+        template,
+        upper,
+        "lte"
+      )
+    );
+  }
+
+  return requirements.slice(0, 16);
+}
+
 function extractUniversalRequirements(
   query: string,
   category: string | null
@@ -5534,6 +13301,55 @@ function extractUniversalRequirements(
     }
   }
 
+  // ASARVO_INTENT_CORE_V1_GPU_REQUIREMENT
+  // Concrete graphics model is a HARD requirement even when the requested
+  // product is a laptop/desktop. Examples: RTX5090, RTX 5090, RTX-5090, RX 7900 XTX.
+  const nvidiaGpuMatch = text.match(
+    /\b(?:nvidia\s+)?(?:geforce\s+)?(rtx|gtx)\s*[- ]?\s*(\d{3,4})(?:\s*[- ]?\s*(ti|super))?\b/i
+  );
+  if (nvidiaGpuMatch) {
+    const family = nvidiaGpuMatch[1].toUpperCase();
+    const number = nvidiaGpuMatch[2];
+    const suffixRaw = nvidiaGpuMatch[3]?.toLowerCase() ?? "";
+    const suffix = suffixRaw === "ti" ? "Ti" : suffixRaw === "super" ? "SUPER" : "";
+    const canonical = normalizeText(family + " " + number + (suffix ? " " + suffix : ""));
+    add(
+      "gpu_model",
+      "GPU",
+      canonical,
+      uniqueNormalized([
+        canonical,
+        canonical.replace(/\s+/g, ""),
+        "GeForce " + canonical,
+        "NVIDIA GeForce " + canonical,
+      ]),
+      "spec",
+      true
+    );
+  }
+
+  const amdGpuMatch = text.match(
+    /\b(?:amd\s+)?(?:radeon\s+)?rx\s*[- ]?\s*(\d{3,4})(?:\s*[- ]?\s*(xtx|xt))?\b/i
+  );
+  if (amdGpuMatch) {
+    const number = amdGpuMatch[1];
+    const suffix = (amdGpuMatch[2] ?? "").toUpperCase();
+    const canonical = normalizeText("RX " + number + (suffix ? " " + suffix : ""));
+    add(
+      "gpu_model",
+      "GPU",
+      canonical,
+      uniqueNormalized([
+        canonical,
+        canonical.replace(/\s+/g, ""),
+        "Radeon " + canonical,
+        "AMD Radeon " + canonical,
+      ]),
+      "spec",
+      true
+    );
+  }
+
   // RAM / storage / VRAM / generic capacity. The local context decides what a
   // number such as 16 GB means, but the matcher always looks for the exact
   // requested capacity instead of category-specific hard-coding.
@@ -5638,6 +13454,43 @@ function extractUniversalRequirements(
           ["ssd", "nvme", "solid state drive"],
           "compatibility"
         );
+      }
+    }
+  }
+
+  // INTENT CORE V3: common laptop shorthand "32GB 1TB" is semantically
+  // RAM + storage even when users/sellers omit explicit RAM/SSD labels.
+  if (category === "laptop") {
+    const genericCapacityRequirements = requirements
+      .filter((item) => item.hard && item.key === "capacity")
+      .map((item) => ({
+        item,
+        value: parseUniversalCapacityToGb(item.value),
+      }))
+      .filter(
+        (entry): entry is { item: UniversalRequirement; value: number } =>
+          entry.value !== null
+      )
+      .sort((a, b) => a.value - b.value);
+
+    if (genericCapacityRequirements.length >= 2) {
+      const smallest = genericCapacityRequirements[0];
+      const largest =
+        genericCapacityRequirements[
+          genericCapacityRequirements.length - 1
+        ];
+
+      if (
+        smallest.value >= 4 &&
+        smallest.value <= 128 &&
+        largest.value >= 128 &&
+        largest.value >= smallest.value * 4
+      ) {
+        smallest.item.key = "ram";
+        smallest.item.label = "RAM";
+
+        largest.item.key = "storage";
+        largest.item.label = "pamięć";
       }
     }
   }
@@ -6398,12 +14251,26 @@ function extractUniversalRequirements(
 
   const hzMatches = Array.from(text.matchAll(/\b(\d{2,3})\s*hz\b/giu));
   for (const match of hzMatches) {
+    if (
+      typeof match.index !== "number" ||
+      !asarvoIntentCoreV3QueryHzIsDisplayRefresh(
+        text,
+        match.index,
+        match.index + match[0].length,
+        category
+      )
+    ) {
+      continue;
+    }
+
     add(
       "refresh_rate", "odświeżanie", `${match[1]}Hz`,
       [`${match[1]}hz`, `${match[1]} hz`], "spec", true,
-      typeof match.index === "number"
-        ? detectUniversalNumericComparison(text, match.index, match.index + match[0].length)
-        : "eq"
+      detectUniversalNumericComparison(
+        text,
+        match.index,
+        match.index + match[0].length
+      )
     );
   }
 
@@ -6455,6 +14322,92 @@ function extractUniversalRequirements(
         ? detectUniversalNumericComparison(text, match.index, match.index + match[0].length)
         : "eq"
     );
+  }
+
+
+  // INTENT CORE V2: metric diagonal becomes screen_size only with explicit
+  // screen context or a parsed TV/monitor category.
+  if (!requirements.some((item) => item.key === "screen_size")) {
+    const explicitCmMatches = Array.from(text.matchAll(
+      /\b(?:przekatna|przekątna|diagonal|screen\s+size|ekran|screen|display)\b[^0-9]{0,24}(\d{2,3}(?:[.,]\d+)?)\s*cm\b/giu
+    ));
+
+    const trailingCmMatches = Array.from(text.matchAll(
+      /\b(\d{2,3}(?:[.,]\d+)?)\s*cm\b[^.!?;]{0,20}\b(?:przek(?:a|ą)tn\w*|diagonal|screen|ekran|display)\b/giu
+    ));
+
+    const categoryBareCmMatches =
+      (category === "tv" || category === "monitor") &&
+      !/\b\d{2,3}(?:[.,]\d+)?\s*(?:cm|mm|m)\s*[x×]\s*\d{2,3}(?:[.,]\d+)?\s*(?:cm|mm|m)\b/iu.test(text) &&
+      !/\b(?:szerokosc|szerokość|wysokosc|wysokość|glebokosc|głębokość|width|height|depth|dimensions?|wymiary?)\b/iu.test(text)
+        ? Array.from(text.matchAll(
+            /\b(\d{2,3}(?:[.,]\d+)?)\s*cm\b/giu
+          ))
+        : [];
+
+    const metricMatches = [
+      ...explicitCmMatches.map((match) => ({
+        raw: match[1],
+        start: match.index ?? 0,
+        end: (match.index ?? 0) + match[0].length,
+      })),
+      ...trailingCmMatches.map((match) => ({
+        raw: match[1],
+        start: match.index ?? 0,
+        end: (match.index ?? 0) + match[0].length,
+      })),
+      ...(
+        categoryBareCmMatches.length === 1
+          ? categoryBareCmMatches.map((match) => ({
+              raw: match[1],
+              start: match.index ?? 0,
+              end: (match.index ?? 0) + match[0].length,
+            }))
+          : []
+      ),
+    ];
+
+    const seenMetricValues = new Set<string>();
+
+    for (const metricMatch of metricMatches) {
+      const normalizedCm = metricMatch.raw.replace(",", ".");
+
+      if (seenMetricValues.has(normalizedCm)) continue;
+      seenMetricValues.add(normalizedCm);
+
+      const inches =
+        asarvoIntentCoreV2CmToInches(normalizedCm);
+
+      if (
+        inches === null ||
+        inches < 10 ||
+        inches > 120
+      ) {
+        continue;
+      }
+
+      const roundedInches =
+        Math.round(inches * 100) / 100;
+
+      add(
+        "screen_size",
+        "przekątna",
+        String(roundedInches) + " cali",
+        [
+          normalizedCm + " cm",
+          String(roundedInches) + " cali",
+          String(roundedInches) + " inch",
+          String(roundedInches) + "\"",
+        ],
+        "size",
+        true,
+        detectUniversalNumericComparison(
+          text,
+          metricMatch.start,
+          metricMatch.end
+        )
+      );
+    }
   }
 
   const resolutionRules: Array<[RegExp, string, string[]]> = [
@@ -6622,6 +14575,50 @@ function extractUniversalRequirements(
     [/\b(?:pomaranczowy|pomarańczowy|pomaranczowa|pomarańczowa|pomaranczowe|pomarańczowe|orange)\b/i, "pomarańczowy", ["pomaranczowy", "pomarańczowy", "pomaranczowa", "pomarańczowa", "pomaranczowe", "pomarańczowe", "orange"]],
     [/\b(?:zloty|złoty|zlota|złota|zlote|złote|gold|golden)\b/i, "złoty", ["zloty", "złoty", "zlota", "złota", "zlote", "złote", "gold", "golden"]],
   ];
+  // INTENT CORE V4: align query-side colour vocabulary with the richer
+  // colour-conflict groups already used during concrete-title validation.
+  colors.push(
+    [
+      /\b(?:kremowy|kremowa|kremowe|cream|ecru|off[\s-]*white)\b/iu,
+      "kremowy",
+      [
+        "kremowy", "kremowa", "kremowe",
+        "cream", "ecru", "off white", "off-white", "offwhite",
+      ],
+    ],
+    [
+      /\b(?:granatowy|granatowa|granatowe|navy|dark\s+blue)\b/iu,
+      "niebieski",
+      [
+        "granatowy", "granatowa", "granatowe",
+        "navy", "dark blue",
+      ],
+    ],
+    [
+      /\b(?:grafitowy|grafitowa|grafitowe|graphite)\b/iu,
+      "szary",
+      [
+        "grafitowy", "grafitowa", "grafitowe", "graphite",
+      ],
+    ],
+    [
+      /\b(?:turkusowy|turkusowa|turkusowe|turquoise|cyan)\b/iu,
+      "turkusowy",
+      [
+        "turkusowy", "turkusowa", "turkusowe",
+        "turquoise", "cyan",
+      ],
+    ],
+    [
+      /\b(?:bordowy|bordowa|bordowe|burgundy|maroon)\b/iu,
+      "bordowy",
+      [
+        "bordowy", "bordowa", "bordowe",
+        "burgundy", "maroon",
+      ],
+    ]
+  );
+
   for (const [pattern, value, aliases] of colors) {
     if (universalPatternHasAffirmativeQueryMention(text, pattern)) add("color", "kolor", value, aliases, "color");
   }
@@ -6722,7 +14719,10 @@ function extractUniversalRequirements(
     }
   }
 
-  return requirements.slice(0, 12);
+  return asarvoIntentCoreV9ApplyRangeAndApproxSemantics(
+    query,
+    requirements
+  );
 }
 
 function extractUniversalForbiddenTerms(query: string): string[] {
@@ -7382,6 +15382,1045 @@ function stripRequirementGrammarLabelsFromProductPhrase(
 }
 
 
+// ASARVO_INTENT_CORE_V5_MEGA200_PREFERRED_HARD_SOFT_SCORING
+//
+// Makes UniversalProductIntent.preferred real.
+// Preference-only requirements become SOFT, are used for ranking/scoring,
+// and NEVER reject an otherwise valid offer.
+
+type AsarvoIntentCoreV5PreferenceSplit = {
+  required: UniversalRequirement[];
+  preferred: UniversalRequirement[];
+  preferredClauses: string[];
+};
+
+function asarvoIntentCoreV5RequirementIdentity(
+  requirement: UniversalRequirement
+): string {
+  return [
+    requirement.key,
+    universalRequirementComparison(requirement),
+    normalizeMatchText(requirement.value),
+  ].join(":");
+}
+
+function asarvoIntentCoreV5ExtractPreferenceSpans(
+  queryRaw: string
+): Array<{ start: number; end: number; text: string }> {
+  const query = normalizeText(queryRaw);
+  const spans: Array<{ start: number; end: number; text: string }> = [];
+
+  // Unicode-safe explicit boundary grammar. Avoid JS \b here because Polish
+  // letters such as "ę" are not handled as word chars by classic JS \b.
+  const markerPattern =
+    /(?:^|[\s,;:()])(?:najlepiej|najch[eę]tniej|preferuj[eę]|preferow(?:any|ana|ane)|mile\s+widzian\w*|dobrze\s+(?:by|żeby|zeby)|fajnie\s+(?:by|żeby|zeby)|je[sś]li\s+si[eę]\s+da|jak\s+si[eę]\s+da|opcjonalnie|preferably|ideally|nice\s+to\s+have|would\s+prefer)(?=$|[\s,;:()])/giu;
+
+  const hardResetPattern =
+    /(?:^|[\s,;:()])(?:ale\s+)?(?:musi|musz[aą]|koniecznie|wymagan\w*|obowi[aą]zkowo|required|must\s+have|has\s+to\s+have)(?=$|[\s,;:()])/iu;
+
+  for (const marker of query.matchAll(markerPattern)) {
+    if (typeof marker.index !== "number") continue;
+
+    const start = marker.index + marker[0].length;
+    const tail = query.slice(start);
+
+    const punctuation = tail.search(/[.;!?]/u);
+    const hardReset = tail.search(hardResetPattern);
+
+    let relativeEnd = tail.length;
+
+    if (punctuation >= 0) {
+      relativeEnd = Math.min(relativeEnd, punctuation);
+    }
+
+    if (hardReset >= 0) {
+      relativeEnd = Math.min(relativeEnd, hardReset);
+    }
+
+    const text = tail
+      .slice(0, relativeEnd)
+      .replace(/^[\s,:;–—-]+/u, "")
+      .replace(/[\s,:;–—-]+$/u, "")
+      .trim();
+
+    if (!text) continue;
+
+    spans.push({
+      start,
+      end: start + relativeEnd,
+      text,
+    });
+  }
+
+  return spans;
+}
+
+function asarvoIntentCoreV5TextOutsidePreferenceSpans(
+  queryRaw: string,
+  spans: readonly { start: number; end: number }[]
+): string {
+  if (spans.length === 0) return queryRaw;
+
+  const chars = Array.from(queryRaw);
+
+  for (const span of spans) {
+    const start = Math.max(0, Math.min(chars.length, span.start));
+    const end = Math.max(start, Math.min(chars.length, span.end));
+
+    for (let index = start; index < end; index += 1) {
+      chars[index] = " ";
+    }
+  }
+
+  return chars.join("");
+}
+
+function asarvoIntentCoreV5SplitPreferredRequirements(
+  query: string,
+  category: string | null,
+  extractedRequirements: readonly UniversalRequirement[]
+): AsarvoIntentCoreV5PreferenceSplit {
+  const spans =
+    asarvoIntentCoreV5ExtractPreferenceSpans(query);
+
+  if (spans.length === 0) {
+    return {
+      required: [...extractedRequirements],
+      preferred: [],
+      preferredClauses: [],
+    };
+  }
+
+  const preferenceCandidates: UniversalRequirement[] = [];
+
+  for (const span of spans) {
+    for (
+      const requirement of
+      extractUniversalRequirements(span.text, category)
+    ) {
+      addUniversalRequirement(
+        preferenceCandidates,
+        {
+          ...requirement,
+          hard: false,
+        }
+      );
+    }
+  }
+
+  const preferredIds = new Set(
+    preferenceCandidates.map(
+      asarvoIntentCoreV5RequirementIdentity
+    )
+  );
+
+  const outsideText =
+    asarvoIntentCoreV5TextOutsidePreferenceSpans(
+      query,
+      spans
+    );
+
+  const required: UniversalRequirement[] = [];
+  const preferred: UniversalRequirement[] = [];
+
+  for (const requirement of extractedRequirements) {
+    const id =
+      asarvoIntentCoreV5RequirementIdentity(requirement);
+
+    if (!preferredIds.has(id)) {
+      required.push(requirement);
+      continue;
+    }
+
+    // Same spec can be stated hard once and later repeated as preference.
+    // Evidence outside SOFT spans keeps HARD semantics.
+    if (
+      requirementHasEvidenceInContext(
+        requirement,
+        outsideText,
+        extractedRequirements
+      )
+    ) {
+      required.push(requirement);
+      continue;
+    }
+
+    addUniversalRequirement(
+      preferred,
+      {
+        ...requirement,
+        hard: false,
+      }
+    );
+  }
+
+  for (const requirement of preferenceCandidates) {
+    const id =
+      asarvoIntentCoreV5RequirementIdentity(requirement);
+
+    if (
+      required.some(
+        (item) =>
+          asarvoIntentCoreV5RequirementIdentity(item) === id
+      )
+    ) {
+      continue;
+    }
+
+    addUniversalRequirement(
+      preferred,
+      {
+        ...requirement,
+        hard: false,
+      }
+    );
+  }
+
+  return {
+    required,
+    preferred,
+    preferredClauses: spans.map((span) => span.text),
+  };
+}
+
+function asarvoIntentCoreV5PreferredRequirementScore(
+  requirement: UniversalRequirement,
+  evidenceRaw: string,
+  allRequirements: readonly UniversalRequirement[],
+  phase: "discovery" | "verified"
+): number {
+  if (
+    !requirementHasEvidenceInContext(
+      requirement,
+      evidenceRaw,
+      allRequirements
+    )
+  ) {
+    return 0;
+  }
+
+  if (phase === "verified") {
+    return requirement.kind === "spec" ? 7 : 6;
+  }
+
+  return requirement.kind === "spec" ? 4 : 3;
+}
+
+// ASARVO_INTENT_CORE_V8_MEGA3000_NEGATION_ANYOF_ALTERNATIVES
+//
+// Natural-language intent composition:
+// - expanded explicit exclusions ("nie chcę", "byle nie", "not", "exclude");
+// - negated brand no longer becomes the requested brand;
+// - hard ANY-OF requirement groups ("144 Hz lub 165 Hz");
+// - explicit brand alternatives ("Samsung albo LG");
+// - OR options participate in discovery/search/verified evidence without
+//   forcing every mentioned option to be simultaneously true.
+
+type AsarvoIntentCoreV8AnyOfSplit = {
+  required: UniversalRequirement[];
+  groups: UniversalRequirement[][];
+};
+
+function asarvoIntentCoreV8RequirementIdentity(
+  requirement: UniversalRequirement
+): string {
+  return [
+    requirement.key,
+    universalRequirementComparison(requirement),
+    normalizeMatchText(requirement.value),
+  ].join(":");
+}
+
+function asarvoIntentCoreV8AllIntentRequirements(
+  parsed: ParsedQuery
+): UniversalRequirement[] {
+  return [
+    ...parsed.intent.required,
+    ...parsed.intent.preferred,
+    ...parsed.intent.anyOfRequired.flat(),
+  ];
+}
+
+function asarvoIntentCoreV8AdditionalForbiddenTerms(
+  queryRaw: string,
+  category: string | null
+): string[] {
+  const query = normalizeMatchText(queryRaw);
+  const values: string[] = [];
+
+  const clausePatterns = [
+    /(?:^|[\s,;:()])(?:nie\s+chc[eę]|nie\s+chce|nie\s+chcialbym|nie\s+chciałbym|byle\s+nie|tylko\s+nie|wyklucz(?:am)?|exclude|excluding)\s+([^,;.!?]{1,90})/giu,
+    /(?:^|[\s,;:()])(?:not|no)\s+([\p{L}][\p{L}\p{N}+\-]*(?:\s+[\p{L}][\p{L}\p{N}+\-]*){0,2})/giu,
+    /(?:^|[\s,;:()])nie\s+([\p{L}][\p{L}\p{N}+\-]*(?:\s+[\p{L}][\p{L}\p{N}+\-]*){0,2})(?=$|[\s,;.!?]|\s+\d)/giu,
+  ];
+
+  const pushClause = (clauseRaw: string): void => {
+    let clause = normalizeMatchText(clauseRaw)
+      .split(/\s+(?:ale|lecz|natomiast|jednak|but|however)\s+/iu)[0]
+      .trim();
+
+    if (!clause) return;
+
+    const parts = clause
+      .split(/\s+(?:i|oraz|ani|and)\s+|,\s*/iu)
+      .map((part) =>
+        part
+          .replace(
+            /^(?:zadnego|zadnej|zadnych|żadnego|żadnej|żadnych)\s+/iu,
+            ""
+          )
+          .trim()
+      )
+      .filter(Boolean);
+
+    for (const part of parts) {
+      const words = part.split(/\s+/).filter(Boolean);
+
+      if (
+        words.length === 0 ||
+        words.length > 5 ||
+        /^\d/.test(part)
+      ) {
+        continue;
+      }
+
+      values.push(part);
+    }
+  };
+
+  for (const pattern of clausePatterns) {
+    for (const match of query.matchAll(pattern)) {
+      pushClause(match[1]);
+    }
+  }
+
+  // If a known brand is explicitly negated, preserve exactly that brand as
+  // the forbidden term even when a generic "nie X" clause captured more text.
+  const detectedBrand = detectBrand(queryRaw, category);
+
+  if (
+    detectedBrand &&
+    asarvoIntentCoreV8QueryNegatesTerm(
+      queryRaw,
+      detectedBrand
+    )
+  ) {
+    values.push(
+      normalizeMatchText(detectedBrand)
+    );
+  }
+
+  return uniqueNormalized(values).slice(0, 12);
+}
+
+function asarvoIntentCoreV8QueryNegatesTerm(
+  queryRaw: string,
+  termRaw: string | null
+): boolean {
+  const term =
+    normalizeMatchText(termRaw ?? "").trim();
+
+  if (!term) return false;
+
+  const query =
+    normalizeMatchText(queryRaw);
+
+  const termPattern =
+    escapeRegExp(term).replace(/\s+/g, "\\s+");
+
+  return [
+    new RegExp(
+      `(?:^|[^a-z0-9])(?:nie\\s+chc[eę]|nie\\s+chce|byle\\s+nie|tylko\\s+nie|wyklucz(?:am)?|exclude|excluding|not|no|bez|without|nie)\\s+${termPattern}(?=$|[^a-z0-9])`,
+      "iu"
+    ),
+  ].some((pattern) =>
+    pattern.test(query)
+  );
+}
+
+function asarvoIntentCoreV8CloneRequirementNumericValue(
+  template: UniversalRequirement,
+  segmentRaw: string
+): UniversalRequirement | null {
+  const segment =
+    normalizeMatchText(segmentRaw);
+
+  const numericMatches =
+    Array.from(
+      segment.matchAll(
+        /\b\d+(?:[.,]\d+)?\b/giu
+      )
+    );
+
+  if (numericMatches.length === 0) {
+    return null;
+  }
+
+  const requestedNumber =
+    numericMatches[
+      numericMatches.length - 1
+    ][0];
+
+  const templateNumber =
+    String(template.value).match(
+      /\d+(?:[.,]\d+)?/
+    )?.[0];
+
+  if (!templateNumber) return null;
+
+  const replaceNumeric = (
+    value: string
+  ): string =>
+    value.replace(
+      /\d+(?:[.,]\d+)?/,
+      requestedNumber
+    );
+
+  return {
+    ...template,
+    value: replaceNumeric(
+      template.value
+    ),
+    aliases: uniqueNormalized(
+      template.aliases.map(
+        replaceNumeric
+      )
+    ),
+    hard: true,
+  };
+}
+
+// ASARVO_INTENT_CORE_V10_MEGA10000_COMPOSITION_PRECEDENCE
+//
+// Composition hardening:
+// - isolate independent OR islands;
+// - prevent numeric shorthand cloning across different requirement keys;
+// - group brand alternatives locally;
+// - use complete intent context in hard evidence matching;
+// - hard-completion priority counts ANY-OF groups too.
+
+function asarvoIntentCoreV10LogicalOrIslands(
+  queryRaw: string
+): string[] {
+  const normalized =
+    normalizeText(queryRaw);
+
+  const clauses =
+    normalized
+      .split(/[;!?]+|\.(?=\s|$)/u)
+      .flatMap((part) =>
+        part.split(
+          /\s*,\s*|\s+(?:i|oraz|a\s+tak[zż]e|and|plus|dodatkowo|r[oó]wnie[zż])\s+/iu
+        )
+      )
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+  const islands =
+    clauses.filter((clause) =>
+      /\s+(?:albo|lub|or)\s+/iu.test(
+        clause
+      )
+    );
+
+  if (
+    islands.length === 0 &&
+    /\s+(?:albo|lub|or)\s+/iu.test(
+      normalized
+    )
+  ) {
+    islands.push(normalized);
+  }
+
+  return Array.from(
+    new Set(
+      islands.map(
+        normalizeText
+      )
+    )
+  ).slice(0, 8);
+}
+
+function asarvoIntentCoreV10ExtractAnyOfRequirementGroups(
+  queryRaw: string,
+  category: string | null,
+  requiredInput: readonly UniversalRequirement[]
+): AsarvoIntentCoreV8AnyOfSplit {
+  const groups: UniversalRequirement[][] = [];
+  const groupedIds = new Set<string>();
+
+  for (
+    const island of
+    asarvoIntentCoreV10LogicalOrIslands(
+      queryRaw
+    )
+  ) {
+    const segments =
+      island
+        .split(
+          /\s+(?:albo|lub|or)\s+/iu
+        )
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .slice(0, 5);
+
+    if (segments.length < 2) continue;
+
+    const perSegment =
+      segments.map((segment) =>
+        extractUniversalRequirements(
+          segment,
+          category
+        ).filter(
+          (requirement) =>
+            requirement.hard &&
+            universalRequirementComparison(
+              requirement
+            ) === "eq" &&
+            !requirement.key.startsWith("with_")
+        )
+      );
+
+    const candidateKeys =
+      Array.from(
+        new Set(
+          perSegment.flatMap(
+            (requirements) =>
+              requirements.map(
+                (requirement) =>
+                  requirement.key
+              )
+          )
+        )
+      );
+
+    for (const key of candidateKeys) {
+      const direct =
+        perSegment.map(
+          (requirements) =>
+            requirements.find(
+              (requirement) =>
+                requirement.key === key
+            ) ?? null
+        );
+
+      const reference =
+        direct.find(Boolean) ?? null;
+
+      if (!reference) continue;
+
+      const resolved =
+        direct.map(
+          (requirement, index) => {
+            if (requirement) {
+              return requirement;
+            }
+
+            if (
+              perSegment[index].length > 0
+            ) {
+              return null;
+            }
+
+            return asarvoIntentCoreV8CloneRequirementNumericValue(
+              reference,
+              segments[index]
+            );
+          }
+        )
+        .filter(
+          (
+            requirement
+          ): requirement is UniversalRequirement =>
+            Boolean(requirement)
+        );
+
+      const unique =
+        Array.from(
+          new Map(
+            resolved.map(
+              (requirement) => [
+                asarvoIntentCoreV8RequirementIdentity(
+                  requirement
+                ),
+                requirement,
+              ]
+            )
+          ).values()
+        );
+
+      if (unique.length < 2) continue;
+
+      const values =
+        new Set(
+          unique.map(
+            (requirement) =>
+              normalizeMatchText(
+                requirement.value
+              )
+          )
+        );
+
+      if (values.size < 2) continue;
+
+      groups.push(
+        unique.slice(0, 5)
+      );
+
+      for (const requirement of unique) {
+        groupedIds.add(
+          asarvoIntentCoreV8RequirementIdentity(
+            requirement
+          )
+        );
+      }
+
+      if (groups.length >= 8) break;
+    }
+
+    if (groups.length >= 8) break;
+  }
+
+  const required =
+    requiredInput.filter(
+      (requirement) =>
+        !groupedIds.has(
+          asarvoIntentCoreV8RequirementIdentity(
+            requirement
+          )
+        )
+    );
+
+  return {
+    required,
+    groups,
+  };
+}
+
+function asarvoIntentCoreV10ExtractBrandAlternativeGroups(
+  queryRaw: string,
+  category: string | null
+): string[][] {
+  const groups: string[][] = [];
+
+  for (
+    const island of
+    asarvoIntentCoreV10LogicalOrIslands(
+      queryRaw
+    )
+  ) {
+    const segments =
+      island
+        .split(
+          /\s+(?:albo|lub|or)\s+/iu
+        )
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .slice(0, 5);
+
+    const brands =
+      uniqueNormalized(
+        segments
+          .map((segment) =>
+            detectBrand(
+              segment,
+              category
+            )
+          )
+          .filter(
+            (
+              brand
+            ): brand is string =>
+              Boolean(brand)
+          )
+      );
+
+    if (brands.length >= 2) {
+      groups.push(
+        brands.slice(0, 5)
+      );
+    }
+
+    if (groups.length >= 4) break;
+  }
+
+  return groups;
+}
+
+function asarvoIntentCoreV10HardCompletionCounts(
+  parsed: ParsedQuery,
+  evidenceRaw: string
+): {
+  expected: number;
+  matched: number;
+} {
+  const allIntentRequirements =
+    asarvoIntentCoreV8AllIntentRequirements(
+      parsed
+    );
+
+  let expected =
+    parsed.intent.required.filter(
+      (requirement) =>
+        requirement.hard
+    ).length;
+
+  let matched =
+    parsed.intent.required.filter(
+      (requirement) =>
+        requirement.hard &&
+        requirementHasEvidenceInContext(
+          requirement,
+          evidenceRaw,
+          allIntentRequirements
+        )
+    ).length;
+
+  expected +=
+    parsed.intent.anyOfRequired.length;
+
+  for (
+    const group of
+    parsed.intent.anyOfRequired
+  ) {
+    if (
+      asarvoIntentCoreV8AnyOfGroupMatches(
+        group,
+        evidenceRaw,
+        allIntentRequirements
+      )
+    ) {
+      matched += 1;
+    }
+  }
+
+  return {
+    expected,
+    matched,
+  };
+}
+
+function asarvoIntentCoreV8ExtractAnyOfRequirementGroups(
+  queryRaw: string,
+  category: string | null,
+  requiredInput: readonly UniversalRequirement[]
+): AsarvoIntentCoreV8AnyOfSplit {
+  const clauses =
+    normalizeText(queryRaw)
+      .split(/[;.!?]+/u)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+  const groups: UniversalRequirement[][] = [];
+  const groupedIds = new Set<string>();
+
+  for (const clause of clauses) {
+    if (
+      !/\s+(?:albo|lub|or)\s+/iu.test(
+        clause
+      )
+    ) {
+      continue;
+    }
+
+    const segments =
+      clause
+        .split(
+          /\s+(?:albo|lub|or)\s+/iu
+        )
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .slice(0, 5);
+
+    if (segments.length < 2) continue;
+
+    const perSegment =
+      segments.map((segment) =>
+        extractUniversalRequirements(
+          segment,
+          category
+        ).filter(
+          (requirement) =>
+            requirement.hard &&
+            universalRequirementComparison(
+              requirement
+            ) === "eq" &&
+            !requirement.key.startsWith("with_")
+        )
+      );
+
+    const candidateKeys =
+      Array.from(
+        new Set(
+          perSegment.flatMap(
+            (requirements) =>
+              requirements.map(
+                (requirement) =>
+                  requirement.key
+              )
+          )
+        )
+      );
+
+    for (const key of candidateKeys) {
+      const direct =
+        perSegment.map(
+          (requirements) =>
+            requirements.find(
+              (requirement) =>
+                requirement.key === key
+            ) ?? null
+        );
+
+      const reference =
+        direct.find(Boolean) ?? null;
+
+      if (!reference) continue;
+
+      const resolved =
+        direct.map(
+          (requirement, index) =>
+            requirement ??
+            asarvoIntentCoreV8CloneRequirementNumericValue(
+              reference,
+              segments[index]
+            )
+        )
+        .filter(
+          (
+            requirement
+          ): requirement is UniversalRequirement =>
+            Boolean(requirement)
+        );
+
+      const unique = Array.from(
+        new Map(
+          resolved.map(
+            (requirement) => [
+              asarvoIntentCoreV8RequirementIdentity(
+                requirement
+              ),
+              requirement,
+            ]
+          )
+        ).values()
+      );
+
+      if (unique.length < 2) continue;
+
+      const values =
+        new Set(
+          unique.map(
+            (requirement) =>
+              normalizeMatchText(
+                requirement.value
+              )
+          )
+        );
+
+      if (values.size < 2) continue;
+
+      groups.push(
+        unique.slice(0, 5)
+      );
+
+      for (const requirement of unique) {
+        groupedIds.add(
+          asarvoIntentCoreV8RequirementIdentity(
+            requirement
+          )
+        );
+      }
+
+      if (groups.length >= 4) break;
+    }
+
+    if (groups.length >= 4) break;
+  }
+
+  const required =
+    requiredInput.filter(
+      (requirement) =>
+        !groupedIds.has(
+          asarvoIntentCoreV8RequirementIdentity(
+            requirement
+          )
+        )
+    );
+
+  return {
+    required,
+    groups,
+  };
+}
+
+function asarvoIntentCoreV8ExtractBrandAlternativeGroups(
+  queryRaw: string,
+  category: string | null
+): string[][] {
+  const clauses =
+    normalizeText(queryRaw)
+      .split(/[;.!?]+/u)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+  const groups: string[][] = [];
+
+  for (const clause of clauses) {
+    if (
+      !/\s+(?:albo|lub|or)\s+/iu.test(
+        clause
+      )
+    ) {
+      continue;
+    }
+
+    const segments =
+      clause
+        .split(
+          /\s+(?:albo|lub|or)\s+/iu
+        )
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .slice(0, 5);
+
+    const brands =
+      uniqueNormalized(
+        segments
+          .map((segment) =>
+            detectBrand(
+              segment,
+              category
+            )
+          )
+          .filter(
+            (
+              brand
+            ): brand is string =>
+              Boolean(brand)
+          )
+      );
+
+    if (brands.length >= 2) {
+      groups.push(
+        brands.slice(0, 5)
+      );
+    }
+
+    if (groups.length >= 3) break;
+  }
+
+  return groups;
+}
+
+function asarvoIntentCoreV8StripNegativeGrammar(
+  phraseRaw: string,
+  forbiddenTerms: readonly string[]
+): string {
+  let phrase =
+    normalizeText(phraseRaw);
+
+  for (const forbiddenRaw of forbiddenTerms) {
+    const forbidden =
+      normalizeMatchText(forbiddenRaw).trim();
+
+    if (!forbidden) continue;
+
+    const termPattern =
+      escapeRegExp(forbidden)
+        .replace(/\s+/g, "\\s+");
+
+    phrase = phrase.replace(
+      new RegExp(
+        `(?:^|\\s)(?:nie\\s+chc[eę]|nie\\s+chce|byle\\s+nie|tylko\\s+nie|wyklucz(?:am)?|exclude|excluding|not|no|bez|without|nie)\\s+${termPattern}(?=$|\\s|[,;.!?])`,
+        "giu"
+      ),
+      " "
+    );
+  }
+
+  return cleanUniversalProductPhrasePunctuation(
+    phrase
+  );
+}
+
+function asarvoIntentCoreV8StripAlternativeIdentityTerms(
+  phraseRaw: string,
+  groups: readonly string[][]
+): string {
+  let phrase =
+    normalizeText(phraseRaw);
+
+  for (const group of groups) {
+    for (const termRaw of group) {
+      const term =
+        normalizeMatchText(termRaw).trim();
+
+      if (!term) continue;
+
+      const pattern =
+        escapeRegExp(term)
+          .replace(/\s+/g, "\\s+");
+
+      phrase = phrase.replace(
+        new RegExp(
+          `(?:^|\\s)${pattern}(?=$|\\s|[,;.!?])`,
+          "giu"
+        ),
+        " "
+      );
+    }
+  }
+
+  phrase = phrase.replace(
+    /\b(?:albo|lub|or|either)\b/giu,
+    " "
+  );
+
+  return cleanUniversalProductPhrasePunctuation(
+    phrase
+  );
+}
+
+function asarvoIntentCoreV8AnyOfGroupMatches(
+  group: readonly UniversalRequirement[],
+  evidenceRaw: string,
+  allRequirements: readonly UniversalRequirement[]
+): UniversalRequirement | null {
+  for (const requirement of group) {
+    if (
+      requirementHasEvidenceInContext(
+        requirement,
+        evidenceRaw,
+        allRequirements
+      )
+    ) {
+      return requirement;
+    }
+  }
+
+  return null;
+}
+
+function asarvoIntentCoreV8AlternativeIdentityGroupsPass(
+  groups: readonly string[][],
+  evidenceRaw: string
+): boolean {
+  if (groups.length === 0) return true;
+
+  const evidence =
+    normalizeMatchText(evidenceRaw);
+
+  return groups.every((group) =>
+    group.some((term) =>
+      universalEvidenceHasBoundedIdentityTerm(
+        normalizeMatchText(term),
+        evidence
+      )
+    )
+  );
+}
+
 function buildUniversalProductIntent(
   query: string,
   category: string | null,
@@ -7391,8 +16430,46 @@ function buildUniversalProductIntent(
   provisionalProduct: string
 ): UniversalProductIntent {
   const corePhrase = normalizeText(extractCoreProductPhrase(query));
-  const required = extractUniversalRequirements(query, category);
-  const forbiddenTerms = extractUniversalForbiddenTerms(query);
+  const extractedRequirements =
+    extractUniversalRequirements(query, category);
+
+  const preferenceSplit =
+    asarvoIntentCoreV5SplitPreferredRequirements(
+      query,
+      category,
+      extractedRequirements
+    );
+
+  const anyOfSplit =
+    asarvoIntentCoreV10ExtractAnyOfRequirementGroups(
+      query,
+      category,
+      preferenceSplit.required
+    );
+
+  const required = anyOfSplit.required;
+  const preferred = preferenceSplit.preferred;
+  const anyOfRequired = anyOfSplit.groups;
+
+  const alternativeIdentityGroups =
+    asarvoIntentCoreV10ExtractBrandAlternativeGroups(
+      query,
+      category
+    );
+
+  const allIntentRequirements = [
+    ...required,
+    ...preferred,
+    ...anyOfRequired.flat(),
+  ];
+
+  const forbiddenTerms = uniqueNormalized([
+    ...extractUniversalForbiddenTerms(query),
+    ...asarvoIntentCoreV8AdditionalForbiddenTerms(
+      query,
+      category
+    ),
+  ]).slice(0, 12);
   const accessoryIntent = detectAccessoryIntent(query, category);
   const budgetPerPiece = /\b(?:za\s+)?(?:1\s*)?(?:sztuke|sztukę|szt\.?|sztuka)(?![\p{L}\p{N}_])/iu.test(query);
   const damagedIntent = queryExplicitlyAllowsDamagedProduct({
@@ -7415,8 +16492,11 @@ function buildUniversalProductIntent(
     stripUniversalRelationalOperatorsAroundNumericRequirements(beforeConstraint);
   let productPhrase = cleanUniversalProductPhrasePunctuation(
     stripRequirementGrammarLabelsFromProductPhrase(
-      stripRequirementTermsFromProductPhrase(relationCleanBeforeConstraint, required),
-      required,
+      stripRequirementTermsFromProductPhrase(
+        relationCleanBeforeConstraint,
+        allIntentRequirements
+      ),
+      allIntentRequirements,
       category
     )
   );
@@ -7451,7 +16531,12 @@ function buildUniversalProductIntent(
     );
   }
 
-  if (category === "vacuum" && required.some((item) => item.key === "mapping")) {
+  if (
+    category === "vacuum" &&
+    allIntentRequirements.some(
+      (item) => item.key === "mapping"
+    )
+  ) {
     productPhrase = "robot sprzątający";
   }
 
@@ -7461,7 +16546,22 @@ function buildUniversalProductIntent(
     );
   }
 
-  productPhrase = cleanUniversalProductPhrasePunctuation(productPhrase);
+  productPhrase =
+    asarvoIntentCoreV8StripNegativeGrammar(
+      productPhrase,
+      forbiddenTerms
+    );
+
+  productPhrase =
+    asarvoIntentCoreV8StripAlternativeIdentityTerms(
+      productPhrase,
+      alternativeIdentityGroups
+    );
+
+  productPhrase =
+    cleanUniversalProductPhrasePunctuation(
+      productPhrase
+    );
 
   const normalizedProduct = normalizeMatchText(productPhrase);
   const identityTerms = Array.from(
@@ -7513,6 +16613,37 @@ function buildUniversalProductIntent(
     .slice(0, 3)
     .map(requirementPrimarySearchTerm);
 
+  const preferredSearchTerm =
+    preferred
+      .filter(isRequirementDiscoverySearchEligible)
+      .slice(0, 1)
+      .map(requirementPrimarySearchTerm)
+      .join(" ");
+  const anyOfSearchVariants =
+    anyOfRequired.flatMap((group) =>
+      group
+        .slice(0, 4)
+        .map((requirement) =>
+          normalizeText(
+            `${productPhrase} ${requirementPrimarySearchTerm(
+              requirement
+            )}`
+          )
+        )
+    );
+
+  const alternativeIdentitySearchVariants =
+    alternativeIdentityGroups.flatMap((group) =>
+      group
+        .slice(0, 5)
+        .map((identity) =>
+          normalizeText(
+            `${productPhrase} ${identity} ${searchRequirementTerms.join(
+              " "
+            )}`
+          )
+        )
+    );
   const searchBase = normalizeText(
     `${productPhrase} ${searchRequirementTerms.join(" ")}`
   );
@@ -7532,7 +16663,12 @@ function buildUniversalProductIntent(
     normalizeText(`${requirementPhrase} ${productPhrase}`),
     normalizeText(relationalDiscoveryCore || corePhrase),
     normalizeText(productPhrase),
-  ].filter(Boolean))).slice(0, 5);
+    normalizeText(
+      `${productPhrase} ${preferredSearchTerm}`
+    ),
+    ...anyOfSearchVariants,
+    ...alternativeIdentitySearchVariants,
+  ].filter(Boolean))).slice(0, 12);
 
   let confidence = 45;
   if (category) confidence += 12;
@@ -7550,7 +16686,9 @@ function buildUniversalProductIntent(
     strongIdentityTerms,
     qualifierTerms,
     required,
-    preferred: [],
+    preferred,
+    anyOfRequired,
+    alternativeIdentityGroups,
     forbiddenTerms,
     accessoryIntent,
     damagedIntent,
@@ -7561,6 +16699,136 @@ function buildUniversalProductIntent(
     searchVariants,
   };
 }
+
+
+// ASARVO_INTENT_CORE_V1_PRIMARY_OBJECT_RELATION_GUARD
+// Main-product vs dependent-object relation guard.
+//
+// Relation-based, not retailer/category specific. It rejects an offer when:
+//   1) the user did not ask for an accessory/part,
+//   2) the SOLD OBJECT is a dependent accessory/part,
+//   3) the requested product identity appears only as the target of
+//      "do/dla/for/compatible with/pasuje do/...".
+function asarvoIntentCoreV1DependentObjectRejectReason(
+  titleRaw: string,
+  urlRaw: string,
+  parsed: ParsedQuery
+): string | null {
+  if (parsed.intent.accessoryIntent) return null;
+
+  const title = normalizeMatchText(titleRaw);
+  if (!title) return null;
+
+  const relationMatch = title.match(
+    /\b(?:do|dla|for|pasuj(?:e|acy|ący|aca|ąca)\s+do|kompatybiln\w*\s+z|compatible\s+with|designed\s+for|dedykowan\w*\s+do|przeznaczon\w*\s+do)\b/iu
+  );
+  if (!relationMatch || typeof relationMatch.index !== "number") return null;
+  if (relationMatch.index > 120) return null;
+
+  const head = normalizeMatchText(title.slice(0, relationMatch.index));
+  const tail = normalizeMatchText(
+    title.slice(relationMatch.index + relationMatch[0].length)
+  );
+  if (!head || !tail) return null;
+
+  const extraDependentNouns = [
+    "czesc", "część", "czesci", "części", "zamiennik", "replacement",
+    "spare part", "pilot", "remote", "uchwyt", "mount", "stojak", "stand",
+    "podstawka", "nozka", "nóżka", "matryca", "digitizer", "wyswietlacz",
+    "wyświetlacz", "panel lcd", "modul", "moduł", "plyta", "płyta",
+    "obudowa", "housing", "ramka", "bezel", "zasilacz", "power supply",
+    "adapter", "przewod", "przewód", "kabel", "cable", "ladowarka",
+    "ładowarka", "charger", "filtr", "filter", "worek", "bag", "szczotka",
+    "brush", "walek", "wałek", "roller", "pojemnik", "zbiornik", "tank",
+    "taca", "tray", "pokrywa", "lid", "uszczelka", "seal", "pasek",
+    "strap", "bransoleta", "band", "koncowka", "końcówka", "dysza",
+    "nozzle", "waz", "wąż", "hose", "szklo", "szkło", "glass", "folia",
+    "film", "case", "cover", "etui"
+  ];
+
+  const dependentNouns = Array.from(new Set([
+    ...GENERIC_ACCESSORY_NOUNS,
+    ...extraDependentNouns,
+  ].map((value) => normalizeMatchText(value)).filter(Boolean)))
+    .sort((a, b) => b.length - a.length);
+
+  const headTokens = head.split(/\s+/).filter(Boolean);
+  const earlyHead = headTokens.slice(0, 6).join(" ");
+  const soldObjectNoun = dependentNouns.find((noun) =>
+    earlyHead === noun ||
+    earlyHead.startsWith(noun + " ") ||
+    earlyHead.includes(" " + noun + " ") ||
+    earlyHead.endsWith(" " + noun)
+  );
+  if (!soldObjectNoun) return null;
+
+  const requestedProductPhrase = normalizeMatchText(
+    parsed.intent.productPhrase || parsed.product || ""
+  );
+  const queryLead = normalizeMatchText(parsed.queryText)
+    .split(/\s+/)
+    .slice(0, 6)
+    .join(" ");
+
+  if (
+    requestedProductPhrase === soldObjectNoun ||
+    requestedProductPhrase.startsWith(soldObjectNoun + " ") ||
+    queryLead === soldObjectNoun ||
+    queryLead.startsWith(soldObjectNoun + " ")
+  ) {
+    return null;
+  }
+
+  const requestedStrongTerms = parsed.intent.strongIdentityTerms
+    .map((term) => normalizeMatchText(term))
+    .filter((term) => term.length >= 2);
+
+  const requestedIdentityTerms = parsed.intent.identityTerms
+    .map((term) => normalizeMatchText(term))
+    .filter((term) => term.length >= 3);
+
+  const modelTailMatch = requestedStrongTerms.some((term) =>
+    tail.includes(term)
+  );
+
+  const identityTailMatches = requestedIdentityTerms.filter((term) =>
+    tail.includes(term)
+  ).length;
+
+  const brandTailMatch = parsed.brand
+    ? getUniversalRequestedBrandAliases(parsed)
+        .map((alias) => normalizeMatchText(alias))
+        .filter(Boolean)
+        .some((alias) => tail.includes(alias))
+    : false;
+
+  const categoryTailMatch = Boolean(
+    parsed.category && hasUniversalCategoryEvidence(tail, parsed)
+  );
+
+  const targetSignals =
+    (modelTailMatch ? 2 : 0) +
+    Math.min(2, identityTailMatches) +
+    (brandTailMatch ? 1 : 0) +
+    (categoryTailMatch ? 1 : 0);
+
+  if (targetSignals < 2) return null;
+
+  const fullRequestedSignalsBeforeRelation =
+    requestedStrongTerms.some((term) => head.includes(term)) ||
+    requestedIdentityTerms.filter((term) => head.includes(term)).length >= 2 ||
+    (
+      parsed.brand &&
+      getUniversalRequestedBrandAliases(parsed)
+        .map((alias) => normalizeMatchText(alias))
+        .some((alias) => head.includes(alias))
+    );
+
+  if (fullRequestedSignalsBeforeRelation) return null;
+
+  return "dependent-object-relation:" + soldObjectNoun;
+}
+
 
 function isGenericAccessoryResult(
   titleRaw: string,
@@ -8287,8 +17555,10 @@ function openWorldIdentityTermMatches(
   // independently recognized alias of the same category is equivalent.
   // Example: airfryer <-> air fryer <-> frytkownica beztłuszczowa.
   if (
-    isUniversalCategoryIdentityTerm(termRaw, parsed) &&
-    hasUniversalCategoryEvidence(evidenceRaw, parsed)
+    (isUniversalCategoryIdentityTerm(termRaw, parsed) &&
+    hasUniversalCategoryEvidence(evidenceRaw, parsed)) &&
+    // ASARVO_BATCH62_OPEN_WORLD_SUBTYPE_IDENTITY_GUARD_V1
+    hasUniversalRequestedCategoryIdentityAliasEvidence(evidenceRaw, parsed)
   ) {
     return true;
   }
@@ -8891,6 +18161,121 @@ function extractUniversalSuctionPowerPaValues(valueRaw: string): number[] {
   return Array.from(values);
 }
 
+
+// ASARVO_INTENT_CORE_V2_SCREEN_UNIT_NORMALIZATION
+// Context-aware metric/inch normalization for screen diagonals.
+
+function asarvoIntentCoreV2CmToInches(
+  cmRaw: string | number
+): number | null {
+  const cm = typeof cmRaw === "number"
+    ? cmRaw
+    : Number(String(cmRaw).replace(",", "."));
+
+  if (!Number.isFinite(cm) || cm <= 0) return null;
+  return cm / 2.54;
+}
+
+function asarvoIntentCoreV2ScreenRequirementUsesCm(
+  requirement: UniversalRequirement
+): boolean {
+  return (
+    requirement.key === "screen_size" &&
+    requirement.aliases.some((alias) =>
+      /\b\d{2,3}(?:[.,]\d+)?\s*cm\b/iu.test(
+        normalizeMatchText(alias)
+      )
+    )
+  );
+}
+
+function asarvoIntentCoreV2ScreenSizeComparisonSatisfied(
+  offeredInches: number,
+  requestedInches: number,
+  requirement: UniversalRequirement
+): boolean {
+  if (
+    !Number.isFinite(offeredInches) ||
+    !Number.isFinite(requestedInches)
+  ) {
+    return false;
+  }
+
+  const comparison = universalRequirementComparison(requirement);
+  const tolerance =
+    asarvoIntentCoreV2ScreenRequirementUsesCm(requirement)
+      ? 0.45
+      : 0.001;
+
+  if (comparison === "gte") {
+    return offeredInches + tolerance >= requestedInches;
+  }
+
+  if (comparison === "lte") {
+    return offeredInches - tolerance <= requestedInches;
+  }
+
+  return Math.abs(offeredInches - requestedInches) <= tolerance;
+}
+
+function asarvoIntentCoreV2ExtractScreenCmValuesInches(
+  valueRaw: string,
+  allowDisplayContextBareCm = false
+): number[] {
+  const text = normalizeMatchText(valueRaw);
+  const values = new Set<number>();
+
+  const add = (raw: string): void => {
+    const inches = asarvoIntentCoreV2CmToInches(raw);
+
+    if (
+      inches !== null &&
+      inches >= 10 &&
+      inches <= 120
+    ) {
+      values.add(Math.round(inches * 1000) / 1000);
+    }
+  };
+
+  for (const match of text.matchAll(
+    /\b(?:przekatna|przekątna|diagonal|screen\s+size|ekran|screen|display)\b[^0-9]{0,24}(\d{2,3}(?:[.,]\d+)?)\s*cm\b/giu
+  )) {
+    add(match[1]);
+  }
+
+  for (const match of text.matchAll(
+    /\b(\d{2,3}(?:[.,]\d+)?)\s*cm\b[^.!?;]{0,20}\b(?:przek(?:a|ą)tn\w*|diagonal|screen|ekran|display)\b/giu
+  )) {
+    add(match[1]);
+  }
+
+  if (!allowDisplayContextBareCm) {
+    return Array.from(values);
+  }
+
+  if (!/\b(?:telewizor|television|tv|monitor)\b/iu.test(text)) {
+    return Array.from(values);
+  }
+
+  if (
+    /\b\d{2,3}(?:[.,]\d+)?\s*(?:cm|mm|m)\s*[x×]\s*\d{2,3}(?:[.,]\d+)?\s*(?:cm|mm|m)\b/iu.test(text) ||
+    /\b(?:szerokosc|szerokość|wysokosc|wysokość|glebokosc|głębokość|width|height|depth|dimensions?|wymiary?)\b/iu.test(text)
+  ) {
+    return Array.from(values);
+  }
+
+  const bare = Array.from(
+    text.matchAll(/\b(\d{2,3}(?:[.,]\d+)?)\s*cm\b/giu)
+  );
+
+  if (bare.length === 1) {
+    add(bare[0][1]);
+  }
+
+  return Array.from(values);
+}
+
+
 function extractUniversalScreenSizeValuesInches(valueRaw: string): number[] {
   const text = normalizeMatchText(valueRaw);
   const values = new Set<number>();
@@ -8907,6 +18292,13 @@ function extractUniversalScreenSizeValuesInches(valueRaw: string): number[] {
   if (/\b(?:monitor|display)\b/iu.test(text)) {
     for (const match of text.matchAll(/\b(\d{2}(?:[.,]\d+)?)\s+(?=(?:8k|5k|4k|uhd|wqhd|qhd|1440p|fhd|1080p|ips|va|tn|oled|mini\s*led|\d{2,3}\s*hz)\b)/giu)) add(match[1]);
   }
+  for (const metricValue of asarvoIntentCoreV2ExtractScreenCmValuesInches(
+    text,
+    true
+  )) {
+    values.add(metricValue);
+  }
+
   return Array.from(values);
 }
 
@@ -9131,13 +18523,70 @@ function requirementHasExactNumericEvidence(
     ));
   }
 
-  if (["storage", "capacity", "ram", "vram"].includes(requirement.key)) {
+  if (requirement.key === "ram") {
+    const requested = parseUniversalCapacityToGb(requirement.value);
+    if (requested === null) return null;
+
+    const offered =
+      extractUniversalContextualRamCapacityValuesGb(evidence);
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
+        value,
+        requested,
+        universalRequirementComparison(requirement)
+      )
+    );
+  }
+
+  if (requirement.key === "vram") {
+    const requested = parseUniversalCapacityToGb(requirement.value);
+    if (requested === null) return null;
+
+    const offered =
+      asarvoIntentCoreV3ExtractContextualVramCapacityValuesGb(
+        evidence
+      );
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
+        value,
+        requested,
+        universalRequirementComparison(requirement)
+      )
+    );
+  }
+
+  if (requirement.key === "storage") {
+    const requested = parseUniversalCapacityToGb(requirement.value);
+    if (requested === null) return null;
+
+    const offered =
+      asarvoIntentCoreV3ExtractContextualStorageCapacityValuesGb(
+        evidence
+      );
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
+        value,
+        requested,
+        universalRequirementComparison(requirement)
+      )
+    );
+  }
+
+  if (requirement.key === "capacity") {
     const requested = parseUniversalCapacityToGb(requirement.value);
     if (requested === null) return null;
     const offered = extractUniversalCapacityValuesGb(evidence);
-    return offered.some((value) => universalNumericComparisonSatisfied(
-      value, requested, universalRequirementComparison(requirement)
-    ));
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
+        value,
+        requested,
+        universalRequirementComparison(requirement)
+      )
+    );
   }
 
   if (requirement.key === "resolution") {
@@ -9154,14 +18603,23 @@ function requirementHasExactNumericEvidence(
   }
 
   if (requirement.key === "refresh_rate") {
-    const requested = Number(String(requirement.value).match(/\d{2,3}/)?.[0] ?? NaN);
+    const requested = Number(
+      String(requirement.value).match(/\d{2,3}/)?.[0] ?? NaN
+    );
     if (!Number.isFinite(requested)) return null;
-    const offered = Array.from(evidence.matchAll(/\b(\d{2,3})\s*hz\b/giu))
-      .map((match) => Number(match[1]))
-      .filter(Number.isFinite);
-    return offered.some((value) => universalNumericComparisonSatisfied(
-      value, requested, universalRequirementComparison(requirement)
-    ));
+
+    const offered =
+      asarvoIntentCoreV3ExtractDisplayRefreshRateValuesHz(
+        evidence
+      );
+
+    return offered.some((value) =>
+      universalNumericComparisonSatisfied(
+        value,
+        requested,
+        universalRequirementComparison(requirement)
+      )
+    );
   }
 
   if (requirement.key === "voltage") {
@@ -9181,7 +18639,13 @@ function requirementHasExactNumericEvidence(
     const requested = Number(String(requirement.value).match(/\d{1,3}(?:[.,]\d+)?/)?.[0]?.replace(",", ".") ?? NaN);
     if (!Number.isFinite(requested)) return null;
     const offered = extractUniversalScreenSizeValuesInches(evidence);
-    return offered.some((value) => universalNumericComparisonSatisfied(value, requested, universalRequirementComparison(requirement)));
+    return offered.some((value) =>
+      asarvoIntentCoreV2ScreenSizeComparisonSatisfied(
+        value,
+        requested,
+        requirement
+      )
+    );
   }
 
   if (requirement.key === "dimensions") {
@@ -9282,11 +18746,131 @@ function hasStructuredAncEncContradiction(evidenceRaw: string): boolean {
   return encField && !ancField;
 }
 
+
+// ASARVO_DESCRIPTION_EVIDENCE_V1_FIX1_NATURAL_DIMENSIONS
+// Understand dimensions stated as separate labelled fields in a product-bound
+// description/specification, e.g. "szerokość 160 cm, głębokość 90 cm".
+function requirementHasNaturalDimensionEvidence(
+  requirement: UniversalRequirement,
+  evidenceRaw: string
+): boolean | null {
+  if (requirement.key !== "dimensions") return null;
+
+  const requested = normalizeMatchText(requirement.value).match(
+    /(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)/i
+  );
+  if (!requested) return null;
+
+  const toMm = (valueRaw: string, unitRaw: string): number => {
+    const value = Number(valueRaw.replace(",", "."));
+    const unit = unitRaw.toLowerCase();
+    return unit === "m" ? value * 1000 : unit === "cm" ? value * 10 : value;
+  };
+
+  const requestedPair = [
+    toMm(requested[1], requested[3]),
+    toMm(requested[2], requested[3]),
+  ].sort((a, b) => a - b);
+
+  const evidence = normalizeMatchText(evidenceRaw);
+  if (!evidence) return false;
+
+  const labelPattern =
+    "(?:szerokosc|szerokość|szer\\.?|width|dlugosc|długość|dl\\.?|length|glebokosc|głębokość|gl\\.?|depth|wysokosc|wysokość|wys\\.?|height)";
+
+  const measurements: Array<{
+    axis: string;
+    mm: number;
+    index: number;
+  }> = [];
+
+  const addMeasurement = (
+    axisRaw: string,
+    valueRaw: string,
+    unitRaw: string,
+    index: number
+  ) => {
+    const mm = toMm(valueRaw, unitRaw);
+    if (!Number.isFinite(mm) || mm <= 0) return;
+
+    const local = evidence.slice(
+      Math.max(0, index - 80),
+      Math.min(evidence.length, index + 140)
+    );
+
+    // Do not use package/shipping dimensions as product evidence.
+    if (
+      /\b(?:opakowan\w*|pacz\w*|karton\w*|shipping|package|packaging)\b/iu.test(local)
+    ) {
+      return;
+    }
+
+    measurements.push({
+      axis: normalizeMatchText(axisRaw).replace(/\./g, "").replace(/\s+/g, ""),
+      mm,
+      index,
+    });
+  };
+
+  const labelFirst = new RegExp(
+    "\\b(" +
+      labelPattern +
+      ")\\s*(?:[:=\\-–—]|wynosi|to)?\\s*(\\d+(?:[.,]\\d+)?)\\s*(mm|cm|m)\\b",
+    "giu"
+  );
+
+  for (const match of evidence.matchAll(labelFirst)) {
+    if (typeof match.index !== "number") continue;
+    addMeasurement(match[1], match[2], match[3], match.index);
+  }
+
+  const valueFirst = new RegExp(
+    "\\b(\\d+(?:[.,]\\d+)?)\\s*(mm|cm|m)\\s*(?:[-–—,:]?\\s*)(" +
+      labelPattern +
+      ")\\b",
+    "giu"
+  );
+
+  for (const match of evidence.matchAll(valueFirst)) {
+    if (typeof match.index !== "number") continue;
+    addMeasurement(match[3], match[1], match[2], match.index);
+  }
+
+  for (let i = 0; i < measurements.length; i += 1) {
+    for (let j = i + 1; j < measurements.length; j += 1) {
+      const a = measurements[i];
+      const b = measurements[j];
+
+      if (a.axis === b.axis) continue;
+      if (Math.abs(a.index - b.index) > 280) continue;
+
+      const offeredPair = [a.mm, b.mm].sort((x, y) => x - y);
+
+      if (
+        universalNumbersNearlyEqual(offeredPair[0], requestedPair[0]) &&
+        universalNumbersNearlyEqual(offeredPair[1], requestedPair[1])
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function requirementHasEvidence(
   requirement: UniversalRequirement,
   evidenceRaw: string
 ): boolean {
   const evidence = normalizeMatchText(evidenceRaw);
+
+  // ASARVO DESCRIPTION EVIDENCE V1 FIX1:
+  // Before falling back to exact-string/numeric evidence, understand dimensions
+  // expressed as separate labelled fields in the bound listing description.
+  const naturalDimensionEvidence =
+    requirementHasNaturalDimensionEvidence(requirement, evidenceRaw);
+  if (naturalDimensionEvidence === true) return true;
+
 
   if (requirement.key === "anc" && hasStructuredAncEncContradiction(evidenceRaw)) {
     return false;
@@ -9596,6 +19180,45 @@ function hasConflictingHardRequirementInTitle(
       ["zloty", "złoty", "zlota", "złota", "zlote", "złote", "gold", "golden"],
     ].map((group) => group.map(normalizeMatchText));
 
+    // INTENT CORE V4: parser/conflict parity for additional neutral colour
+    // vocabulary. Navy belongs to blue, graphite to grey. Cream/off-white is
+    // deliberately its own group so a white-only offer cannot satisfy cream.
+    colorGroups.push(
+      [
+        "turkusowy", "turkusowa", "turkusowe",
+        "turquoise", "cyan",
+      ].map(normalizeMatchText),
+      [
+        "bordowy", "bordowa", "bordowe",
+        "burgundy", "maroon",
+      ].map(normalizeMatchText)
+    );
+
+    const blueGroup = colorGroups.find((group) =>
+      group.includes(normalizeMatchText("niebieski"))
+    );
+    if (blueGroup) {
+      blueGroup.push(
+        normalizeMatchText("granatowy"),
+        normalizeMatchText("granatowa"),
+        normalizeMatchText("granatowe"),
+        normalizeMatchText("navy"),
+        normalizeMatchText("dark blue")
+      );
+    }
+
+    const grayGroup = colorGroups.find((group) =>
+      group.includes(normalizeMatchText("szary"))
+    );
+    if (grayGroup) {
+      grayGroup.push(
+        normalizeMatchText("grafitowy"),
+        normalizeMatchText("grafitowa"),
+        normalizeMatchText("grafitowe"),
+        normalizeMatchText("graphite")
+      );
+    }
+
     const requestedColorAliases = allRequirements
       .filter((item) => item.hard && item.key === "color")
       .flatMap((item) => [item.value, ...item.aliases])
@@ -9857,30 +19480,82 @@ function hasConflictingHardRequirementInTitle(
     return false;
   }
 
-  if (requirement.key === "storage") {
-    const medium = storageMediumCanonicalValue(storageMediumRequirementFromAll(allRequirements));
-    if (medium) {
-      const requestedGb = parseUniversalCapacityToGb(requirement.value);
-      const offeredGb = extractUniversalTypedStorageCapacityValuesGb(title, medium);
-      if (requestedGb !== null && offeredGb.length > 0) {
-        return !offeredGb.some((value) => universalNumericComparisonSatisfied(
-          value, requestedGb, universalRequirementComparison(requirement)
-        ));
-      }
-      // Medium-bound capacity was not stated in the title. Defer to the
-      // concrete page instead of treating another drive capacity as a conflict.
-      return false;
+    if (requirement.key === "vram") {
+    const requestedGb =
+      parseUniversalCapacityToGb(requirement.value);
+
+    const offeredGb =
+      asarvoIntentCoreV3ExtractContextualVramCapacityValuesGb(
+        title
+      );
+
+    if (
+      requestedGb !== null &&
+      offeredGb.length > 0
+    ) {
+      return !offeredGb.some((value) =>
+        universalNumericComparisonSatisfied(
+          value,
+          requestedGb,
+          universalRequirementComparison(requirement)
+        )
+      );
     }
+
+    return false;
   }
 
-  if (["storage", "capacity", "ram", "vram"].includes(requirement.key)) {
-    const requestedGb = parseUniversalCapacityToGb(requirement.value);
-    const offeredGb = extractUniversalCapacityValuesGb(title);
+  if (requirement.key === "storage") {
+    const requestedGb =
+      parseUniversalCapacityToGb(requirement.value);
 
-    if (requestedGb !== null && offeredGb.length > 0) {
-      return !offeredGb.some((value) => universalNumericComparisonSatisfied(
-        value, requestedGb, universalRequirementComparison(requirement)
-      ));
+    const medium =
+      storageMediumCanonicalValue(
+        storageMediumRequirementFromAll(allRequirements)
+      );
+
+    const offeredGb = medium
+      ? extractUniversalTypedStorageCapacityValuesGb(
+          title,
+          medium
+        )
+      : asarvoIntentCoreV3ExtractContextualStorageCapacityValuesGb(
+          title
+        );
+
+    if (
+      requestedGb !== null &&
+      offeredGb.length > 0
+    ) {
+      return !offeredGb.some((value) =>
+        universalNumericComparisonSatisfied(
+          value,
+          requestedGb,
+          universalRequirementComparison(requirement)
+        )
+      );
+    }
+
+    return false;
+  }
+
+  if (requirement.key === "capacity") {
+    const requestedGb =
+      parseUniversalCapacityToGb(requirement.value);
+    const offeredGb =
+      extractUniversalCapacityValuesGb(title);
+
+    if (
+      requestedGb !== null &&
+      offeredGb.length > 0
+    ) {
+      return !offeredGb.some((value) =>
+        universalNumericComparisonSatisfied(
+          value,
+          requestedGb,
+          universalRequirementComparison(requirement)
+        )
+      );
     }
   }
 
@@ -9904,16 +19579,27 @@ function hasConflictingHardRequirementInTitle(
     }
   }
 
-  if (requirement.key === "refresh_rate") {
-    const requested = Number(String(requirement.value).match(/\d{2,3}/)?.[0] ?? NaN);
-    const offered = Array.from(title.matchAll(/\b(\d{2,3})\s*hz\b/giu))
-      .map((match) => Number(match[1]))
-      .filter(Number.isFinite);
+    if (requirement.key === "refresh_rate") {
+    const requested = Number(
+      String(requirement.value).match(/\d{2,3}/)?.[0] ?? NaN
+    );
 
-    if (Number.isFinite(requested) && offered.length > 0) {
-      return !offered.some((value) => universalNumericComparisonSatisfied(
-        value, requested, universalRequirementComparison(requirement)
-      ));
+    const offered =
+      asarvoIntentCoreV3ExtractDisplayRefreshRateValuesHz(
+        title
+      );
+
+    if (
+      Number.isFinite(requested) &&
+      offered.length > 0
+    ) {
+      return !offered.some((value) =>
+        universalNumericComparisonSatisfied(
+          value,
+          requested,
+          universalRequirementComparison(requirement)
+        )
+      );
     }
   }
 
@@ -9934,7 +19620,13 @@ function hasConflictingHardRequirementInTitle(
     const requested = Number(String(requirement.value).match(/\d{1,3}(?:[.,]\d+)?/)?.[0]?.replace(",", ".") ?? NaN);
     const offered = extractUniversalScreenSizeValuesInches(title);
     if (Number.isFinite(requested) && offered.length > 0) {
-      return !offered.some((value) => universalNumericComparisonSatisfied(value, requested, universalRequirementComparison(requirement)));
+      return !offered.some((value) =>
+        asarvoIntentCoreV2ScreenSizeComparisonSatisfied(
+          value,
+          requested,
+          requirement
+        )
+      );
     }
   }
 
@@ -10087,6 +19779,9 @@ function isBrandExplicitlyRequested(brandRaw: string | null, queryRaw: string): 
 
 type UniversalCategoryProfile = {
   positiveAliases: string[];
+  // Optional mutually distinct semantic subtypes inside one broad product category.
+  // Discovery may use the broad category, but identity cannot jump between groups.
+  identityAliasGroups?: string[][];
   discoveryAliases?: string[];
   // Explicit plural/category forms that can safely bind a nearby multi-unit
   // quantity to the requested product itself rather than to an accessory.
@@ -10300,9 +19995,22 @@ const UNIVERSAL_CATEGORY_PROFILES: Record<string, UniversalCategoryProfile> = {
       "odżywka białkowa", "odzywka bialkowa", "bcaa", "eaa",
       "elektrolity", "izotonik", "isotonic",
     ],
+    // ASARVO_BATCH61_CATEGORY_SUBTYPE_IDENTITY_SAFETY_V1
+    // Subtype identity is intentionally separate from broad category evidence.
+    identityAliasGroups: [
+      [
+        "whey protein", "whey", "protein",
+        "białko", "bialko", "białko serwatkowe", "bialko serwatkowe",
+        "odżywka białkowa", "odzywka bialkowa", "protein shake"
+      ],
+      ["kreatyna", "creatine", "creatine monohydrate", "monohydrat"],
+      ["bcaa", "eaa"],
+      ["elektrolity", "izotonik", "isotonic"],
+    ],
   },
   construction_toy: { positiveAliases: ["klocki", "lego", "technic", "building set"] },
-  shoes: { positiveAliases: ["buty", "obuwie", "shoes", "sneakers"] },
+  // ASARVO_BATCH67_SHOES_SNEAKERSY_IDENTITY_ALIAS_V1
+  shoes: { positiveAliases: ["buty", "obuwie", "shoes", "sneakers", "sneakersy"] },
   clothing: { positiveAliases: ["odziez", "odzież", "koszulka", "spodnie", "kurtka", "bluza"] },
   bike: { positiveAliases: ["rower", "bike", "bicycle"] },
   scooter: { positiveAliases: ["hulajnoga", "scooter"] },
@@ -10328,7 +20036,26 @@ const UNIVERSAL_CATEGORY_PROFILES: Record<string, UniversalCategoryProfile> = {
   book: { positiveAliases: ["ksiazka", "książka", "book", "powiesc", "powieść", "podrecznik", "podręcznik", "komiks", "manga"] },
   projector: { positiveAliases: ["projektor", "projector"] },
   drone: { positiveAliases: ["dron", "drone"] },
-};
+
+
+  // ASARVO_ROUTING_V1_TABLE_HOME_FURNITURE_FIX2_AST
+  table: {
+    positiveAliases: ["stolik", "stoliki", "stolika", "stoliku", "stolikiem", "stolikach", "stolikom", "stolikow", "stolików", 
+      "stol", "stół", "stoly", "stoły", "stolu", "stołu",
+      "table", "dining table", "dining-table"
+    ],
+    incompatibleTitlePatterns: [
+      // ASARVO_SOURCE_EXPANSION_V1_FIX2_LEROY_TIMEOUT_TOOL_TABLE_GUARD
+      /(?:stol|stół).{0,55}(?:pilark|ukosnic|ukośnic|frezark|wyrzynark|pily\s+stolowej|piły\s+stołowej)/iu,
+      // ASARVO_SOURCE_EXPANSION_V1_FIX1_LEROY_READER_TABLE_GUARD
+      /(?:podkladka|podkładka|mata|obrus|bieznik|bieżnik).{0,45}(?:na|do)\s+(?:stol|stół|stolu|stołu)/iu,
+      /(?:stol|stół)\s+(?:warsztatowy|roboczy|do\s+tapetowania)/iu,
+      /^(?:biurko|toaletka|regal|regał)(?:\s|$)/iu,
+      /^(?:blat|nogi?|stela[zż]|podstawa)\s+(?:do\s+)?(?:stolu|stołu|stolika)\b/iu,
+      /^(?:obrus|bie[zż]nik|tablecloth)\b/iu,
+      /^(?:krzeslo|krzesło|krzesla|krzesła|chair|chairs)\b/iu,
+    ],
+  },};
 
 function normalizeProfileAlias(aliasRaw: string): string {
   return normalizeMatchText(aliasRaw).trim();
@@ -10558,6 +20285,48 @@ function hasSafeUniversalNamedProductAnchor(
   );
 
   return candidates.length >= 2 && matched.length >= 2;
+}
+
+// ASARVO_BATCH61_CATEGORY_SUBTYPE_IDENTITY_SAFETY_V1
+function getUniversalRequestedCategoryIdentityAliasGroup(
+  parsed: ParsedQuery
+): readonly string[] | null {
+  if (!parsed.category) return null;
+  const profile = UNIVERSAL_CATEGORY_PROFILES[parsed.category];
+  if (!profile?.identityAliasGroups?.length) return null;
+
+  const requested = normalizeMatchText(
+    `${parsed.intent.productPhrase} ${parsed.queryText}`
+  );
+
+  for (const group of profile.identityAliasGroups) {
+    const requestedGroupMatch = group.some((aliasRaw) => {
+      const alias = normalizeMatchText(aliasRaw);
+      return (
+        universalEvidenceHasBoundedIdentityTerm(alias, requested) ||
+        phraseMorphologicallyMatches(alias, requested)
+      );
+    });
+    if (requestedGroupMatch) return group;
+  }
+
+  return null;
+}
+
+function hasUniversalRequestedCategoryIdentityAliasEvidence(
+  evidenceRaw: string,
+  parsed: ParsedQuery
+): boolean {
+  const group = getUniversalRequestedCategoryIdentityAliasGroup(parsed);
+  if (!group) return true;
+  const evidence = normalizeMatchText(evidenceRaw);
+  return group.some((aliasRaw) => {
+    const alias = normalizeMatchText(aliasRaw);
+    return (
+      universalEvidenceHasBoundedIdentityTerm(alias, evidence) ||
+      phraseMorphologicallyMatches(alias, evidence)
+    );
+  });
 }
 
 function isUniversalCategoryIdentityTerm(
@@ -10800,6 +20569,262 @@ function evaluateUniversalProductClass(
   return null;
 }
 
+// ASARVO_INTENT_CORE_V4_MULTI_VARIANT_GENERATION_COLOR
+//
+// Multi-core exact-variant hardening:
+// 1) attached sibling suffixes: S24FE / Pixel9ProXL / RTX4060Ti;
+// 2) generation markers: Gen 2 / 2nd Gen / generacja 2 / Mk II;
+// 3) extended explicit variant words: SE / Neo / Edge / XL;
+// 4) wider neutral colour vocabulary used consistently by parser + conflicts.
+
+function asarvoIntentCoreV4RomanToNumber(
+  valueRaw: string
+): number | null {
+  const value = normalizeMatchText(valueRaw).toUpperCase();
+
+  const roman: Record<string, number> = {
+    I: 1,
+    II: 2,
+    III: 3,
+    IV: 4,
+    V: 5,
+    VI: 6,
+    VII: 7,
+    VIII: 8,
+    IX: 9,
+    X: 10,
+  };
+
+  if (roman[value] !== undefined) {
+    return roman[value];
+  }
+
+  const numeric = Number(value);
+  return Number.isInteger(numeric) && numeric > 0 && numeric <= 20
+    ? numeric
+    : null;
+}
+
+function asarvoIntentCoreV4ExtractGenerationSignature(
+  valueRaw: string
+): number[] {
+  const text = normalizeMatchText(valueRaw);
+  const values = new Set<number>();
+
+  const add = (raw: string): void => {
+    const value = asarvoIntentCoreV4RomanToNumber(raw);
+    if (value !== null) values.add(value);
+  };
+
+  for (const match of text.matchAll(
+    /\b(?:gen(?:eration)?|generacj(?:a|i)|mk|mark)\s*[-.:]?\s*(\d{1,2}|i{1,3}|iv|v|vi{0,3}|ix|x)\b/giu
+  )) {
+    add(match[1]);
+  }
+
+  for (const match of text.matchAll(
+    /\b(\d{1,2})(?:(?:st|nd|rd|th)\s+gen(?:eration)?|\s+generacj(?:a|i))\b/giu
+  )) {
+    add(match[1]);
+  }
+
+  return Array.from(values);
+}
+
+function asarvoIntentCoreV4HasGenerationMismatch(
+  titleRaw: string,
+  parsed: ParsedQuery
+): boolean {
+  if (!parsed.category) return false;
+
+  const profile = UNIVERSAL_CATEGORY_PROFILES[parsed.category];
+  if (!profile?.variantSensitive) return false;
+
+  const requested =
+    asarvoIntentCoreV4ExtractGenerationSignature(
+      parsed.queryText
+    );
+
+  if (requested.length === 0) return false;
+
+  const offered =
+    asarvoIntentCoreV4ExtractGenerationSignature(titleRaw);
+
+  // No explicit generation in the offer title = defer to later evidence.
+  if (offered.length === 0) return false;
+
+  return !offered.some((value) =>
+    requested.includes(value)
+  );
+}
+
+const ASARVO_INTENT_CORE_V4_EXTENDED_VARIANTS = [
+  "se",
+  "neo",
+  "edge",
+  "xl",
+] as const;
+
+function asarvoIntentCoreV4ExtractExtendedVariantSignature(
+  valueRaw: string
+): string[] {
+  const text = ` ${normalizeMatchText(valueRaw)} `;
+  const values: string[] = [];
+
+  for (
+    const token of
+    ASARVO_INTENT_CORE_V4_EXTENDED_VARIANTS
+  ) {
+    const pattern = new RegExp(
+      `(?:^|[^\\p{L}\\p{N}])${escapeRegExp(token)}(?=$|[^\\p{L}\\p{N}])`,
+      "iu"
+    );
+
+    if (pattern.test(text)) {
+      values.push(token);
+    }
+  }
+
+  return Array.from(new Set(values));
+}
+
+function asarvoIntentCoreV4HasExtendedVariantMismatch(
+  titleRaw: string,
+  parsed: ParsedQuery
+): boolean {
+  if (!parsed.category) return false;
+
+  const profile = UNIVERSAL_CATEGORY_PROFILES[parsed.category];
+  if (!profile?.variantSensitive) return false;
+
+  const requested =
+    asarvoIntentCoreV4ExtractExtendedVariantSignature(
+      parsed.intent.productPhrase
+    );
+
+  const offered =
+    asarvoIntentCoreV4ExtractExtendedVariantSignature(
+      titleRaw
+    );
+
+  if (requested.length === 0 || offered.length === 0) {
+    return false;
+  }
+
+  return (
+    offered.some((token) => !requested.includes(token)) ||
+    requested.some((token) => !offered.includes(token))
+  );
+}
+
+function asarvoIntentCoreV4HasAttachedSiblingSuffixMismatch(
+  titleRaw: string,
+  urlRaw: string,
+  parsed: ParsedQuery
+): boolean {
+  const exactModelAlias =
+    getCompactExactModelCodeAlias(parsed);
+
+  if (
+    !exactModelAlias ||
+    !isUniversalModelCodeToken(exactModelAlias)
+  ) {
+    return false;
+  }
+
+  const requestedModel =
+    compactUniversalModelCode(exactModelAlias);
+
+  if (requestedModel.length < 2) return false;
+
+  const scope =
+    compactUniversalModelCode(
+      `${titleRaw} ${urlRaw}`
+    );
+
+  const at = scope.indexOf(requestedModel);
+  if (at < 0) return false;
+
+  const suffix = scope.slice(
+    at + requestedModel.length,
+    at + requestedModel.length + 12
+  );
+
+  if (!suffix) return false;
+
+  const requestedVariants = new Set([
+    ...extractUniversalVariantSignature(
+      parsed.intent.productPhrase
+    ),
+    ...asarvoIntentCoreV4ExtractExtendedVariantSignature(
+      parsed.intent.productPhrase
+    ),
+  ].map((value) =>
+    normalizeMatchText(value).replace(/\s+/g, "")
+  ));
+
+  const knownSiblingSuffixes = [
+    "promax",
+    "pro",
+    "max",
+    "ultra",
+    "plus",
+    "mini",
+    "lite",
+    "fe",
+    "se",
+    "neo",
+    "edge",
+    "xl",
+    "ti",
+    "super",
+    "xtx",
+    "xt",
+  ];
+
+  for (const variant of knownSiblingSuffixes) {
+    if (!suffix.startsWith(variant)) continue;
+
+    if (requestedVariants.has(variant)) {
+      return false;
+    }
+
+    // "pro max" normalizes to promax.
+    if (
+      variant === "promax" &&
+      requestedVariants.has("promax")
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  return false;
+}
+
+function asarvoIntentCoreV4HasVariantGenerationMismatch(
+  titleRaw: string,
+  urlRaw: string,
+  parsed: ParsedQuery
+): boolean {
+  return (
+    asarvoIntentCoreV4HasGenerationMismatch(
+      titleRaw,
+      parsed
+    ) ||
+    asarvoIntentCoreV4HasExtendedVariantMismatch(
+      titleRaw,
+      parsed
+    ) ||
+    asarvoIntentCoreV4HasAttachedSiblingSuffixMismatch(
+      titleRaw,
+      urlRaw,
+      parsed
+    )
+  );
+}
+
 const UNIVERSAL_VARIANT_TOKENS = [
   "pro max", "ultra", "plus", "mini", "air", "lite", "super", "xtx", "max", "pro",
   "classic", " ii ", " iii ", " ti ", " xt ", " fe "
@@ -10998,11 +21023,11 @@ const V28_OPEN_WORLD_QUALIFIER_EQUIVALENCE: readonly (readonly string[])[] = [
   // adjective spelling to represent the requested product class.
   ["gamingowy", "gaming", "do gier", "dla graczy", "dla gracza"],
   ["turystyczny", "trekkingowy", "outdoorowy", "gorski", "wyprawowy"],
-  ["sportowy", "treningowy", "fitness"],
+  ["sportowy", "treningowy", "fitness", "sportswear"],
   ["samochodowy", "motoryzacyjny", "do samochodu"],
   ["dzieciecy", "dla dziecka", "dla dzieci"],
   ["biurowy", "do biura", "office"],
-  ["ogrodowy", "do ogrodu"],
+  ["ogrodowy", "do ogrodu", "taras", "tarasowy", "na taras", "do tarasu", "balkon", "balkonowy", "na balkon", "do balkonu", "outdoor", "outdoorowy"],
 ];
 
 function isSoftMerchandisingQualifierTerm(termRaw: string): boolean {
@@ -11020,12 +21045,145 @@ function isSoftMerchandisingQualifierTerm(termRaw: string): boolean {
   );
 }
 
+
+// ASARVO_DESCRIPTION_INTELLIGENCE_V1_FIX1
+function asarvoDescriptionAliasFamilyMatches(
+  termRaw: string,
+  evidenceRaw: string
+): boolean {
+  const term = normalizeMatchText(termRaw);
+  const evidence = normalizeMatchText(evidenceRaw);
+  if (!term || !evidence) return false;
+
+  const grinderTerms = [
+    "diax", "diaxa", "diaxem",
+    "flex", "flexa", "flexem",
+    "katowka", "kątówka", "katowki", "kątówki",
+    "szlifierka", "szlifierka katowa", "szlifierka kątowa",
+    "szlifierki katowej", "szlifierki kątowej",
+    "angle grinder", "grinder"
+  ];
+
+  const discTerms = [
+    "tarcza", "tarcze", "tarcza diamentowa",
+    "tarcza tnaca", "tarcza tnąca",
+    "tarcza do ciecia", "tarcza do cięcia",
+    "tarcza szlifierska",
+    "disc", "disk", "cutting disc", "grinding disc", "diamond disc"
+  ];
+
+  const groups = [grinderTerms, discTerms];
+
+  for (const group of groups) {
+    const termBelongs = group.some((aliasRaw) => {
+      const alias = normalizeMatchText(aliasRaw);
+      return (
+        term === alias ||
+        phraseMorphologicallyMatches(term, alias) ||
+        phraseMorphologicallyMatches(alias, term)
+      );
+    });
+    if (!termBelongs) continue;
+
+    const evidenceMatches = group.some((aliasRaw) => {
+      const alias = normalizeMatchText(aliasRaw);
+      return (
+        universalEvidenceHasBoundedIdentityTerm(alias, evidence) ||
+        phraseMorphologicallyMatches(alias, evidence)
+      );
+    });
+    if (evidenceMatches) return true;
+  }
+
+  return false;
+}
+
+function asarvoToolDiscRequestedSizeMm(parsed: ParsedQuery): number | null {
+  const hardLength = parsed.intent.required.find(
+    (item) => item.hard && item.key === "length"
+  );
+  if (!hardLength) return null;
+
+  const value = normalizeMatchText(hardLength.value);
+  const match = value.match(/\b(\d{1,4}(?:[.,]\d+)?)\s*(mm|cm)\b/i);
+  if (!match) return null;
+
+  const number = Number(match[1].replace(",", "."));
+  if (!Number.isFinite(number) || number <= 0) return null;
+
+  return match[2].toLowerCase() === "cm"
+    ? Math.round(number * 10)
+    : Math.round(number);
+}
+
+function asarvoToolDiscTitleHasRequestedSize(
+  titleRaw: string,
+  parsed: ParsedQuery
+): boolean {
+  const title = normalizeMatchText(titleRaw);
+  if (!/\btarcz\w*\b/iu.test(title)) return false;
+
+  const requestedMm = asarvoToolDiscRequestedSizeMm(parsed);
+  if (requestedMm === null) return false;
+
+  for (const match of title.matchAll(/\b(\d{1,4}(?:[.,]\d+)?)\s*(mm|cm)\b/giu)) {
+    const number = Number(match[1].replace(",", "."));
+    if (!Number.isFinite(number)) continue;
+    const offeredMm =
+      match[2].toLowerCase() === "cm"
+        ? Math.round(number * 10)
+        : Math.round(number);
+    if (offeredMm === requestedMm) return true;
+  }
+
+  if (requestedMm >= 75 && requestedMm <= 500) {
+    if (new RegExp(`\\b${requestedMm}\\b`).test(title)) return true;
+  }
+
+  return false;
+}
+
+function asarvoCanDeferToolDiscQualifierProof(
+  titleRaw: string,
+  qualifierTermsRaw: string[],
+  matchedQualifiersRaw: string[],
+  parsed: ParsedQuery
+): boolean {
+  if (!parsed.intent.openWorld) return false;
+
+  const query = normalizeMatchText(parsed.queryText);
+  const title = normalizeMatchText(titleRaw);
+
+  const requestsDisc =
+    /\btarcz\w*\b/iu.test(query) &&
+    /\b(?:diax\w*|flex\w*|katow\w*|kątow\w*|szlifier\w*)\b/iu.test(query);
+
+  if (!requestsDisc || !/\btarcz\w*\b/iu.test(title)) return false;
+  if (!asarvoToolDiscTitleHasRequestedSize(titleRaw, parsed)) return false;
+
+  const matched = new Set(
+    matchedQualifiersRaw.map((item) => normalizeMatchText(item))
+  );
+
+  const missing = qualifierTermsRaw
+    .map((item) => normalizeMatchText(item))
+    .filter(Boolean)
+    .filter((item) => !matched.has(item));
+
+  if (missing.length === 0) return false;
+
+  return missing.every((item) =>
+    /\b(?:diax\w*|flex\w*|katow\w*|kątow\w*|szlifier\w*)\b/iu.test(item)
+  );
+}
 function openWorldQualifierTermMatches(
   termRaw: string,
   evidenceRaw: string,
   parsed: ParsedQuery
 ): boolean {
   if (openWorldIdentityTermMatches(termRaw, evidenceRaw, parsed)) return true;
+
+  if (asarvoDescriptionAliasFamilyMatches(termRaw, evidenceRaw)) return true;
 
   const term = normalizeMatchText(termRaw);
   const evidence = normalizeMatchText(evidenceRaw);
@@ -11923,13 +22081,53 @@ function isAutomotiveFitmentNumericIdentityTerm(termRaw: string, parsed: ParsedQ
   return /^(?:19|20)\d{2}$/.test(term) || /^[0-8][.,][0-9]$/.test(term);
 }
 
+function asarvoFix15IsSoftwareInsteadOfConsole(titleRaw: string, parsed: ParsedQuery): boolean {
+  if (parsed.category !== 'console' || parsed.intent.accessoryIntent) return false;
+  const normalize = (x: unknown): string => String(x || '').toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9: +\-]/g,' ').replace(/\s+/g,' ').trim();
+  const q = normalize(parsed.queryText);
+  const t = normalize(titleRaw);
+  // Only a request explicitly headed by the sold console itself, not a
+  // game title whose compatibility suffix merely mentions a platform.
+  const mainRequested = /\b(?:konsol[aey]?|console)\b/.test(q) ||
+    /^(?:(?:sony|microsoft|nintendo)\s+)?(?:playstation\s*[345]|ps[345]|xbox\s+(?:series|one)|nintendo\s+switch)\b/.test(q);
+  if (!mainRequested || /\b(?:gra|gry|gier|games?|klucz|kod)\b/.test(q)) return false;
+  const software = /\b(?:gra|gry|gier|games?|wersja\s+gry|platforma\s*:\s*(?:playstation|ps[345]|xbox|nintendo)|klucz\s+(?:do\s+)?gry|kod\s+(?:do\s+)?gry|game\s+key)\b/.test(t);
+  if (!software) return false;
+  // Real main-product bundles may legitimately contain a game, but the main
+  // sold object must be stated at the beginning of the listing title.
+  const mainObjectLead = /^(?:(?:sony|microsoft|nintendo)\s+)?(?:konsol[aey]?|console|playstation\s*[345]\s+(?:slim|pro|digital|z\s+napedem)|ps[345]\s+(?:slim|pro|digital)|xbox\s+(?:series|one)|nintendo\s+switch)\b/.test(t);
+  return !mainObjectLead;
+}
+
+function asarvoFix18ConsoleSoldObjectReject(titleRaw: string, parsed: { category: string | null; queryText: string; intent?: { accessoryIntent?: boolean } }): string | null{
+  if(parsed.category !== 'console' || parsed.intent?.accessoryIntent) return null;
+  const norm=(x: unknown): string =>String(x||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ł/g,'l').replace(/[^a-z0-9+\- ]/g,' ').replace(/\s+/g,' ').trim();
+  const q=norm(parsed.queryText),t=norm(titleRaw);
+  const explicitRequest=/^(?:(?:sony|konsola|konsole|sprzedam)\s+){0,2}(?:playstation\s*5|ps\s*5)\b/.test(q) || /\b(?:konsola|konsole)\s+(?:sony\s+)?(?:playstation\s*5|ps\s*5)\b/.test(q);
+  if(!explicitRequest || /\b(?:gra|gry|gier|game|gry\s+na|kod\s+do\s+gry)\b/.test(q)) return null;
+  if(!/\b(?:playstation\s*5|ps\s*5)\b/.test(t))return 'missing-ps5-sold-object';
+  const lead=/^(?:(?:sprzedam|oryginalna|oryginalny|uzywana|uzywany|nowa|nowy|zestaw)\s+){0,2}(?:(?:konsola|konsole|console)\s+)?(?:sony\s+)?(?:playstation\s*5|ps\s*5)\b/.test(t) ||
+     /^(?:(?:sprzedam|uzywana|nowa)\s+){0,2}(?:konsola|konsole)\s+(?:sony\s+)?(?:playstation\s*5|ps\s*5)\b/.test(t);
+  if(!lead) return 'platform-mention-not-console';
+  const strongAccessory= /\b(?:stacja\s+(?:ladowania|dokujaca|ladujaca)|naped\s+optyczny|ladowarka|etui|pokrowiec|obudowa|adapter|przewod|kabel|uchwyt|zasilacz)\b/.test(t);
+  if(strongAccessory) return 'accessory-as-sold-object';
+  const accessory=/\b(?:pad|pady|kontroler|joystick|dualsense|dual\s+sense|plyta\s+gry)\b/.test(t);
+  const hardware= /\b(?:slim|pro|digital|chassis|cfi\s*\d|z\s+napedem|825\s*gb|1\s*tb|2\s*tb|konsola)\b/.test(t);
+  const bundle= /\+\s*(?:\d+\s*)?(?:pad|pady|kontroler|dualsense|gra|game)\b/.test(t) || /\b\d+\s+pady\b/.test(t);
+  if(accessory && !hardware && !bundle) return 'controller-not-console';
+  return null;
+}
+
 function evaluateUniversalProductMatch(
   title: string,
   content: string,
   url: string,
   parsed: ParsedQuery,
   phase: "discovery" | "verified",
-  source: string | null = null
+  source: string | null = null,
+  trustedRetailerOwnedDiscoveryContext: boolean = false
 ): UniversalMatchResult {
   const titleScope = normalizeMatchText(`${title} ${url}`);
 
@@ -11938,18 +22136,28 @@ function evaluateUniversalProductMatch(
   // discovery classification; it is never trusted for final price/spec proof.
   const trustedDiscoveryClassEvidence =
     phase === "discovery" &&
-    (source === "CeneoDirect" || source === "AllegroLokalnieDirect")
+    (
+      source === "CeneoDirect" ||
+      source === "AllegroLokalnieDirect" ||
+      trustedRetailerOwnedDiscoveryContext
+    )
       ? normalizeMatchText(`${title} ${content} ${url}`)
       : titleScope;
 
   const evidence = phase === "verified"
     ? getUniversalEvidenceScope(title, content, url)
-    : titleScope;
+    : trustedRetailerOwnedDiscoveryContext
+      ? normalizeMatchText(`${title} ${content} ${url}`)
+      : titleScope;
 
   const reasons: string[] = [];
   const missingRequirements: string[] = [];
   let score = 0;
 
+  const v8AllIntentRequirements =
+    asarvoIntentCoreV8AllIntentRequirements(
+      parsed
+    );
   const editorialTitle = normalizeMatchText(title);
   const editorialTopicMatches = editorialTitle.match(
     /\b(?:wlasciwosci|dzialanie|efekty|dawkowanie|stosowanie|skutki\s+uboczne|co\s+to\s+jest)\b/giu
@@ -11965,6 +22173,36 @@ function evaluateUniversalProductMatch(
     /#(?:respond|comments?|komentarze?)$/i.test(url)
   ) {
     return { pass: false, score: 0, reasons: ["informational-page"], missingRequirements };
+  }
+
+  // ASARVO_FIX15_EXPLICIT_CONSOLE_SOFTWARE: marketplace cards for games
+  // and digital codes are not a console even when platform PS5 appears.
+  // Do not apply to game searches, non-console categories or real bundles.
+  if (asarvoFix15IsSoftwareInsteadOfConsole(title, parsed)) {
+    console.log('[ASARVO_FIX15_SOFTWARE_REJECT]', JSON.stringify({
+      source, phase, title: title.slice(0,120), category: parsed.category,
+    }));
+    return { pass: false, score: 0, reasons: ['console-software-not-hardware'], missingRequirements };
+  }
+
+  // ASARVO_FIX18_CONSOLE_DISCOVERY_REJECT: main sold object must be a PS5 console.
+  const asarvoFix18DiscoveryReason = asarvoFix18ConsoleSoldObjectReject(title, parsed);
+  if (asarvoFix18DiscoveryReason) {
+    console.log('[ASARVO_FIX18_CONSOLE_DISCOVERY_REJECT]', JSON.stringify({
+      url, title: title.slice(0, 125), reason: asarvoFix18DiscoveryReason,
+    }));
+    return { pass: false, score: 0, reasons: [asarvoFix18DiscoveryReason], missingRequirements };
+  }
+
+  const intentCoreV1RejectReason =
+    asarvoIntentCoreV1DependentObjectRejectReason(title, url, parsed);
+  if (intentCoreV1RejectReason) {
+    return {
+      pass: false,
+      score: 0,
+      reasons: [intentCoreV1RejectReason],
+      missingRequirements,
+    };
   }
 
   if (isGenericAccessoryResult(title, url, parsed)) {
@@ -12040,6 +22278,50 @@ function evaluateUniversalProductMatch(
   if (hasUniversalVariantMismatch(title, parsed)) {
     return { pass: false, score: 0, reasons: ["variant-mismatch"], missingRequirements };
   }
+
+  if (
+    asarvoIntentCoreV4HasVariantGenerationMismatch(
+      title,
+      url,
+      parsed
+    )
+  ) {
+    return {
+      pass: false,
+      score: 0,
+      reasons: ["variant-generation-mismatch"],
+      missingRequirements,
+    };
+  }
+
+  const v8AlternativeIdentityEvidence =
+    phase === "discovery"
+      ? trustedDiscoveryClassEvidence
+      : evidence;
+
+  if (
+    !asarvoIntentCoreV8AlternativeIdentityGroupsPass(
+      parsed.intent.alternativeIdentityGroups,
+      v8AlternativeIdentityEvidence
+    )
+  ) {
+    return {
+      pass: false,
+      score: 0,
+      reasons: ["alternative-identity-mismatch"],
+      missingRequirements,
+    };
+  }
+
+  if (
+    parsed.intent.alternativeIdentityGroups.length > 0
+  ) {
+    score += 10;
+    reasons.push(
+      "alternative-identity-match"
+    );
+  }
+
 
   for (const forbidden of parsed.intent.forbiddenTerms) {
     if (!forbidden) continue;
@@ -12252,8 +22534,24 @@ function evaluateUniversalProductMatch(
         ? qualifierTerms.length
         : Math.ceil(qualifierTerms.length * 0.6);
 
-      if (matchedQualifiers.length < requiredQualifiers) {
+      const descriptionQualifierProofDeferred =
+        phase === "discovery" &&
+        asarvoCanDeferToolDiscQualifierProof(
+          title,
+          qualifierTerms,
+          matchedQualifiers,
+          parsed
+        );
+
+      if (
+        matchedQualifiers.length < requiredQualifiers &&
+        !descriptionQualifierProofDeferred
+      ) {
         return { pass: false, score: 0, reasons: ["product-qualifier-mismatch"], missingRequirements };
+      }
+
+      if (descriptionQualifierProofDeferred) {
+        reasons.push("description-qualifier-proof-deferred");
       }
     }
 
@@ -12264,12 +22562,19 @@ function evaluateUniversalProductMatch(
       modelLikeTerms.length === 0 &&
       hasUniversalCategoryEvidence(trustedDiscoveryClassEvidence, parsed);
 
-    const categorySynonymIdentity =
-      hasUniversalCategoryEvidence(
+        const categorySubtypeOwnIdentityEvidence =
+      phase === "verified" ? evidence : titleScope;
+
+const categorySynonymIdentity =
+      (hasUniversalCategoryEvidence(
         phase === "discovery" ? trustedDiscoveryClassEvidence : evidence,
         parsed
       ) &&
-      effectiveIdentityTerms.every((term) => isUniversalCategoryIdentityTerm(term, parsed));
+      effectiveIdentityTerms.every((term) => isUniversalCategoryIdentityTerm(term, parsed))) &&
+      hasUniversalRequestedCategoryIdentityAliasEvidence(
+        categorySubtypeOwnIdentityEvidence,
+        parsed
+      );
 
     const modelAnchoredIdentity = hasSafeUniversalModelAnchor(
       title,
@@ -12338,7 +22643,7 @@ function evaluateUniversalProductMatch(
       hasConflictingHardRequirementInTitle(
         requirement,
         title,
-        parsed.intent.required
+        v8AllIntentRequirements
       )
     ) {
       return {
@@ -12354,13 +22659,52 @@ function evaluateUniversalProductMatch(
     for (const requirement of parsed.intent.required) {
       if (!requirement.hard) continue;
 
-      if (requirementHasEvidenceInContext(requirement, evidence, parsed.intent.required)) {
+      if (requirementHasEvidenceInContext(
+        requirement,
+        evidence,
+        v8AllIntentRequirements
+      )) {
         score += requirement.kind === "spec" ? 12 : 10;
         reasons.push(`matched:${requirement.key}`);
       } else {
         missingRequirements.push(requirement.label);
       }
     }
+
+    for (
+      const group of
+      parsed.intent.anyOfRequired
+    ) {
+      const matched =
+        asarvoIntentCoreV8AnyOfGroupMatches(
+          group,
+          evidence,
+          v8AllIntentRequirements
+        );
+
+      if (matched) {
+        score +=
+          matched.kind === "spec"
+            ? 12
+            : 10;
+
+        reasons.push(
+          `matched-anyof:${matched.key}`
+        );
+      } else {
+        missingRequirements.push(
+          group
+            .map(
+              (requirement) =>
+                requirement.label +
+                "=" +
+                requirement.value
+            )
+            .join(" lub ")
+        );
+      }
+    }
+
 
     if (missingRequirements.length > 0) {
       return {
@@ -12374,9 +22718,52 @@ function evaluateUniversalProductMatch(
     // During discovery attributes are a boost, not a hard gate. Product titles
     // often omit features which are available only on the product page.
     for (const requirement of parsed.intent.required) {
-      if (requirementHasEvidenceInContext(requirement, evidence, parsed.intent.required)) score += 4;
+      if (requirementHasEvidenceInContext(
+        requirement,
+        evidence,
+        v8AllIntentRequirements
+      )) score += 4;
     }
   }
+
+  if (phase === "discovery") {
+    for (
+      const group of
+      parsed.intent.anyOfRequired
+    ) {
+      if (
+        asarvoIntentCoreV8AnyOfGroupMatches(
+          group,
+          evidence,
+          v8AllIntentRequirements
+        )
+      ) {
+        score += 4;
+      }
+    }
+  }
+
+
+  const allIntentRequirements =
+    v8AllIntentRequirements;
+
+  for (const requirement of parsed.intent.preferred) {
+    const preferredScore =
+      asarvoIntentCoreV5PreferredRequirementScore(
+        requirement,
+        evidence,
+        allIntentRequirements,
+        phase
+      );
+
+    if (preferredScore <= 0) continue;
+
+    score += preferredScore;
+    reasons.push(
+      `preferred:${requirement.key}`
+    );
+  }
+
 
   return {
     pass: true,
@@ -13685,10 +24072,192 @@ function dedupeExactModelSiteQueriesByHost(queries: string[]): string[] {
   return out;
 }
 
+
+// ASARVO_SOURCE_EXPANSION_V1_FIX3_FIX2_BRIDGE_ONLY
+// Leroy category/PLP reader surfaces do not expose concrete product cards.
+// Search indexes expose stable first-party /produkty/*.html URLs.
+// Discovery only: existing hydration + universal verifier remain authoritative.
+function buildAsarvoLeroySearchEngineBridgeQueries(
+  parsed: ParsedQuery
+): string[] {
+  if (parsed.country !== "PL" || parsed.category !== "table") return [];
+
+  const productPhrase = normalizeText(
+    parsed.intent.productPhrase ||
+    parsed.product ||
+    parsed.intent.searchBase ||
+    "stół"
+  );
+  if (!productPhrase) return [];
+
+  const exactBase = buildUniversalExactDiscoveryQuery(parsed);
+
+  const phraseQuery =
+    `site:leroymerlin.pl/produkty/ ${quoteSearchTerm(productPhrase)}`;
+
+  const exactQuery = exactBase
+    ? `site:leroymerlin.pl/produkty/ ${exactBase}`
+    : "";
+
+  return Array.from(
+    new Set([phraseQuery, exactQuery].filter(Boolean))
+  ).slice(0, 2);
+}
+
+// ASARVO_MEGA25_PHYSICAL_SUCCESS_V3_DIRECT_RESCUE4
+// Batch23 V2 recovered marketplace results broadly, but only two zero-result
+// categories gained a direct retailer. V3 gives the persistently weak MEGA25
+// categories four FIRST-PARTY direct-adapter site searches. They are inserted
+// before marketplace/specialist targeted queries, so all four receive the
+// existing first-eight Bing HTML + RSS lane.
+const ASARVO_MEGA25_PHYSICAL_V3_RESCUE_CATEGORY_IDS = new Set([
+  "kuchnia_agd",
+  "garderoba_moda",
+  "ogrod",
+  "sport_fitness",
+  "rowery_outdoor",
+  "motoryzacja_czesci",
+  "opony_felgi",
+  "zdrowie_apteka",
+  "dzieci_niemowleta",
+  "bizuteria_zegarki",
+  "instrumenty_studio",
+]);
+
+function getMega25DirectRescueRetailerDomains(
+  parsed: ParsedQuery,
+  limit = 4
+): string[] {
+  if (limit <= 0) return [];
+
+  const matches = getMega25CategoryMatches(parsed)
+    .filter(({ profile }) =>
+      ASARVO_MEGA25_PHYSICAL_V3_RESCUE_CATEGORY_IDS.has(
+        profile.id
+      )
+    );
+
+  if (matches.length === 0) return [];
+
+  const directAdapterHosts = new Set(
+    V28_DIRECT_RETAILER_CATALOG_ADAPTERS.map(
+      (adapter) => adapter.host
+    )
+  );
+
+  const candidates = Array.from(
+    new Set(
+      matches.flatMap(({ profile }) => [
+        ...profile.primaryDomains,
+        ...profile.domains,
+      ])
+    )
+  )
+    .map((domain) =>
+      domain
+        .replace(/^www\./i, "")
+        .trim()
+        .toLowerCase()
+    )
+    .filter(Boolean)
+    .filter((domain) =>
+      directAdapterHosts.has(domain)
+    )
+    .filter((domain) =>
+      !V28_UNIVERSAL_MARKETPLACE_DOMAINS.some(
+        (marketplace) =>
+          retailerHostMatchesDomain(
+            domain,
+            String(marketplace)
+          )
+      )
+    );
+
+  if (candidates.length <= limit) {
+    return candidates;
+  }
+
+  const stableCount = Math.min(
+    2,
+    limit,
+    candidates.length
+  );
+
+  const stable = candidates.slice(
+    0,
+    stableCount
+  );
+
+  const tail = candidates.slice(
+    stableCount
+  );
+
+  if (tail.length === 0) {
+    return stable.slice(0, limit);
+  }
+
+  const offset =
+    getStableRetailerRotationSeed(parsed) %
+    tail.length;
+
+  const rotated = [
+    ...tail.slice(offset),
+    ...tail.slice(0, offset),
+  ];
+
+  return Array.from(
+    new Set([
+      ...stable,
+      ...rotated,
+    ])
+  ).slice(0, limit);
+}
+
+function buildMega25DirectRescueRetailerQueries(
+  parsed: ParsedQuery
+): string[] {
+  if (parsed.country !== "PL") return [];
+
+  const domains =
+    getMega25DirectRescueRetailerDomains(
+      parsed,
+      4
+    );
+
+  if (domains.length === 0) return [];
+
+  const preciseCore = normalizeText(
+    buildUniversalPreciseDiscoveryCore(parsed) ||
+    parsed.intent.productPhrase ||
+    buildProductSearchBase(parsed) ||
+    parsed.intent.searchBase
+  );
+
+  if (!preciseCore) return [];
+
+  const hardHints =
+    getUniversalPreciseDiscoveryRequirements(parsed)
+      .slice(0, 3)
+      .map(requirementDiscoveryHintTerm)
+      .filter(Boolean)
+      .join(" ");
+
+  const queryCore = normalizeText(
+    `${quoteSearchTerm(preciseCore)} ${hardHints}`
+  );
+
+  return domains.map(
+    (domain) =>
+      `site:${getRetailerProductSiteScope(domain)} ${queryCore}`
+  );
+}
+
 function buildTargetedRetailerQueries(
   parsed: ParsedQuery
 ): string[] {
   if (parsed.country !== "PL") return [];
+
+  
 
   const richBase = buildRetailerDiscoveryQuery(parsed);
   const preciseBase = buildUniversalPreciseDiscoveryCore(parsed);
@@ -13718,7 +24287,10 @@ function buildTargetedRetailerQueries(
     categoryAcceleratorBase || alternativePreciseBase
   );
   const exactVerticalRetailerQueries =
-    buildV28ExactVerticalRetailerQueries(parsed);
+    [
+    ...buildAsarvoLeroySearchEngineBridgeQueries(parsed),
+    ...(buildV28ExactVerticalRetailerQueries(parsed)),
+  ];
   const exactModelRetailerQueries =
     buildExactModelRetailerQueries(parsed);
   const variantRelaxedRetailerQueries =
@@ -13754,6 +24326,7 @@ function buildTargetedRetailerQueries(
         : [];
 
     const assembled = Array.from(new Set([
+      
       ...exactModelRetailerQueries,
       ...marketplaceQueries,
       ...variantRelaxedRetailerQueries,
@@ -13774,6 +24347,7 @@ function buildTargetedRetailerQueries(
   // Known-category acceleration remains available, but it is now only an
   // optimization. It is not required for an unseen product to work.
   const assembled = Array.from(new Set([
+      
     ...exactModelRetailerQueries,
     ...marketplaceQueries,
     ...variantRelaxedRetailerQueries,
@@ -13832,13 +24406,26 @@ const retailerCatalogDiscoveryPriceCache = new WeakMap<SearchResult, PriceInfo>(
 // only a PROVISIONAL card-local amount. Final trust is granted later only when
 // the mature product-aware binder independently re-binds the same amount to the
 // same bounded product identity.
+
+// ASARVO_SOURCE_EXPANSION_V1_BRICOMARCHE_DECIMAL_DOT_PRICE_FIX
+// Retail storefronts may serialize decimal prices with a dot even on Polish
+// pages (e.g. "69.99 zł/ szt."). The mature price binders already handle
+// comma decimals safely, so normalize ONLY the unambiguous "digits.twoDigits
+// + currency" shape. Thousands formats such as "1.299,99 zł" are untouched.
+function normalizeAsarvoRetailDecimalDotBeforeCurrency(valueRaw: string): string {
+  return String(valueRaw ?? "").replace(
+    /(\d{1,7})\.(\d{2})(?=\s*(?:zł|PLN|€|EUR|USD|GBP|CZK|KČ)(?=$|[^\p{L}\p{N}_]))/giu,
+    "$1,$2"
+  );
+}
+
 function extractFirstBoundedRetailerCatalogCardPrice(
   textRaw: string,
   productNameRaw: string,
   requestedCondition: Condition = null
 ): PriceInfo {
   const text = normalizeText(
-    decodeHtml(textRaw)
+    decodeHtml(normalizeAsarvoRetailDecimalDotBeforeCurrency(textRaw))
       .replace(/\u00a0/g, " ")
       .replace(/\u202f/g, " ")
   );
@@ -14331,13 +24918,81 @@ function getSearchResultPriority(
   const titleEvidence = normalizeMatchText(`${result.name} ${result.url}`);
   let titleRequirementMatches = 0;
 
+  const allIntentRequirements =
+    asarvoIntentCoreV8AllIntentRequirements(
+      parsed
+    );
+
   for (const requirement of parsed.intent.required) {
-    if (requirement.hard && requirementHasEvidence(requirement, titleEvidence)) {
+    if (
+      requirement.hard &&
+      requirementHasEvidenceInContext(
+        requirement,
+        titleEvidence,
+        allIntentRequirements
+      )
+    ) {
       titleRequirementMatches += 1;
     }
   }
 
+  let preferredTitleMatches = 0;
+
+  for (const requirement of parsed.intent.preferred) {
+    if (
+      requirementHasEvidenceInContext(
+        requirement,
+        titleEvidence,
+        allIntentRequirements
+      )
+    ) {
+      preferredTitleMatches += 1;
+    }
+  }
+
+  let anyOfTitleMatches = 0;
+
+  for (
+    const group of
+    parsed.intent.anyOfRequired
+  ) {
+    if (
+      asarvoIntentCoreV8AnyOfGroupMatches(
+        group,
+        titleEvidence,
+        allIntentRequirements
+      )
+    ) {
+      anyOfTitleMatches += 1;
+    }
+  }
+
+  let alternativeIdentityTitleMatches = 0;
+
+  for (
+    const group of
+    parsed.intent.alternativeIdentityGroups
+  ) {
+    if (
+      group.some((identity) =>
+        universalEvidenceHasBoundedIdentityTerm(
+          normalizeMatchText(identity),
+          titleEvidence
+        )
+      )
+    ) {
+      alternativeIdentityTitleMatches += 1;
+    }
+  }
+
+
   score += titleRequirementMatches * 24;
+  score += Math.min(32, preferredTitleMatches * 8);
+  score += Math.min(48, anyOfTitleMatches * 16);
+  score += Math.min(
+    60,
+    alternativeIdentityTitleMatches * 30
+  );
 
   // A trusted multi-variant card intentionally carries the default package
   // in its title. Do not bury it behind unrelated cards simply because the
@@ -14354,12 +25009,15 @@ function getSearchResultPriority(
     score += 68;
   }
 
-  const hardRequirementCount = parsed.intent.required.filter(
-    (requirement) => requirement.hard
-  ).length;
+  const hardCompletion =
+    asarvoIntentCoreV10HardCompletionCounts(
+      parsed,
+      titleEvidence
+    );
+
   if (
-    hardRequirementCount > 0 &&
-    titleRequirementMatches === hardRequirementCount
+    hardCompletion.expected > 0 &&
+    hardCompletion.matched === hardCompletion.expected
   ) {
     score += 80;
   }
@@ -15679,6 +26337,54 @@ function selectDiverseSearchResults(
       return false;
     }
 
+    // ASARVO_MVP_WASHER_FOREIGN_CLASS_V1: brand-only electronics landings may
+    // produce unrelated SSD/monitor product cards when searching for washers.
+    // Reject only an explicit *leading* different product class in the OWN
+    // retailer title, never merely a keyword in snippets/specs/recommendations.
+    // This is portfolio scheduling only; all final verification gates are intact.
+    const asarvoMvpLeadingCategoryText = normalizeMatchText(result.name)
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(" ");
+    const asarvoMvpWasherForeignClass =
+      parsed.category === "washing_machine" &&
+      !titleHasLiteralUniversalCategoryAlias(result.name, "washing_machine") &&
+      (
+        titleHasLiteralUniversalCategoryAlias(asarvoMvpLeadingCategoryText, "storage") ||
+        titleHasLiteralUniversalCategoryAlias(asarvoMvpLeadingCategoryText, "monitor")
+      );
+    if (asarvoMvpWasherForeignClass) {
+      console.log(
+        "[AIShopping] ASARVO_MVP_WASHER_FOREIGN_CLASS_V1 reject:",
+        result.url,
+        result.name
+      );
+      return false;
+    }
+
+    // ASARVO_MVP_FASTTRACK_STORAGE_CLASS_V1: on an SSD/drive search,
+    // a *title-leading* phone or tablet without any own storage class cannot
+    // consume verification slots. The actual Galaxy S25 false-positive in the
+    // 2026-10-16 audit motivated this. Product titles mentioning SSD/NVMe/dysk
+    // are not excluded. No final verifier/matcher changes.
+    const asarvoMvpStorageForeignClass =
+      parsed.category === "storage" &&
+      !titleHasLiteralUniversalCategoryAlias(result.name, "storage") &&
+      (
+        titleHasLiteralUniversalCategoryAlias(asarvoMvpLeadingCategoryText, "phone") ||
+        titleHasLiteralUniversalCategoryAlias(asarvoMvpLeadingCategoryText, "tablet") ||
+        /^(?:telewizor|television|monitor|tv)(?:\s|$)/i.test(asarvoMvpLeadingCategoryText)
+      );
+    if (asarvoMvpStorageForeignClass) {
+      console.log(
+        "[AIShopping] ASARVO_MVP_FASTTRACK_STORAGE_CLASS_V1 reject:",
+        result.url,
+        result.name
+      );
+      return false;
+    }
+
     // CORE99: explicit foreign product classes should never spend a scarce
     // verifier slot merely because their title contains the category word
     // (for example a heart-rate monitor or a lamp for a monitor). Use the
@@ -16432,6 +27138,9 @@ function isLikelyOpenWorldCategoryOrCollectionResult(
   const path = url.pathname.toLowerCase();
   const title = normalizeMatchText(result.name);
 
+  // ASARVO_BATCH75_24GARDEN_NUMERIC_CATEGORY_GUARD
+  if (asarvoBatch75KnownNumericRetailerRoute(result.url) === "category") return true;
+
   // Strong direct-offer shapes stay eligible even when their breadcrumbs or
   // titles mention a category.
   if (host === "olx.pl" && /\/d\/(?:oferta|ogloszenie)\//i.test(path)) return false;
@@ -16724,6 +27433,9 @@ function looksLikeOpenWebProductUrl(url: string): boolean {
     ].some((key) => parsed.searchParams.has(key));
 
     if (productParam) return true;
+
+    // ASARVO_BATCH75_24GARDEN_NUMERIC_PRODUCT_SHAPE
+    if (asarvoBatch75KnownNumericRetailerRoute(url) === "product") return true;
 
     const parts = pathname.split("/").filter(Boolean);
     const lastPart = parts[parts.length - 1] ?? "";
@@ -17186,6 +27898,365 @@ function getDeferredRetailerModelIdentityBridgeCode(
   return mpn;
 }
 
+
+// ASARVO_BATCH52_GLOBAL_TARGET48_EXACT_GATE_AUDIT_V1_FIX4
+type AsarvoBatch52Fix4ParsedDiagnostic = ParsedQuery & { __asarvoBatch52Fix4ForcedHosts?: string[] };
+const ASARVO_BATCH52_FIX4_GATE_REASON_LABELS: Record<string, string> = {
+  "R01_HOST_MISMATCH": "!host || !retailerHostMatchesDomain(host, expectedHost)",
+  "R02_URL_PARSE_FAIL": "URL parse catch",
+  "R03_REFERENCE_DOCUMENT": "isReferenceDocumentOfferResult(result)",
+  "R04_CATEGORY_OR_COLLECTION": "isLikelyOpenWorldCategoryOrCollectionResult(result, parsed)",
+  "R05_LEGACY_CATEGORY_SUFFIX": "/(?:^|-)c-\\d+(?:\\.html?)?$/i.test(rawLastPart)",
+  "R06_EMPTY_SCOPE": "!scope || parts.length === 0",
+  "R07_GENERIC_LANDING": "parts.length <= 1 && genericLandingSignals.some((signal) => lastPart === normalizeMatchText(signal))",
+  "R08_INFO_OR_ARTICLE": "/\\b(?:ranking|poradnik|blog|forum|recenzja|review|aktualnosci|news|przepis|recipe|cennik|artykul|article|porownanie|porownania|comparison|specyfikacja|specification)\\b/i.test(title) || /\\b(?:rodzina|rodziny)\\b.{0,28}\\b(?",
+  "R09_MODEL_IDENTITY_COVERAGE": "modelMatches < Math.max(1, Math.ceil(modelTerms.length * 0.6)) && !deferredModelIdentityBridgeCode",
+  "R10_IDENTITY_ZERO": "parsed.intent.identityTerms.length > 0 && identityMatches === 0",
+  "R11_CLOSED_WORLD_IDENTITY_LT2": "!parsed.intent.openWorld && parsed.intent.identityTerms.length >= 2 && identityMatches < Math.min(2, parsed.intent.identityTerms.length)",
+  "R12_PRODUCTLIKE_URL_FAIL": "!productLikeUrl"
+};
+const ASARVO_BATCH52_FIX4_GATE_REJECTS = new Map<string, Record<string, number>>();
+function asarvoBatch52Fix4GateKey(parsed: ParsedQuery, hostRaw: string): string {
+  return `${getRetailerRequestHealthKey(parsed)}\u0000${hostRaw.replace(/^www\./, "").toLowerCase()}`;
+}
+function asarvoBatch52Fix4RecordCandidateGateReject(
+  parsed: ParsedQuery,
+  expectedHostRaw: string,
+  reason: string
+): false {
+  const forced = (parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts;
+  const normalizedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
+  if (!forced?.includes(normalizedHost)) return false;
+  const key = asarvoBatch52Fix4GateKey(parsed, normalizedHost);
+  const map = ASARVO_BATCH52_FIX4_GATE_REJECTS.get(key) ?? {};
+  map[reason] = (map[reason] ?? 0) + 1;
+  ASARVO_BATCH52_FIX4_GATE_REJECTS.set(key, map);
+  return false;
+}
+function asarvoBatch52Fix4ResetCandidateGateRejectReasons(parsed: ParsedQuery, hosts: readonly string[]): void {
+  for (const host of hosts) ASARVO_BATCH52_FIX4_GATE_REJECTS.delete(asarvoBatch52Fix4GateKey(parsed, host));
+}
+function asarvoBatch52Fix4GetCandidateGateRejectReasons(parsed: ParsedQuery, hostRaw: string): Record<string, number> {
+  return { ...(ASARVO_BATCH52_FIX4_GATE_REJECTS.get(asarvoBatch52Fix4GateKey(parsed, hostRaw)) ?? {}) };
+}
+
+
+// ASARVO_BATCH55_R11_DOWNSTREAM_MATCH_DIAGNOSTIC_V1
+type AsarvoBatch55R11Sample = {
+  name: string;
+  url: string;
+  identityMatches: number;
+  identityTerms: string[];
+  matchedIdentityTerms: string[];
+  missingIdentityTerms: string[];
+  retailerOwnedCardEvidence: boolean;
+  productLikeUrl: boolean;
+  universalMatchPass: boolean;
+  universalMatchScore: number;
+  universalMatchReasons: string[];
+  wouldPassIfR11Deferred: boolean;
+  scopePreview: string;
+};
+const ASARVO_BATCH55_R11_SAMPLES = new Map<string, AsarvoBatch55R11Sample[]>();
+function asarvoBatch55R11Key(parsed: ParsedQuery, hostRaw: string): string {
+  return asarvoBatch52Fix4GateKey(parsed, hostRaw.replace(/^www\./, "").toLowerCase());
+}
+function asarvoBatch55ResetR11Samples(parsed: ParsedQuery, hosts: readonly string[]): void {
+  for (const hostRaw of hosts) ASARVO_BATCH55_R11_SAMPLES.delete(asarvoBatch55R11Key(parsed, hostRaw));
+}
+function asarvoBatch55GetR11Samples(parsed: ParsedQuery, hostRaw: string): AsarvoBatch55R11Sample[] {
+  return [...(ASARVO_BATCH55_R11_SAMPLES.get(asarvoBatch55R11Key(parsed, hostRaw)) ?? [])];
+}
+function asarvoBatch55RecordR11Reject(
+  result: SearchResult,
+  parsed: ParsedQuery,
+  expectedHostRaw: string,
+  identityMatches: number,
+  scope: string
+): false {
+  const normalizedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
+  const forced = (parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts;
+  if (forced?.includes(normalizedHost)) {
+    const qualifierIdentityTerms = new Set(parsed.intent.qualifierTerms.map((term) => normalizeMatchText(term)));
+    const identityTerms = parsed.intent.identityTerms.map((term) => normalizeMatchText(term)).filter(Boolean);
+    const matchedIdentityTerms = parsed.intent.identityTerms.filter((term) => {
+      const normalizedTerm = normalizeMatchText(term);
+      if (qualifierIdentityTerms.has(normalizedTerm) && openWorldQualifierTermMatches(term, scope, parsed)) return true;
+      return universalEvidenceHasBoundedIdentityTerm(term, scope) || phraseMorphologicallyMatches(term, scope);
+    }).map((term) => normalizeMatchText(term));
+    const matchedSet = new Set(matchedIdentityTerms);
+    const missingIdentityTerms = identityTerms.filter((term) => !matchedSet.has(term));
+    let productLikeUrl = false;
+    try {
+      const parsedUrl = new URL(result.url);
+      const parts = parsedUrl.pathname.split("/").filter(Boolean);
+      const rawLastPart = decodeURIComponent(parts[parts.length - 1] ?? "");
+      const lastPart = normalizeMatchText(rawLastPart.replace(/[-_]+/g, " "));
+      const modelTerms = parsed.intent.strongIdentityTerms.filter((term) => /\d/.test(term));
+      productLikeUrl = looksLikeOpenWebProductUrl(result.url) || (
+        parts.length >= 1 && lastPart.length >= 10 && /[a-z]/i.test(lastPart) &&
+        (/\d/.test(lastPart) || modelTerms.some((term) => universalEvidenceHasBoundedIdentityTerm(term, lastPart)))
+      );
+    } catch {}
+    const universalMatch = evaluateUniversalProductMatch(
+      result.name, result.snippet, result.url, parsed, "discovery", "RetailerRescue",
+      result.retailerOwnedCardEvidence === true
+    );
+    const key = asarvoBatch55R11Key(parsed, normalizedHost);
+    const samples = ASARVO_BATCH55_R11_SAMPLES.get(key) ?? [];
+    if (samples.length < 4) {
+      samples.push({
+        name: cleanTitle(result.name).slice(0, 260),
+        url: result.url.slice(0, 900),
+        identityMatches,
+        identityTerms: identityTerms.slice(0, 12),
+        matchedIdentityTerms: matchedIdentityTerms.slice(0, 12),
+        missingIdentityTerms: missingIdentityTerms.slice(0, 12),
+        retailerOwnedCardEvidence: result.retailerOwnedCardEvidence === true,
+        productLikeUrl,
+        universalMatchPass: universalMatch.pass,
+        universalMatchScore: universalMatch.score,
+        universalMatchReasons: universalMatch.reasons.slice(0, 10),
+        wouldPassIfR11Deferred: productLikeUrl && universalMatch.pass,
+        scopePreview: normalizeText(scope).slice(0, 700),
+      });
+      ASARVO_BATCH55_R11_SAMPLES.set(key, samples);
+    }
+  }
+  return asarvoBatch52Fix4RecordCandidateGateReject(
+    parsed, expectedHostRaw, "R11_CLOSED_WORLD_IDENTITY_LT2"
+  );
+}
+
+
+// ASARVO_BATCH57_TRUSTED_RETAILER_OWNED_R11_BRIDGE_V1
+// A closed-world retailer-owned card may defer the early two-anchor R11 guard only
+// when the SAME bounded card context already passes the ordinary universal matcher
+// and the URL is independently product-like. This does not accept an offer: the
+// normal downstream matcher, verifier, HARD requirements and price safety remain.
+function asarvoBatch57CanDeferClosedWorldRetailerOwnedIdentity(
+  result: SearchResult,
+  parsed: ParsedQuery
+): boolean {
+  if (result.retailerOwnedCardEvidence !== true) return false;
+  let parsedUrl: URL;
+  try { parsedUrl = new URL(result.url); } catch { return false; }
+  const parts = parsedUrl.pathname.split("/").filter(Boolean);
+  const rawLastPart = decodeURIComponent(parts[parts.length - 1] ?? "");
+  const lastPart = normalizeMatchText(rawLastPart.replace(/[-_]+/g, " "));
+  const modelTerms = parsed.intent.strongIdentityTerms.filter((term) => /\d/.test(term));
+  const productLikeUrl =
+    looksLikeOpenWebProductUrl(result.url) ||
+    (parts.length >= 1 && lastPart.length >= 10 && /[a-z]/i.test(lastPart) &&
+      (/\d/.test(lastPart) || modelTerms.some((term) => universalEvidenceHasBoundedIdentityTerm(term, lastPart))));
+  if (!productLikeUrl) return false;
+  const match = evaluateUniversalProductMatch(
+    result.name, result.snippet, result.url, parsed, "discovery", "RetailerRescue", true
+  );
+  return match.pass;
+}
+
+
+// ASARVO_BATCH58_R12_PRODUCTLIKE_FORENSICS_V1
+type AsarvoBatch58R12Sample = {
+  name: string;
+  url: string;
+  retailerOwnedCardEvidence: boolean;
+  partsLength: number;
+  lastPart: string;
+  lastPartLength: number;
+  lastPartHasLetter: boolean;
+  lastPartHasDigit: boolean;
+  modelTermInSlug: boolean;
+  openWebProductUrl: boolean;
+  concreteAnchorUrl: boolean;
+  trustedUniversalMatchPass: boolean;
+  trustedUniversalMatchScore: number;
+  trustedUniversalMatchReasons: string[];
+  normalUniversalMatchPass: boolean;
+  normalUniversalMatchScore: number;
+  normalUniversalMatchReasons: string[];
+  structuralNonOfferRoute: boolean;
+  wouldPassOwnIdentitySafeR12Bridge: boolean;
+  wouldPassTrustedCardR12Bridge: boolean;
+  scopePreview: string;
+};
+const ASARVO_BATCH58_R12_SAMPLES = new Map<string, AsarvoBatch58R12Sample[]>();
+function asarvoBatch58R12Key(parsed: ParsedQuery, hostRaw: string): string {
+  return asarvoBatch52Fix4GateKey(parsed, hostRaw.replace(/^www\./, "").toLowerCase());
+}
+function asarvoBatch58ResetR12Samples(parsed: ParsedQuery, hosts: readonly string[]): void {
+  for (const hostRaw of hosts) ASARVO_BATCH58_R12_SAMPLES.delete(asarvoBatch58R12Key(parsed, hostRaw));
+}
+function asarvoBatch58GetR12Samples(parsed: ParsedQuery, hostRaw: string): AsarvoBatch58R12Sample[] {
+  return [...(ASARVO_BATCH58_R12_SAMPLES.get(asarvoBatch58R12Key(parsed, hostRaw)) ?? [])];
+}
+function asarvoBatch58RecordR12Reject(
+  result: SearchResult,
+  parsed: ParsedQuery,
+  expectedHostRaw: string,
+  scope: string
+): false {
+  const normalizedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
+  const forced = (parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts;
+  if (forced?.includes(normalizedHost)) {
+    let partsLength = 0;
+    let lastPart = "";
+    let lastPartLength = 0;
+    let lastPartHasLetter = false;
+    let lastPartHasDigit = false;
+    let modelTermInSlug = false;
+    let openWebProductUrl = false;
+    let concreteAnchorUrl = false;
+    try {
+      const parsedUrl = new URL(result.url);
+      const parts = parsedUrl.pathname.split("/").filter(Boolean);
+      partsLength = parts.length;
+      const rawLastPart = decodeURIComponent(parts[parts.length - 1] ?? "");
+      lastPart = normalizeMatchText(rawLastPart.replace(/[-_]+/g, " "));
+      lastPartLength = lastPart.length;
+      lastPartHasLetter = /[a-z]/i.test(lastPart);
+      lastPartHasDigit = /\d/.test(lastPart);
+      const modelTerms = parsed.intent.strongIdentityTerms.filter((term) => /\d/.test(term));
+      modelTermInSlug = modelTerms.some((term) => universalEvidenceHasBoundedIdentityTerm(term, lastPart));
+      openWebProductUrl = looksLikeOpenWebProductUrl(result.url);
+      concreteAnchorUrl = looksLikeConcreteRescuedRetailerAnchorUrl(result.url, result.name, parsed);
+    } catch {}
+    const trustedUniversalMatch = evaluateUniversalProductMatch(
+      result.name,
+      result.snippet,
+      result.url,
+      parsed,
+      "discovery",
+      "RetailerRescue",
+      result.retailerOwnedCardEvidence === true
+    );
+    // ASARVO_BATCH60_R12_OWN_IDENTITY_SAFETY_FORENSICS_V1
+    const normalUniversalMatch = evaluateUniversalProductMatch(
+      result.name,
+      result.snippet,
+      result.url,
+      parsed,
+      "discovery",
+      "RetailerRescue"
+    );
+    let structuralNonOfferRoute = false;
+    try {
+      const pathname = new URL(result.url).pathname;
+      structuralNonOfferRoute = /\/(?:categorys?|categories|kategoria|kategorie|powiadom-mnie|powiadom|notify|notification|wishlist|ulubione|favorites?|cart|koszyk|basket|login|logowanie|register|rejestracja|compare|porownaj)(?:\/|$)/i.test(pathname);
+    } catch {}
+    const wouldPassOwnIdentitySafeR12Bridge = Boolean(
+      result.retailerOwnedCardEvidence === true &&
+      concreteAnchorUrl &&
+      !structuralNonOfferRoute &&
+      normalUniversalMatch.pass
+    );
+
+    const wouldPassTrustedCardR12Bridge = Boolean(
+      result.retailerOwnedCardEvidence === true &&
+      concreteAnchorUrl &&
+      trustedUniversalMatch.pass
+    );
+    const key = asarvoBatch58R12Key(parsed, normalizedHost);
+    const samples = ASARVO_BATCH58_R12_SAMPLES.get(key) ?? [];
+    if (samples.length < 4) {
+      samples.push({
+        name: cleanTitle(result.name).slice(0, 260),
+        url: result.url.slice(0, 900),
+        retailerOwnedCardEvidence: result.retailerOwnedCardEvidence === true,
+        partsLength,
+        lastPart: lastPart.slice(0, 360),
+        lastPartLength,
+        lastPartHasLetter,
+        lastPartHasDigit,
+        modelTermInSlug,
+        openWebProductUrl,
+        concreteAnchorUrl,
+        trustedUniversalMatchPass: trustedUniversalMatch.pass,
+        trustedUniversalMatchScore: trustedUniversalMatch.score,
+        trustedUniversalMatchReasons: trustedUniversalMatch.reasons.slice(0, 10),
+        normalUniversalMatchPass: normalUniversalMatch.pass,
+        normalUniversalMatchScore: normalUniversalMatch.score,
+        normalUniversalMatchReasons: normalUniversalMatch.reasons.slice(0, 10),
+        structuralNonOfferRoute,
+        wouldPassOwnIdentitySafeR12Bridge,
+        wouldPassTrustedCardR12Bridge,
+        scopePreview: normalizeText(scope).slice(0, 700),
+      });
+      ASARVO_BATCH58_R12_SAMPLES.set(key, samples);
+    }
+  }
+  return asarvoBatch52Fix4RecordCandidateGateReject(
+    parsed, expectedHostRaw, "R12_PRODUCTLIKE_URL_FAIL"
+  );
+}
+
+
+// ASARVO_BATCH64_NARROW_R12_OWN_IDENTITY_BRIDGE_V1
+type AsarvoBatch64R12BridgeHit = {
+  name: string;
+  url: string;
+  score: number;
+  reasons: string[];
+};
+const ASARVO_BATCH64_R12_BRIDGE_HITS = new Map<string, AsarvoBatch64R12BridgeHit[]>();
+function asarvoBatch64R12BridgeKey(parsed: ParsedQuery, hostRaw: string): string {
+  return asarvoBatch52Fix4GateKey(parsed, hostRaw.replace(/^www\./, "").toLowerCase());
+}
+function asarvoBatch64ResetR12BridgeHits(parsed: ParsedQuery, hosts: readonly string[]): void {
+  for (const hostRaw of hosts) ASARVO_BATCH64_R12_BRIDGE_HITS.delete(asarvoBatch64R12BridgeKey(parsed, hostRaw));
+}
+function asarvoBatch64GetR12BridgeHits(parsed: ParsedQuery, hostRaw: string): AsarvoBatch64R12BridgeHit[] {
+  return [...(ASARVO_BATCH64_R12_BRIDGE_HITS.get(asarvoBatch64R12BridgeKey(parsed, hostRaw)) ?? [])];
+}
+function asarvoBatch64IsStructuralNonOfferRetailerRoute(urlRaw: string): boolean {
+  try {
+    const pathname = new URL(urlRaw).pathname;
+    return /\/(?:categorys?|categories|kategoria|kategorie|powiadom-mnie|powiadom|notify|notification|wishlist|ulubione|favorites?|cart|koszyk|basket|login|logowanie|register|rejestracja|compare|porownaj)(?:\/|$)/i.test(pathname);
+  } catch {
+    return true;
+  }
+}
+function asarvoBatch64CanDeferR12ProductLikeUrl(
+  result: SearchResult,
+  parsed: ParsedQuery,
+  expectedHostRaw: string
+): boolean {
+  if (result.retailerOwnedCardEvidence !== true) return false;
+  if (!looksLikeConcreteRescuedRetailerAnchorUrl(result.url, result.name, parsed)) return false;
+  if (asarvoBatch64IsStructuralNonOfferRetailerRoute(result.url)) return false;
+
+  // Own identity only: empty content + trusted context disabled. Batch61/62
+  // subtype guards therefore apply before R12 can be deferred.
+  const ownIdentityMatch = evaluateUniversalProductMatch(
+    result.name,
+    "",
+    result.url,
+    parsed,
+    "discovery",
+    "RetailerRescue",
+    false
+  );
+  if (!ownIdentityMatch.pass) return false;
+
+  const normalizedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
+  const forced = (parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts;
+  if (forced?.includes(normalizedHost)) {
+    const key = asarvoBatch64R12BridgeKey(parsed, normalizedHost);
+    const hits = ASARVO_BATCH64_R12_BRIDGE_HITS.get(key) ?? [];
+    if (hits.length < 8 && !hits.some((item) => item.url === result.url)) {
+      hits.push({
+        name: cleanTitle(result.name).slice(0, 260),
+        url: result.url.slice(0, 900),
+        score: ownIdentityMatch.score,
+        reasons: ownIdentityMatch.reasons.slice(0, 10),
+      });
+      ASARVO_BATCH64_R12_BRIDGE_HITS.set(key, hits);
+    }
+  }
+  return true;
+}
+
 function looksLikeRescuedRetailerProductCandidate(
   result: SearchResult,
   parsed: ParsedQuery,
@@ -17194,17 +28265,17 @@ function looksLikeRescuedRetailerProductCandidate(
 ): boolean {
   const expectedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
   const host = getResultHostname(result.url);
-  if (!host || !retailerHostMatchesDomain(host, expectedHost)) return false;
+  if (!host || !retailerHostMatchesDomain(host, expectedHost)) return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R01_HOST_MISMATCH");
 
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(result.url);
   } catch {
-    return false;
+    return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R02_URL_PARSE_FAIL");
   }
 
-  if (isReferenceDocumentOfferResult(result)) return false;
-  if (isLikelyOpenWorldCategoryOrCollectionResult(result, parsed)) return false;
+  if (isReferenceDocumentOfferResult(result)) return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R03_REFERENCE_DOCUMENT");
+  if (isLikelyOpenWorldCategoryOrCollectionResult(result, parsed)) return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R04_CATEGORY_OR_COLLECTION");
 
   const parts = parsedUrl.pathname.split("/").filter(Boolean);
   const rawLastPart = decodeURIComponent(parts[parts.length - 1] ?? "");
@@ -17214,7 +28285,7 @@ function looksLikeRescuedRetailerProductCandidate(
   // landing can contain the requested identity plus many product prices, but it
   // must NEVER become an offer. Keep it as a crawl seed; concrete product URLs
   // continue through the normal parser/verifier.
-  if (/(?:^|-)c-\d+(?:\.html?)?$/i.test(rawLastPart)) return false;
+  if (/(?:^|-)c-\d+(?:\.html?)?$/i.test(rawLastPart)) return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R05_LEGACY_CATEGORY_SUFFIX");
 
   const lastPart = normalizeMatchText(
     rawLastPart.replace(/[-_]+/g, " ")
@@ -17222,7 +28293,7 @@ function looksLikeRescuedRetailerProductCandidate(
   const title = normalizeMatchText(result.name);
   const scope = normalizeMatchText(`${result.name} ${result.snippet} ${lastPart}`);
 
-  if (!scope || parts.length === 0) return false;
+  if (!scope || parts.length === 0) return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R06_EMPTY_SCOPE");
 
   const deferredModelIdentityBridgeCode = allowDeferredModelIdentityBridge
     ? getDeferredRetailerModelIdentityBridgeCode(result, parsed, expectedHost)
@@ -17238,7 +28309,7 @@ function looksLikeRescuedRetailerProductCandidate(
     parts.length <= 1 &&
     genericLandingSignals.some((signal) => lastPart === normalizeMatchText(signal))
   ) {
-    return false;
+    return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R07_GENERIC_LANDING");
   }
 
   if (
@@ -17246,7 +28317,7 @@ function looksLikeRescuedRetailerProductCandidate(
     /\b(?:rodzina|rodziny)\b.{0,28}\b(?:modeli|smartfonow|telefonow|produktow)\b/i.test(title) ||
     /\/(?:blog|poradnik|poradniki|porady|artykul|artykuly|article|articles|aktualnosci|news|search|szukaj|przepis|przepisy|recipe|recipes|info|informacje|cennik|cenniki|ranking|rankingi|review|reviews|recenzja|recenzje|branze|industry|industries|porownanie|porownania|compare|comparison|specyfikacja|specyfikacje|specification|specifications|rodzina|rodziny|rodzina-modeli|rodziny-modeli|rodziny-smartfonow|family|families|katalog)(?:\/|$)/i.test(parsedUrl.pathname)
   ) {
-    return false;
+    return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R08_INFO_OR_ARTICLE");
   }
 
   const modelTerms = parsed.intent.strongIdentityTerms.filter((term) => /\d/.test(term));
@@ -17258,13 +28329,18 @@ function looksLikeRescuedRetailerProductCandidate(
       modelMatches < Math.max(1, Math.ceil(modelTerms.length * 0.6)) &&
       !deferredModelIdentityBridgeCode
     ) {
-      return false;
+      return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R09_MODEL_IDENTITY_COVERAGE");
     }
   }
 
   const qualifierIdentityTerms = new Set(
     parsed.intent.qualifierTerms.map((term) => normalizeMatchText(term))
-  );
+  );  // ASARVO_BATCH68_FIX1_PRE_R11_OWN_CATEGORY_ALIAS_AND_SPORTSWEAR_V1
+  // Own-candidate evidence only: no bounded card snippet is allowed to satisfy
+  // a missing category noun before the closed-world R11 gate.
+  const asarvoBatch68OwnIdentityScope = normalizeMatchText(`${result.name} ${lastPart}`);
+
+
   const identityMatches = parsed.intent.identityTerms.filter((term) => {
     const normalizedTerm = normalizeMatchText(term);
     if (
@@ -17272,15 +28348,28 @@ function looksLikeRescuedRetailerProductCandidate(
       openWorldQualifierTermMatches(term, scope, parsed)
     ) {
       return true;
+    }    if (
+      !qualifierIdentityTerms.has(normalizedTerm) &&
+      isUniversalCategoryIdentityTerm(term, parsed) &&
+      openWorldIdentityTermMatches(term, asarvoBatch68OwnIdentityScope, parsed)
+    ) {
+      return true;
     }
+
+
     return (
       universalEvidenceHasBoundedIdentityTerm(term, scope) ||
       phraseMorphologicallyMatches(term, scope)
     );
   }).length;
 
-  if (parsed.intent.identityTerms.length > 0 && identityMatches === 0) {
-    return false;
+  // ASARVO_BATCH54_R10_RETAILER_OWNED_DEFER_TO_UNIVERSAL_MATCHER_V1
+  // Retailer-owned catalog cards are already bound to a same-host concrete card/URL.
+  // Do not accept them here; only defer the zero-identity early exit so the existing
+  // URL gate, closed-world guard, universal matcher, verifier and price safety decide.
+  if ((parsed.intent.identityTerms.length > 0 && identityMatches === 0) &&
+      result.retailerOwnedCardEvidence !== true) {
+    return asarvoBatch52Fix4RecordCandidateGateReject(parsed, expectedHostRaw, "R10_IDENTITY_ZERO");
   }
 
   // V32.12 RETAILER-LANDING GUARD: a brand/category page can look deceptively
@@ -17290,17 +28379,20 @@ function looksLikeRescuedRetailerProductCandidate(
   // concrete product. A page that only says the brand remains a rescue seed,
   // so the same-domain crawl/search can still discover the exact product.
   if (
-    !parsed.intent.openWorld &&
+    (!parsed.intent.openWorld &&
     parsed.intent.identityTerms.length >= 2 &&
-    identityMatches < Math.min(2, parsed.intent.identityTerms.length)
+    identityMatches < Math.min(2, parsed.intent.identityTerms.length)) &&
+    !asarvoBatch57CanDeferClosedWorldRetailerOwnedIdentity(result, parsed)
   ) {
-    return false;
+    return asarvoBatch55RecordR11Reject(result, parsed, expectedHostRaw, identityMatches, scope);
   }
 
   // A rescued retailer may use a single SEO product slug instead of /product/
   // or /p/. Accept it only when the slug is specific and the universal matcher
   // independently confirms the requested product identity.
   const productLikeUrl =
+    // ASARVO_BATCH75_URL_SHAPE_ONLY_NORMAL_MATCHER_STILL_REQUIRED
+    asarvoBatch75KnownNumericRetailerRoute(result.url) === "product" ||
     looksLikeOpenWebProductUrl(result.url) ||
     (
       parts.length >= 1 &&
@@ -17312,7 +28404,8 @@ function looksLikeRescuedRetailerProductCandidate(
       )
     );
 
-  if (!productLikeUrl) return false;
+  if ((!productLikeUrl) &&
+    !asarvoBatch64CanDeferR12ProductLikeUrl(result, parsed, expectedHostRaw)) return asarvoBatch58RecordR12Reject(result, parsed, expectedHostRaw, scope);
 
   const match = evaluateUniversalProductMatch(
     result.name,
@@ -17320,7 +28413,8 @@ function looksLikeRescuedRetailerProductCandidate(
     result.url,
     parsed,
     "discovery",
-    "RetailerRescue"
+    "RetailerRescue",
+    result.retailerOwnedCardEvidence === true
   );
 
   if (!match.pass && deferredModelIdentityBridgeCode) {
@@ -17363,6 +28457,8 @@ function looksLikeConcreteRescuedRetailerAnchorUrl(
   parsed: ParsedQuery | null = null
 ): boolean {
   if (isClearlyNonOfferAssetUrl(urlRaw)) return false;
+  // ASARVO_BATCH75_24GARDEN_CONCRETE_CATEGORY_REJECT
+  if (asarvoBatch75KnownNumericRetailerRoute(urlRaw) === "category") return false;
 
   try {
     const parsedUrl = new URL(urlRaw);
@@ -17427,6 +28523,7 @@ function looksLikeConcreteRescuedRetailerAnchorUrl(
       ["productid", "product_id", "sku", "itemid", "item_id", "offerid", "offer_id"]
         .some((key) => parsedUrl.searchParams.has(key));
     if (strongProductMarker) return true;
+    if (asarvoBatch75KnownNumericRetailerRoute(urlRaw) === "product") return true;
 
     // Retailer product slugs commonly carry a manufacturer/model code such as
     // AB12, X1000 or 123456. Pure requirement/filter values (e.g. a lone 240)
@@ -17452,6 +28549,40 @@ function looksLikeConcreteRescuedRetailerAnchorUrl(
     // model code (common in footwear/home goods), but require more specificity
     // than a short taxonomy label such as "laptopy-gamingowe".
     const hyphenCount = (lastPart.match(/-/g) ?? []).length;
+
+    // ASARVO_SOURCE_EXPANSION_V1_BRICOMARCHE_ROOT_SLUG_GATE_FIX2_AST
+    // Configured retailers may expose a real product directly under one
+    // descriptive root slug, e.g. /stolik-bistro-czarny-60-cm.
+    // Existing taxonomy/collection rejects above have already run.
+    const configuredSingleSegmentConcreteProduct = Boolean(
+      parsed &&
+      parts.length === 1 &&
+      isConfiguredCommerceDomain(urlRaw) &&
+      normalizedLastPart.length >= 18 &&
+      /[a-z]/i.test(normalizedLastPart) &&
+      hyphenCount >= 3 &&
+      cleanLabel.length >= 18 &&
+      hasUniversalCategoryEvidence(cleanLabel, parsed)
+    );
+
+    // ASARVO_BRICOMARCHE_ROOT_SLUG_GATE_FIX3_CONTRADICTION_REMOVAL
+    // FIX2 already proved all of these before reaching this point:
+    // - configured commerce domain
+    // - one path segment
+    // - descriptive long slug
+    // - >=3 hyphens
+    // - long visible label
+    // - visible label proves the parsed product category
+    // - taxonomy/collection guards above already rejected collection surfaces
+    //
+    // Requiring looksLikeOpenWebProductUrl(urlRaw) here was contradictory:
+    // that generic open-web helper intentionally rejects ordinary single-root
+    // retailer slugs unless they contain a strong marker/ID. The configured
+    // retailer gate itself is the stronger evidence for this narrow case.
+    if (configuredSingleSegmentConcreteProduct) {
+      return true;
+    }
+
     return (
       parts.length >= 2 &&
       normalizedLastPart.length >= 18 &&
@@ -17812,6 +28943,209 @@ function parseEmbeddedRetailerProductRoutesFromHtmlCore179(
 }
 
 
+
+
+type AsarvoBatch46MarkdownFunnel = {
+  links: number;
+  sameHost: number;
+  concrete: number;
+  clusters: number;
+  named: number;
+  priceCards: number;
+  gateRejects: number;
+  gateAccepts: number;
+};
+
+function asarvoBatch46AnalyzeReaderMarkdownFunnel(
+  markdown: string,
+  pageUrl: string,
+  parsed: ParsedQuery,
+  expectedHostRaw: string
+): AsarvoBatch46MarkdownFunnel {
+  const expectedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
+  const out: AsarvoBatch46MarkdownFunnel = {
+    links: 0, sameHost: 0, concrete: 0, clusters: 0, named: 0,
+    priceCards: 0, gateRejects: 0, gateAccepts: 0,
+  };
+  const anchors: Array<{ url: string; start: number; end: number; labels: string[] }> = [];
+  const linkRe = /\[([^\]]{1,500})\]\(([^)\s]+)\)/giu;
+  let match: RegExpExecArray | null;
+  while ((match = linkRe.exec(markdown)) !== null) {
+    out.links += 1;
+    if (/#(?:reviews?|opinie|ratings?|recenzje?|comments?)\b/iu.test(match[2])) continue;
+    let absoluteUrl = "";
+    try { absoluteUrl = new URL(match[2], pageUrl).toString(); } catch { continue; }
+    const url = normalizeUrl(absoluteUrl);
+    if (!url) continue;
+    if (!retailerHostMatchesDomain(getResultHostname(url), expectedHost)) continue;
+    out.sameHost += 1;
+    const rawLabel = cleanTitle(decodeHtml(match[1]));
+    if (!looksLikeConcreteRescuedRetailerAnchorUrl(url, rawLabel, parsed)) continue;
+    out.concrete += 1;
+    anchors.push({
+      url, start: match.index, end: match.index + match[0].length,
+      labels: rawLabel && !/^image\b/i.test(rawLabel) ? [rawLabel] : [],
+    });
+  }
+  const clusters: Array<{ url: string; start: number; end: number; labels: string[] }> = [];
+  for (const anchor of anchors) {
+    const prev = clusters[clusters.length - 1];
+    if (prev && prev.url === anchor.url) {
+      prev.end = Math.max(prev.end, anchor.end); prev.labels.push(...anchor.labels);
+    } else {
+      clusters.push({ url: anchor.url, start: anchor.start, end: anchor.end, labels: [...anchor.labels] });
+    }
+  }
+  out.clusters = clusters.length;
+  for (let i = 0; i < clusters.length; i += 1) {
+    const cluster = clusters[i];
+    let slugTitle = "";
+    try {
+      slugTitle = cleanTitle(decodeURIComponent(new URL(cluster.url).pathname.split("/").filter(Boolean).pop() ?? "").replace(/[-_]+/g, " "));
+    } catch {}
+    const names = Array.from(new Set([...cluster.labels, slugTitle].filter(v => v.length >= 5)));
+    const name = names.sort((a,b) => b.length - a.length)[0] ?? "";
+    if (!name) continue;
+    out.named += 1;
+    const nextStart = clusters[i + 1]?.start ?? markdown.length;
+    const rawContext = markdown.slice(cluster.start, Math.min(markdown.length, nextStart, cluster.start + 6000));
+    const bounded = normalizeText(rawContext
+      .replace(/!\[[^\]]*\]\([^)]+\)/g, " " )
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/[#*_\x60]/g, " "));
+    const evidence = normalizeText(`${name} ${bounded}`).slice(0, 8000);
+    const price = extractFirstBoundedRetailerCatalogCardPrice(evidence, name, parsed.condition);
+    if (price !== null && price !== undefined) out.priceCards += 1;
+    const candidate: SearchResult = {
+      url: cluster.url, name, snippet: evidence.slice(0, 2400), source: "RetailerRescue",
+      searchRank: i, retailerOwnedCardEvidence: true, retailerCatalogCardPrice: price,
+      retailerCatalogCardAvailability: getAvailabilityFromHtml(evidence),
+    };
+    if (looksLikeRescuedRetailerProductCandidate(candidate, parsed, expectedHost)) out.gateAccepts += 1;
+    else out.gateRejects += 1;
+  }
+  return out;
+}
+// ASARVO_BATCH75_NESTED_MARKDOWN_AND_24GARDEN_SCHEMA_V1
+// Numeric route knowledge is scoped to the retailer validated in BATCH73/74.
+// A product route establishes URL shape only, never identity or a verified price.
+function asarvoBatch75KnownNumericRetailerRoute(
+  urlRaw: string
+): "category" | "product" | null {
+  try {
+    const url = new URL(urlRaw);
+    if (!/^https?:$/.test(url.protocol)) return null;
+    if (url.hostname.toLowerCase().replace(/^www\./, "") !== "24garden.pl") return null;
+    const pathname = decodeURIComponent(url.pathname);
+    if (/\/2-\d+\/?$/i.test(pathname)) return "category";
+    if (
+      /\/3-\d+-\d+\/?$/i.test(pathname) &&
+      !isClearlyNonOfferAssetUrl(urlRaw) &&
+      !/\/(?:blog|news|poradnik|porady|artykul|artykuly|article|articles|info|informacje|search|szukaj|category|categories|kategoria|kategorie|collection|collections|catalog|catalogue|brand|marka|ranking|review|reviews|recenzja|recenzje)(?:\/|$)/i.test(pathname)
+    ) return "product";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function asarvoBatch75MarkdownClosingDelimiter(
+  text: string,
+  start: number,
+  open: string,
+  close: string,
+  limit = 12_000
+): number {
+  let depth = 0;
+  for (let index = start; index < text.length && index < start + limit; index += 1) {
+    if (text[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (text[index] === open) depth += 1;
+    if (text[index] === close) {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function asarvoBatch75ExtractMarkdownRetailerAnchors(
+  markdown: string
+): Array<{ href: string; label: string; start: number; end: number }> {
+  const anchors: Array<{ href: string; label: string; start: number; end: number }> = [];
+  for (let index = 0; index < markdown.length; index += 1) {
+    if (markdown[index] === "\\") {
+      index += 1;
+      continue;
+    }
+    if (markdown[index] !== "[") continue;
+    const labelEnd = asarvoBatch75MarkdownClosingDelimiter(markdown, index, "[", "]");
+    if (labelEnd < 0) continue;
+    let destinationStart = labelEnd + 1;
+    while (
+      destinationStart < markdown.length &&
+      destinationStart < labelEnd + 5 &&
+      /[ \t\r\n]/.test(markdown[destinationStart])
+    ) destinationStart += 1;
+    if (markdown[destinationStart] !== "(") continue;
+    const destinationEnd = asarvoBatch75MarkdownClosingDelimiter(
+      markdown, destinationStart, "(", ")", 4_096
+    );
+    if (destinationEnd < 0) continue;
+    const destination = markdown.slice(destinationStart + 1, destinationEnd);
+    const href = (
+      destination.match(/^\s*<([^>]+)>/)?.[1] ??
+      destination.match(/^\s*((?:\\.|[^\s])+)/)?.[1] ?? ""
+    ).replace(/\\([()[\]<>])/g, "$1");
+    if (!href) {
+      index = destinationEnd;
+      continue;
+    }
+    const rawLabel = markdown.slice(index + 1, labelEnd);
+    const nestedImageCard = /!\[/.test(rawLabel);
+    let label = rawLabel;
+    if (nestedImageCard) {
+      // Only visible text after embedded image markup may supply the name.
+      // Image alt/sequence numbers remain outside product-name evidence.
+      label = label
+        .replace(/!\[[^\]]*\]\((?:\\.|[^)])*\)/g, " ")
+        .replace(/!\[[^\]]*\]\[[^\]]*\]/g, " ")
+        .replace(/[#*_`]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+      // Jina cards can place their displayed prices inside the outer label.
+      // Keep price text in the original card slice, but out of its title.
+      const priceStart = label.search(
+        /\s+\d[\d \u00a0\u202f]*[.,]\d{2}\s*(?:zł|PLN|EUR|USD|GBP|€)(?=$|[^\p{L}\p{N}_])/iu
+      );
+      if (priceStart >= 0) {
+        const titleOnly = label.slice(0, priceStart).trim();
+        if (titleOnly.length >= 5) label = titleOnly;
+      }
+    }
+    anchors.push({ href, label, start: index, end: destinationEnd + 1 });
+    index = destinationEnd;
+  }
+  return anchors;
+}
+
+function asarvoBatch75Build24GardenCatalogUrls(
+  context: DirectRetailerCatalogSearchContext
+): string[] {
+  const text = normalizeMatchText([
+    context.productPhrase,
+    context.preciseSearchText,
+    context.exactSearchText,
+  ].join(" "));
+  const sprayer = /\bopryskiwacz(?:e|y|a|em|ami|ach|om|ow)?\b/i.test(text);
+  const battery = /\bakumulatorow(?:y|a|e|ego|ej|ych|ym|ymi)\b/i.test(text);
+  return sprayer && battery
+    ? ["https://www.24garden.pl/produkty/opryskiwacze/akumulatorowe/2-167077"]
+    : ["https://24garden.pl/"];
+}
+
 function parseRescuedRetailerLandingMarkdown(
   markdown: string,
   pageUrl: string,
@@ -17819,6 +29153,9 @@ function parseRescuedRetailerLandingMarkdown(
   expectedHostRaw: string,
   allowDeferredModelIdentityBridge = false
 ): SearchResult[] {
+  // ASARVO_SOURCE_EXPANSION_V1_FIX3G_LEROY_MARKDOWN_CARD_BRIDGE
+  // Markdown optional-link-title support is required by Leroy reader cards.
+
   const expectedHost = expectedHostRaw.replace(/^www\./, "").toLowerCase();
   const candidates: SearchResult[] = [];
   const seen = new Set<string>();
@@ -17839,17 +29176,15 @@ function parseRescuedRetailerLandingMarkdown(
   // links to the same concrete product URL and slice from the first link of the
   // card to the next distinct product URL. Image labels help delimit the card
   // but are never used as the product name.
-  const linkRe = /\[([^\]]{1,500})\]\(([^)\s]+)\)/giu;
-  let match: RegExpExecArray | null;
-
-  while ((match = linkRe.exec(markdown)) !== null) {
-    if (/#(?:reviews?|opinie|ratings?|recenzje?|comments?)\b/iu.test(match[2])) {
+  // ASARVO_BATCH75_BALANCED_NESTED_MARKDOWN_CARD_ANCHORS
+  for (const asarvoBatch75Anchor of asarvoBatch75ExtractMarkdownRetailerAnchors(markdown)) {
+    if (/#(?:reviews?|opinie|ratings?|recenzje?|comments?)\b/iu.test(asarvoBatch75Anchor.href)) {
       continue;
     }
 
     let absoluteUrl = "";
     try {
-      absoluteUrl = new URL(match[2], pageUrl).toString();
+      absoluteUrl = new URL(asarvoBatch75Anchor.href, pageUrl).toString();
     } catch {
       continue;
     }
@@ -17858,7 +29193,7 @@ function parseRescuedRetailerLandingMarkdown(
     if (!url) continue;
     if (!retailerHostMatchesDomain(getResultHostname(url), expectedHost)) continue;
 
-    const rawLabel = cleanTitle(decodeHtml(match[1]));
+    const rawLabel = cleanTitle(decodeHtml(asarvoBatch75Anchor.label));
     const labels = rawLabel && !/^image\b/i.test(rawLabel)
       ? [rawLabel]
       : [];
@@ -17867,8 +29202,8 @@ function parseRescuedRetailerLandingMarkdown(
 
     anchors.push({
       url,
-      start: match.index,
-      end: match.index + match[0].length,
+      start: asarvoBatch75Anchor.start,
+      end: asarvoBatch75Anchor.end,
       labels,
     });
   }
@@ -18645,10 +29980,45 @@ type DirectRetailerCatalogSearchOptions = {
   disableReaderFallback?: boolean;
   disableDirectRetries?: boolean;
   directFetchTimeoutMs?: number;
+
+  // ASARVO_BATCH41_PARALLEL_READER_RESCUE_WAVE3_V1_FIX3: rescue-only eager reader scheduling.
+  forceParallelReaderFallback?: boolean;
 };
 
 function isV34Core164PreciseTechIntent(parsed: ParsedQuery): boolean {
-  if (!hasTechnologyBrandRetailIntent(parsed)) return false;
+  // ASARVO_BATCH90_CORE164_HIGH_CONSTRAINT_TECH_ADMISSION_V1
+  // A high-constraint technology query can have a short identity footprint
+  // (for example product noun + brand) while the HARD requirements carry the
+  // actual precision. Admit that bounded case into the existing exact-tech
+  // Store Mesh. This changes source scheduling only; all identity/HARD/price/
+  // availability verification remains unchanged.
+  const asarvoBatch90HighConstraintTechAdmission = Boolean(
+    parsed.brand &&
+    V34_TECH_RETAIL_BRANDS.has(normalizeMatchText(parsed.brand)) &&
+    parsed.intent.required.filter((requirement) => requirement.hard).length >= 2 &&
+    V28_RETAIL_VERTICAL_PROFILES.some(
+      (profile) =>
+        profile.id === "electronics_tech" &&
+        profile.categories.includes(parsed.category ?? "")
+    )
+  );
+
+  if (
+    !hasTechnologyBrandRetailIntent(parsed) &&
+    !asarvoBatch90HighConstraintTechAdmission
+  ) return false;
+
+  if (asarvoBatch90HighConstraintTechAdmission) {
+    console.log(
+      "[AIShopping] ASARVO_BATCH90_CORE164_HIGH_CONSTRAINT_ADMISSION",
+      {
+        category: parsed.category,
+        brand: parsed.brand,
+        hardCount: parsed.intent.required.filter((requirement) => requirement.hard).length,
+      }
+    );
+    return true;
+  }
 
   if (
     getCompactExactModelDiscoveryCore(parsed) ||
@@ -18946,6 +30316,494 @@ function shouldV34Core164SkipCeneoEmptyPageReader(parsed: ParsedQuery): boolean 
   return isV34Core164HighConstraintRetailIntent(parsed);
 }
 
+// ASARVO_BATCH101_CONFIRMED_SURFACE_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH101_CONFIRMED_SURFACES = new Map<string, { method: "direct" | "reader"; kind: "production_0" | "generic_wp_s" | "generic_search" | "generic_szukaj" }>([
+  ["2407.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["al.to", { method: "reader" as const, kind: "production_0" as const }],
+  ["amso.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["apple.com", { method: "direct" as const, kind: "production_0" as const }],
+  ["autofixer.com", { method: "direct" as const, kind: "generic_szukaj" as const }],
+  ["beafoto.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["cyfrowe.pl", { method: "reader" as const, kind: "generic_search" as const }],
+  ["delkom.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["euro.com.pl", { method: "direct" as const, kind: "generic_wp_s" as const }],
+  ["foto-net.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["foto-tip.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["fotosoft.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["fototechnika.com", { method: "reader" as const, kind: "generic_wp_s" as const }],
+  ["foxkomputer.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["fxmusic.pl", { method: "direct" as const, kind: "generic_wp_s" as const }],
+  ["hard-pc.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["interfoto.eu", { method: "reader" as const, kind: "generic_wp_s" as const }],
+  ["itnes.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["komputerymarkowe.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["komputronik.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["krsystem.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["maxelektro.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["mediamarkt.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["megamusic.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["midi.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["morele.net", { method: "reader" as const, kind: "production_0" as const }],
+  ["musicdealer.pl", { method: "reader" as const, kind: "generic_search" as const }],
+  ["muzyczny.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["neo24.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["neonet.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["notebooki.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["oleole.pl", { method: "reader" as const, kind: "generic_wp_s" as const }],
+  ["proline.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["techlord.pl", { method: "direct" as const, kind: "production_0" as const }],
+  ["thomann.de", { method: "reader" as const, kind: "generic_wp_s" as const }],
+  ["x-kom.pl", { method: "direct" as const, kind: "production_0" as const }],
+]);
+const ASARVO_BATCH101_CONFIRMED_DIRECT_HOSTS = new Set(Array.from(ASARVO_BATCH101_CONFIRMED_SURFACES.entries()).filter(([, value]) => value.method === "direct").map(([host]) => host));
+const ASARVO_BATCH101_CONFIRMED_READER_HOSTS = new Set(Array.from(ASARVO_BATCH101_CONFIRMED_SURFACES.entries()).filter(([, value]) => value.method === "reader").map(([host]) => host));
+function asarvoBatch101NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch101BuildSurfaceUrl(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter): { method: "direct" | "reader"; kind: string; url: string } | null {
+  const host = asarvoBatch101NormalizeHost(adapter.host);
+  const config = ASARVO_BATCH101_CONFIRMED_SURFACES.get(host);
+  if (!config) return null;
+  if (config.kind === "production_0") {
+    const built = buildDirectRetailerCatalogRequests(parsed, { hosts: [adapter.host], maxAdapters: 1, maxUrlsPerAdapter: 1 });
+    const own = built.find((request) => asarvoBatch101NormalizeHost(request.adapter.host) === host);
+    const url = own?.urls?.[0] ?? "";
+    return url ? { ...config, url } : null;
+  }
+  const searchText = normalizeText(buildCompactRetailerSearchText(parsed) || parsed.intent.productPhrase || buildProductSearchBase(parsed));
+  if (!searchText) return null;
+  const q = encodeURIComponent(searchText);
+  const url = config.kind === "generic_wp_s" ? `https://${host}/?s=${q}` : config.kind === "generic_search" ? `https://${host}/search?q=${q}` : `https://${host}/szukaj?q=${q}`;
+  return { ...config, url };
+}
+async function asarvoBatch101RecoverConfirmedSurface(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, externalSignal?: AbortSignal): Promise<SearchResult[]> {
+  const target = asarvoBatch101BuildSurfaceUrl(parsed, adapter);
+  if (!target || externalSignal?.aborted) return [];
+  const localSignal = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(target.method === "reader" ? 7_500 : 5_200)]) : AbortSignal.timeout(target.method === "reader" ? 7_500 : 5_200);
+  let recovered: SearchResult[] = [];
+  if (target.method === "direct") {
+    const fetched = await fetchHtml(target.url, 5_000, localSignal);
+    const html = fetched?.html ?? ""; const finalUrl = fetched?.finalUrl || target.url;
+    if (fetched && fetched.status >= 200 && fetched.status < 400 && html.length >= 100 && !isBlockedOrChallengePage(html)) {
+      recovered = [
+        ...parseRescuedRetailerJsonLdProducts(html, finalUrl, parsed, adapter.host),
+        ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(html, finalUrl, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)),
+      ];
+    }
+  } else {
+    const text = await fetchViaJina(target.url, 7_200, false, localSignal, undefined, 100);
+    if (text && !isBlockedOrChallengePage(text)) {
+      recovered = [
+        ...parseRescuedRetailerLandingMarkdown(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)),
+        ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)),
+      ];
+    }
+  }
+  const seen = new Set<string>();
+  const unique = recovered.filter((result) => { const key = normalizeUrl(result.url); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+  if (unique.length === 0) return [];
+  const trusted = parsed.intent.required.filter((requirement) => adapter.trustedCatalogRequirementKeys?.includes(requirement.key));
+  const evidence = trusted.map((requirement) => requirement.aliases[0] || requirement.value).filter(Boolean).join(" " );
+  const proofKeys = trusted.map((requirement) => requirement.key);
+  const variantEvidence = proofKeys.some((key) => ["shoe_size", "clothing_size"].includes(key));
+  const enriched = unique.map((result) => ({ ...result, ...(evidence ? { snippet: normalizeText(`${result.snippet} ${evidence}`).slice(0, 2200) } : {}), ...(proofKeys.length ? { catalogRequirementProofKeys: proofKeys } : {}), ...(variantEvidence ? { catalogVariantAvailabilityEvidence: true } : {}) }));
+  console.log("[AIShopping] ASARVO_BATCH101_CONFIRMED_SURFACE_RECOVERY", { host: adapter.host, method: target.method, kind: target.kind, url: target.url, products: enriched.length });
+  return enriched;
+}
+
+// ASARVO_BATCH103_EXACT47_CONFIRMED_SURFACE_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH103_CONFIRMED_SURFACES = new Map<string, { method: "direct" | "reader"; kind: "production_0" | "generic_wp_s" | "generic_search" | "generic_szukaj" | "woo_post_type" }>([
+  ["avans.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["electro.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["eltrox.pl", { method: "reader" as const, kind: "woo_post_type" as const }],
+  ["fotojoker.pl", { method: "direct" as const, kind: "generic_szukaj" as const }],
+  ["fotopoker.pl", { method: "reader" as const, kind: "woo_post_type" as const }],
+  ["komputery.pl", { method: "reader" as const, kind: "woo_post_type" as const }],
+  ["mediaexpert.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["musicexpress.pl", { method: "reader" as const, kind: "production_0" as const }],
+  ["sferis.pl", { method: "reader" as const, kind: "woo_post_type" as const }],
+  ["ucando.pl", { method: "reader" as const, kind: "woo_post_type" as const }],
+]);
+const ASARVO_BATCH103_CONFIRMED_DIRECT_HOSTS = new Set(Array.from(ASARVO_BATCH103_CONFIRMED_SURFACES.entries()).filter(([, value]) => value.method === "direct").map(([host]) => host));
+const ASARVO_BATCH103_CONFIRMED_READER_HOSTS = new Set(Array.from(ASARVO_BATCH103_CONFIRMED_SURFACES.entries()).filter(([, value]) => value.method === "reader").map(([host]) => host));
+function asarvoBatch103NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch103BuildSurfaceUrl(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter): { method: "direct" | "reader"; kind: string; url: string } | null {
+  const host = asarvoBatch103NormalizeHost(adapter.host);
+  const config = ASARVO_BATCH103_CONFIRMED_SURFACES.get(host);
+  if (!config) return null;
+  if (config.kind === "production_0") {
+    const built = buildDirectRetailerCatalogRequests(parsed, { hosts: [adapter.host], maxAdapters: 1, maxUrlsPerAdapter: 1 });
+    const own = built.find((request) => asarvoBatch103NormalizeHost(request.adapter.host) === host);
+    const url = own?.urls?.[0] ?? "";
+    return url ? { ...config, url } : null;
+  }
+  const searchText = normalizeText(buildCompactRetailerSearchText(parsed) || parsed.intent.productPhrase || buildProductSearchBase(parsed));
+  if (!searchText) return null;
+  const q = encodeURIComponent(searchText);
+  const url = config.kind === "generic_wp_s" ? `https://${host}/?s=${q}` : config.kind === "generic_search" ? `https://${host}/search?q=${q}` : config.kind === "generic_szukaj" ? `https://${host}/szukaj?q=${q}` : `https://${host}/?s=${q}&post_type=product`;
+  return { ...config, url };
+}
+async function asarvoBatch103RecoverConfirmedSurface(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, externalSignal?: AbortSignal): Promise<SearchResult[]> {
+  const target = asarvoBatch103BuildSurfaceUrl(parsed, adapter);
+  if (!target || externalSignal?.aborted) return [];
+  const localSignal = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(target.method === "reader" ? 7_500 : 5_200)]) : AbortSignal.timeout(target.method === "reader" ? 7_500 : 5_200);
+  let recovered: SearchResult[] = [];
+  if (target.method === "direct") {
+    const fetched = await fetchHtml(target.url, 5_000, localSignal);
+    const html = fetched?.html ?? ""; const finalUrl = fetched?.finalUrl || target.url;
+    if (fetched && fetched.status >= 200 && fetched.status < 400 && html.length >= 100 && !isBlockedOrChallengePage(html)) {
+      recovered = [
+        ...parseRescuedRetailerJsonLdProducts(html, finalUrl, parsed, adapter.host),
+        ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(html, finalUrl, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)),
+      ];
+    }
+  } else {
+    const text = await fetchViaJina(target.url, 7_200, false, localSignal, undefined, 100);
+    if (text && !isBlockedOrChallengePage(text)) {
+      recovered = [
+        ...parseRescuedRetailerLandingMarkdown(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)),
+        ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)),
+      ];
+    }
+  }
+  const seen = new Set<string>();
+  const unique = recovered.filter((result) => { const key = normalizeUrl(result.url); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+  if (unique.length === 0) return [];
+  const trusted = parsed.intent.required.filter((requirement) => adapter.trustedCatalogRequirementKeys?.includes(requirement.key));
+  const evidence = trusted.map((requirement) => requirement.aliases[0] || requirement.value).filter(Boolean).join(" " );
+  const proofKeys = trusted.map((requirement) => requirement.key);
+  const variantEvidence = proofKeys.some((key) => ["shoe_size", "clothing_size"].includes(key));
+  const enriched = unique.map((result) => ({ ...result, ...(evidence ? { snippet: normalizeText(`${result.snippet} ${evidence}`).slice(0, 2200) } : {}), ...(proofKeys.length ? { catalogRequirementProofKeys: proofKeys } : {}), ...(variantEvidence ? { catalogVariantAvailabilityEvidence: true } : {}) }));
+  console.log("[AIShopping] ASARVO_BATCH103_CONFIRMED_SURFACE_RECOVERY", { host: adapter.host, method: target.method, kind: target.kind, url: target.url, products: enriched.length });
+  return enriched;
+}
+
+// ASARVO_BATCH105_EXACT37_CONFIRMED_MECHANISM_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH105_CONFIRMED_SURFACES = new Map<string, { method: "reader"; kind: string; parser: "standard" | "relaxed" }>([
+  ["autosklep24.pl", { method: "reader" as const, kind: "generic_wp_s", parser: "standard" as "standard" | "relaxed" }],
+  ["fotoplus.pl", { method: "reader" as const, kind: "production_0", parser: "relaxed" as "standard" | "relaxed" }],
+  ["motos.pl", { method: "reader" as const, kind: "woo_post_type", parser: "relaxed" as "standard" | "relaxed" }],
+]);
+const ASARVO_BATCH105_CONFIRMED_READER_HOSTS = new Set(ASARVO_BATCH105_CONFIRMED_SURFACES.keys());
+function asarvoBatch105NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch105BuildSurfaceUrl(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter): { method: "reader"; kind: string; parser: "standard" | "relaxed"; url: string } | null {
+  const host = asarvoBatch105NormalizeHost(adapter.host);
+  const config = ASARVO_BATCH105_CONFIRMED_SURFACES.get(host);
+  if (!config) return null;
+  const productionMatch = /^production_(\d+)$/.exec(config.kind);
+  if (productionMatch) {
+    const index = Math.max(0, Number(productionMatch[1]) || 0);
+    const built = buildDirectRetailerCatalogRequests(parsed, { hosts: [adapter.host], maxAdapters: 1, maxUrlsPerAdapter: Math.max(1, index + 1) });
+    const own = built.find((request) => asarvoBatch105NormalizeHost(request.adapter.host) === host);
+    const url = own?.urls?.[index] ?? own?.urls?.[0] ?? "";
+    return url ? { ...config, url } : null;
+  }
+  const searchText = normalizeText(buildCompactRetailerSearchText(parsed) || parsed.intent.productPhrase || buildProductSearchBase(parsed));
+  if (!searchText) return null;
+  const q = encodeURIComponent(searchText);
+  const urls: Record<string, string> = {
+    generic_wp_s: "https://" + host + "/?s=" + q,
+    generic_search: "https://" + host + "/search?q=" + q,
+    generic_szukaj: "https://" + host + "/szukaj?q=" + q,
+    woo_post_type: "https://" + host + "/?s=" + q + "&post_type=product",
+    shopify_product_search: "https://" + host + "/search?q=" + q + "&type=product",
+    search_query: "https://" + host + "/search?query=" + q,
+    search_search: "https://" + host + "/search?search=" + q,
+    search_s: "https://" + host + "/search?s=" + q,
+    search_slash_q: "https://" + host + "/search/?q=" + q,
+    szukaj_query: "https://" + host + "/szukaj?query=" + q,
+    szukaj_controller: "https://" + host + "/szukaj?controller=search&s=" + q,
+    wyszukiwarka_query: "https://" + host + "/wyszukiwarka?query=" + q,
+    magento_result: "https://" + host + "/catalogsearch/result/?q=" + q,
+    magento_index: "https://" + host + "/catalogsearch/result/index/?q=" + q,
+    prestashop_index: "https://" + host + "/index.php?controller=search&s=" + q,
+    shopware_ssearch: "https://" + host + "/search?sSearch=" + q,
+    search_text: "https://" + host + "/search?text=" + q,
+    search_phrase: "https://" + host + "/search?phrase=" + q,
+    search_term: "https://" + host + "/search?term=" + q,
+    search_keyword: "https://" + host + "/search?keyword=" + q,
+    search_keywords: "https://" + host + "/search?keywords=" + q,
+    search_slash_text: "https://" + host + "/search/?text=" + q,
+    search_php_text: "https://" + host + "/search.php?text=" + q,
+    search_php_query: "https://" + host + "/search.php?query=" + q,
+    szukaj_search: "https://" + host + "/szukaj?search=" + q,
+    szukaj_text: "https://" + host + "/szukaj?text=" + q,
+    wyszukiwarka_text: "https://" + host + "/wyszukiwarka?text=" + q,
+    wyszukiwarka_search: "https://" + host + "/wyszukiwarka?search=" + q,
+    wyniki_q: "https://" + host + "/wyniki-wyszukiwania?q=" + q,
+    wyniki_query: "https://" + host + "/wyniki-wyszukiwania?query=" + q,
+    wyniki_search: "https://" + host + "/wyniki-wyszukiwania?search=" + q,
+    prestashop_search_query: "https://" + host + "/index.php?controller=search&search_query=" + q,
+    search_result_keywords: "https://" + host + "/search_result.php?keywords=" + q,
+    search_results_q: "https://" + host + "/search-results?q=" + q,
+    search_results_query: "https://" + host + "/search-results?query=" + q,
+    products_search: "https://" + host + "/products?search=" + q,
+    produkty_search: "https://" + host + "/produkty?search=" + q,
+    find_q: "https://" + host + "/find?q=" + q
+  };
+  const url = urls[config.kind] ?? "";
+  return url ? { ...config, url } : null;
+}
+function asarvoBatch105RelaxedReaderProducts(text: string, pageUrl: string, parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter): SearchResult[] {
+  const host = asarvoBatch105NormalizeHost(adapter.host);
+  const out: SearchResult[] = []; const seen = new Set<string>();
+  const re = /\[([^\]]{1,500})\]\(([^)\s]+)\)/giu; let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null && out.length < 48) {
+    let absolute = ""; try { absolute = new URL(match[2], pageUrl).toString(); } catch { continue; }
+    const url = normalizeUrl(absolute); if (!url || seen.has(url) || !retailerHostMatchesDomain(getResultHostname(url), host) || isClearlyNonOfferAssetUrl(url)) continue;
+    let slug = ""; try { slug = cleanTitle(decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "").replace(/[-_]+/g, " ")); } catch {}
+    const label = cleanTitle(decodeHtml(match[1])); const name = [label, slug].filter((value) => value && value.length >= 5).sort((a,b) => b.length - a.length)[0] ?? ""; if (name.length < 5) continue;
+    const start = Math.max(0, match.index - 1_200), end = Math.min(text.length, match.index + match[0].length + 3_600);
+    const snippet = normalizeText(text.slice(start,end).replace(/!\[[^\]]*\]\([^)]+\)/g," ").replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[#*_\x60]/g," "));
+    const evidence = normalizeText((name + " " + snippet).slice(0,8000));
+    const candidate: SearchResult = { url, name: cleanTitle(name), snippet: evidence.slice(0,2400), source: "RetailerRescue", searchRank: out.length, retailerOwnedCardEvidence: true, retailerCatalogCardPrice: extractFirstBoundedRetailerCatalogCardPrice(evidence,name,parsed.condition), retailerCatalogCardAvailability: getAvailabilityFromHtml(evidence) };
+    if (!looksLikeRescuedRetailerProductCandidate(candidate, parsed, host, Boolean(adapter.allowDeferredModelIdentityBridge))) continue;
+    seen.add(url); out.push(candidate);
+  }
+  return out;
+}
+async function asarvoBatch105RecoverConfirmedSurface(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, externalSignal?: AbortSignal): Promise<SearchResult[]> {
+  const target = asarvoBatch105BuildSurfaceUrl(parsed, adapter); if (!target || externalSignal?.aborted) return [];
+  const localSignal = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(13_000)]) : AbortSignal.timeout(13_000);
+  const text = await fetchViaJina(target.url, 12_500, true, localSignal, undefined, 100);
+  if (!text || isBlockedOrChallengePage(text)) return [];
+  const standard = [ ...parseRescuedRetailerLandingMarkdown(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)), ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)) ];
+  const recovered = target.parser === "relaxed" ? [...standard, ...asarvoBatch105RelaxedReaderProducts(text, target.url, parsed, adapter)] : standard;
+  const seen = new Set<string>(); const unique = recovered.filter((result) => { const key = normalizeUrl(result.url); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+  if (unique.length === 0) return [];
+  const trusted = parsed.intent.required.filter((requirement) => adapter.trustedCatalogRequirementKeys?.includes(requirement.key));
+  const evidence = trusted.map((requirement) => requirement.aliases[0] || requirement.value).filter(Boolean).join(" "); const proofKeys = trusted.map((requirement) => requirement.key); const variantEvidence = proofKeys.some((key) => ["shoe_size","clothing_size"].includes(key));
+  const enriched = unique.map((result) => ({ ...result, ...(evidence ? { snippet: normalizeText(result.snippet + " " + evidence).slice(0,2200) } : {}), ...(proofKeys.length ? { catalogRequirementProofKeys: proofKeys } : {}), ...(variantEvidence ? { catalogVariantAvailabilityEvidence: true } : {}) }));
+  console.log("[AIShopping] ASARVO_BATCH105_CONFIRMED_MECHANISM_RECOVERY", { host: adapter.host, kind: target.kind, parser: target.parser, url: target.url, products: enriched.length });
+  return enriched;
+}
+
+// ASARVO_BATCH108_EXACT34_CONFIRMED_DEEP_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH108_CONFIRMED_SURFACES = new Map<string, { method: "direct" | "reader"; kind: "home_product" | "schema_search_action" | "woo_post_type"; surfaceUrl: string }>([
+  ["abfoto.pl", { method: "direct" as "direct" | "reader", kind: "schema_search_action" as "home_product" | "schema_search_action" | "woo_post_type", surfaceUrl: "https://abfoto.pl/pl_PL/searchquery/aparat%20cyfrowy/1/phot/5?url=aparat+cyfrowy" }],
+  ["audiostacja.pl", { method: "reader" as "direct" | "reader", kind: "woo_post_type" as "home_product" | "schema_search_action" | "woo_post_type", surfaceUrl: "https://audiostacja.pl/?s=gitara+elektryczna&post_type=product" }],
+  ["notopstryk.pl", { method: "reader" as "direct" | "reader", kind: "schema_search_action" as "home_product" | "schema_search_action" | "woo_post_type", surfaceUrl: "https://notopstryk.pl/pl/searchquery/tg7+kit/1/phot/5?url=tg7" }],
+  ["senetic.pl", { method: "reader" as "direct" | "reader", kind: "home_product" as "home_product" | "schema_search_action" | "woo_post_type", surfaceUrl: "https://senetic.pl/" }],
+]);
+const ASARVO_BATCH108_CONFIRMED_DIRECT_HOSTS = new Set(Array.from(ASARVO_BATCH108_CONFIRMED_SURFACES.entries()).filter(([, value]) => value.method === "direct").map(([host]) => host));
+const ASARVO_BATCH108_CONFIRMED_READER_HOSTS = new Set(Array.from(ASARVO_BATCH108_CONFIRMED_SURFACES.entries()).filter(([, value]) => value.method === "reader").map(([host]) => host));
+function asarvoBatch108NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch108BuildSurfaceUrl(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter): { method: "direct" | "reader"; kind: string; url: string } | null {
+  const host = asarvoBatch108NormalizeHost(adapter.host);
+  const config = ASARVO_BATCH108_CONFIRMED_SURFACES.get(host);
+  if (!config) return null;
+  if (config.kind === "home_product") return { ...config, url: "https://" + host + "/" };
+  const searchText = normalizeText(buildCompactRetailerSearchText(parsed) || parsed.intent.productPhrase || buildProductSearchBase(parsed));
+  if (!searchText) return null;
+  const q = encodeURIComponent(searchText);
+  if (config.kind === "woo_post_type") return { ...config, url: "https://" + host + "/?s=" + q + "&post_type=product" };
+  try {
+    const u = new URL(config.surfaceUrl);
+    const preferred = ["q","query","s","search","search_query","search_term_string","search_term","term","keyword","keywords","text","phrase"];
+    let changed = false;
+    for (const key of preferred) { if (u.searchParams.has(key)) { u.searchParams.set(key, searchText); changed = true; break; } }
+    if (!changed) {
+      const staticKeys = new Set(["type","post_type","controller","route","category","cat","limit","page","order","dir"]);
+      for (const [key] of u.searchParams) { if (!staticKeys.has(key.toLowerCase())) { u.searchParams.set(key, searchText); changed = true; break; } }
+    }
+    return { ...config, url: u.toString() };
+  } catch { return { ...config, url: config.surfaceUrl }; }
+}
+async function asarvoBatch108RecoverConfirmedSurface(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, externalSignal?: AbortSignal): Promise<SearchResult[]> {
+  const target = asarvoBatch108BuildSurfaceUrl(parsed, adapter); if (!target || externalSignal?.aborted) return [];
+  const localSignal = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(target.method === "reader" ? 15_500 : 8_000)]) : AbortSignal.timeout(target.method === "reader" ? 15_500 : 8_000);
+  let recovered: SearchResult[] = [];
+  if (target.method === "direct") {
+    const fetched = await fetchHtml(target.url, 7_200, localSignal); const html = fetched?.html ?? ""; const finalUrl = fetched?.finalUrl || target.url;
+    if (fetched && fetched.status >= 200 && fetched.status < 400 && html.length >= 100 && !isBlockedOrChallengePage(html)) recovered = [...parseRescuedRetailerJsonLdProducts(html, finalUrl, parsed, adapter.host), ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(html, finalUrl, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge))];
+  } else {
+    const text = await fetchViaJina(target.url, 14_800, true, localSignal, undefined, 100);
+    if (text && !isBlockedOrChallengePage(text)) recovered = [...parseRescuedRetailerLandingMarkdown(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)), ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(text, target.url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge))];
+  }
+  const seen = new Set<string>(); const unique = recovered.filter((result) => { const key = normalizeUrl(result.url); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+  if (unique.length === 0) return [];
+  const trusted = parsed.intent.required.filter((requirement) => adapter.trustedCatalogRequirementKeys?.includes(requirement.key)); const evidence = trusted.map((requirement) => requirement.aliases[0] || requirement.value).filter(Boolean).join(" "); const proofKeys = trusted.map((requirement) => requirement.key); const variantEvidence = proofKeys.some((key) => ["shoe_size","clothing_size"].includes(key));
+  const enriched = unique.map((result) => ({ ...result, ...(evidence ? { snippet: normalizeText(result.snippet + " " + evidence).slice(0,2200) } : {}), ...(proofKeys.length ? { catalogRequirementProofKeys: proofKeys } : {}), ...(variantEvidence ? { catalogVariantAvailabilityEvidence: true } : {}) }));
+  console.log("[AIShopping] ASARVO_BATCH108_CONFIRMED_DEEP_RECOVERY", { host: adapter.host, method: target.method, kind: target.kind, url: target.url, products: enriched.length });
+  return enriched;
+}
+
+// ASARVO_BATCH111_EXACT30_MATCHER_GAP_PRODUCTION_BRIDGE_V1
+const ASARVO_BATCH111_MATCHER_GAP_HOSTS = new Map<string, { preferredMethod: "direct" | "reader"; surfaceRanks: number[] }>([
+  ["guitarcenter.pl", { preferredMethod: "direct" as "direct" | "reader", surfaceRanks: [0] as number[] }],
+]);
+function asarvoBatch111NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch111ProductishUrl(urlRaw: string): boolean {
+  try {
+    const u = new URL(urlRaw); const lower = decodeURIComponent(u.pathname).toLowerCase(); const parts = lower.split("/").filter(Boolean); const last = parts[parts.length - 1] ?? "";
+    if (!last || /^(?:search|szukaj|wyszukiwanie|kategoria|category|categories|produkty|products|sklep|shop|blog|news|tag|cart|koszyk|login|konto)$/iu.test(last)) return false;
+    if (/(?:^|\/)(?:blog|poradnik|poradniki|artykul|artykuly|news|search|szukaj|kategoria|category|categories|tag|ranking|rankingi|review|reviews|recenzja|recenzje)(?:\/|$)/iu.test(lower)) return false;
+    return /(?:^|\/)(?:product|produkt|towar|oferta|item|p)(?:\/|[-_])/iu.test(lower) || /(?:^|[-_])(?:p|prod|sku)?\d{3,}(?:\.|[-_/]|$)/iu.test(last) || /\.html?$/iu.test(last) || (parts.length >= 2 && last.length >= 8);
+  } catch { return false; }
+}
+function asarvoBatch111BridgeIdentityPass(candidate: SearchResult, parsed: ParsedQuery): boolean {
+  const universal = evaluateUniversalProductMatch(candidate.name, candidate.snippet, candidate.url, parsed, "discovery", "RetailerRescue", true);
+  if (!universal.pass) return false;
+  const evidence = normalizeMatchText(`${candidate.name} ${candidate.snippet} ${candidate.url}`);
+  const exactAnchor = getUniversalExactModelAnchor(parsed, parsed.intent.productPhrase || parsed.intent.searchBase || parsed.queryText);
+  if (exactAnchor && !titleContainsUniversalModelCode(evidence, exactAnchor)) return false;
+  const strong = parsed.intent.strongIdentityTerms.map((term) => normalizeMatchText(term)).filter((term) => term && !isUniversalCategoryIdentityTerm(term, parsed));
+  const identity = parsed.intent.identityTerms.map((term) => normalizeMatchText(term)).filter((term) => term && !isUniversalCategoryIdentityTerm(term, parsed));
+  const hit = (term: string) => universalEvidenceHasBoundedIdentityTerm(term, evidence) || phraseMorphologicallyMatches(term, evidence) || automotiveLexicalTermMatches(term, evidence);
+  if (strong.length > 0) { const hits = strong.filter(hit).length; if (hits < Math.max(1, Math.ceil(strong.length * 0.6))) return false; }
+  else if (identity.length > 0) { const hits = identity.filter(hit).length; if (hits < Math.max(1, Math.ceil(identity.length * 0.5))) return false; }
+  else return false;
+  return true;
+}
+function asarvoBatch111BridgeFromText(text: string, pageUrl: string, parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, markdown: boolean): SearchResult[] {
+  const host = asarvoBatch111NormalizeHost(adapter.host); const out: SearchResult[] = []; const seen = new Set<string>();
+  const push = (href: string, labelRaw: string, index: number) => {
+    let absolute = ""; try { absolute = new URL(decodeHtml(href), pageUrl).toString(); } catch { return; } const url = normalizeUrl(absolute);
+    if (!url || seen.has(url) || !retailerHostMatchesDomain(getResultHostname(url), host) || isClearlyNonOfferAssetUrl(url) || !asarvoBatch111ProductishUrl(url)) return;
+    let slug = ""; try { slug = cleanTitle(decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "").replace(/[-_]+/g, " ")); } catch {}
+    const label = cleanTitle(decodeHtml(String(labelRaw || "").replace(/<[^>]+>/g, " "))); const name = [label, slug].filter((value) => value && value.length >= 5).sort((a,b) => b.length - a.length)[0] ?? ""; if (name.length < 5) return;
+    const start = Math.max(0, index - 1000), end = Math.min(text.length, index + 4200); const context = normalizeText(text.slice(start,end).replace(/<[^>]+>/g," ").replace(/!\[[^\]]*\]\([^)]+\)/g," ").replace(/\[([^\]]+)\]\([^)]+\)/g,"$1").replace(/[#*_\x60]/g," ")).slice(0,2600);
+    const evidence = normalizeText((name + " " + context).slice(0,8000)); const candidate: SearchResult = { url, name, snippet: evidence.slice(0,2400), source: "RetailerRescue", searchRank: out.length, retailerOwnedCardEvidence: true, retailerCatalogCardPrice: extractFirstBoundedRetailerCatalogCardPrice(evidence, name, parsed.condition), retailerCatalogCardAvailability: getAvailabilityFromHtml(evidence) };
+    if (looksLikeRescuedRetailerProductCandidate(candidate, parsed, host, Boolean(adapter.allowDeferredModelIdentityBridge)) || asarvoBatch111BridgeIdentityPass(candidate, parsed)) { seen.add(url); out.push(candidate); }
+  };
+  let match: RegExpExecArray | null; if (markdown) { const re=/\[([^\]]{1,500})\]\(([^)\s]+)\)/giu; while((match=re.exec(text))!==null&&out.length<40)push(match[2],match[1],match.index); } else { const re=/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]{0,1200}?)<\/a>/giu; while((match=re.exec(text))!==null&&out.length<40)push(match[1],match[2],match.index); }
+  return out;
+}
+function asarvoBatch111SurfaceUrls(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, ranks: number[]): string[] {
+  const host = asarvoBatch111NormalizeHost(adapter.host); const built = buildDirectRetailerCatalogRequests(parsed, { hosts: [adapter.host], maxAdapters: 1, maxUrlsPerAdapter: 3 }); const own = built.find((request) => asarvoBatch111NormalizeHost(request.adapter.host) === host); const urls = [...(own?.urls ?? []), "https://" + host + "/"]; const unique = Array.from(new Set(urls.map((url) => normalizeUrl(url)).filter(Boolean))).slice(0,3); const order = [...ranks, ...unique.map((_, index) => index)]; const seen = new Set<number>(); return order.filter((index) => Number.isInteger(index) && index >= 0 && index < unique.length && !seen.has(index) && Boolean(seen.add(index))).map((index) => unique[index]).slice(0,3);
+}
+async function asarvoBatch111RecoverMatcherGap(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, externalSignal?: AbortSignal): Promise<SearchResult[]> {
+  const host = asarvoBatch111NormalizeHost(adapter.host); const config = ASARVO_BATCH111_MATCHER_GAP_HOSTS.get(host); if (!config || externalSignal?.aborted) return []; const urls = asarvoBatch111SurfaceUrls(parsed, adapter, config.surfaceRanks); if (urls.length === 0) return [];
+  const run = async (method: "direct" | "reader", url: string): Promise<SearchResult[]> => {
+    try {
+      if (method === "direct") { const localSignal = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(7_500)]) : AbortSignal.timeout(7_500); const fetched = await fetchHtml(url, 6_900, localSignal); const html = fetched?.html ?? ""; const finalUrl = fetched?.finalUrl || url; if (!fetched || fetched.status < 200 || fetched.status >= 400 || html.length < 100 || isBlockedOrChallengePage(html)) return []; const standard = [...parseRescuedRetailerJsonLdProducts(html, finalUrl, parsed, adapter.host), ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(html, finalUrl, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge))]; return [...standard, ...asarvoBatch111BridgeFromText(html, finalUrl, parsed, adapter, false)]; }
+      const localSignal = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(10_500)]) : AbortSignal.timeout(10_500); const text = await fetchViaJina(url, 9_800, true, localSignal, undefined, 100); if (!text || isBlockedOrChallengePage(text)) return []; const standard = [...parseRescuedRetailerLandingMarkdown(text, url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge)), ...parseEmbeddedRetailerProductRoutesFromHtmlCore179(text, url, parsed, adapter.host, Boolean(adapter.allowDeferredModelIdentityBridge))]; return [...standard, ...asarvoBatch111BridgeFromText(text, url, parsed, adapter, true)];
+    } catch { return []; }
+  };
+  let recovered: SearchResult[] = []; const first = urls.slice(0,2); const firstRows = await Promise.all(first.map((url) => run(config.preferredMethod, url))); recovered.push(...firstRows.flat()); if (recovered.length === 0 && urls[2] && !externalSignal?.aborted) recovered.push(...await run(config.preferredMethod, urls[2])); if (recovered.length === 0 && urls[0] && !externalSignal?.aborted) recovered.push(...await run(config.preferredMethod === "reader" ? "direct" : "reader", urls[0]));
+  const seen = new Set<string>(); const unique = recovered.filter((result) => { const key = normalizeUrl(result.url); if (!key || seen.has(key)) return false; seen.add(key); return true; }).slice(0,24); if (unique.length === 0) return [];
+  console.log("[AIShopping] ASARVO_BATCH111_MATCHER_GAP_BRIDGE", { host: adapter.host, preferredMethod: config.preferredMethod, products: unique.length }); return unique;
+}
+
+// ASARVO_BATCH117_EXACT29_STABLE_READER_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH117_STABLE_READER_HOSTS = new Map<string, { source: "b115_cloudflare_reader" | "b115_magento_native"; kind: string; method: "reader"; surfaceUrl: string }>([
+  ["supersound.pl", { source: "b115_magento_native" as "b115_cloudflare_reader" | "b115_magento_native", kind: "magento_catalogsearch", method: "reader" as const, surfaceUrl: "https://supersound.pl/catalogsearch/result/?q=gitara%20elektryczna" }],
+]);
+function asarvoBatch117NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch117ParseSurface(text: string, pageUrl: string, parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, markdown: boolean): SearchResult[] {
+  if (!text || text.length < 100 || isBlockedOrChallengePage(text)) return []; const allow = Boolean(adapter.allowDeferredModelIdentityBridge);
+  const a = markdown ? parseRescuedRetailerLandingMarkdown(text, pageUrl, parsed, adapter.host, allow) : parseRescuedRetailerLandingHtml(text, pageUrl, parsed, adapter.host, allow);
+  const b = parseEmbeddedRetailerProductRoutesFromHtmlCore179(text, pageUrl, parsed, adapter.host, allow); const c = markdown ? [] : parseRescuedRetailerJsonLdProducts(text, pageUrl, parsed, adapter.host);
+  const seen = new Set<string>(); return [...a, ...b, ...c].filter((result) => { const key = normalizeUrl(result.url); if (!key || seen.has(key)) return false; seen.add(key); return true; });
+}
+function asarvoBatch117PrimarySurfaces(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter): string[] {
+  const host = asarvoBatch117NormalizeHost(adapter.host); const built = buildDirectRetailerCatalogRequests(parsed, { hosts: [adapter.host], maxAdapters: 1, maxUrlsPerAdapter: 3 }); const own = built.find((request) => asarvoBatch117NormalizeHost(request.adapter.host) === host);
+  return Array.from(new Set([...(own?.urls ?? []), "https://" + host + "/"].map((url) => normalizeUrl(url)).filter(Boolean))).slice(0,3);
+}
+function asarvoBatch117CandidateFromMagentoItem(host: string, parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, url: string, nameRaw: string, skuRaw: string): SearchResult | null {
+  const name = cleanTitle(nameRaw); const candidate: SearchResult = { url: normalizeUrl(url), name, snippet: normalizeText(name + " " + skuRaw).slice(0,2400), source: "RetailerRescue", searchRank: 0, retailerOwnedCardEvidence: true }; if (!candidate.url || name.length < 4) return null;
+  return looksLikeRescuedRetailerProductCandidate(candidate, parsed, host, Boolean(adapter.allowDeferredModelIdentityBridge)) ? candidate : null;
+}
+async function asarvoBatch117RecoverStableReader(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, externalSignal?: AbortSignal): Promise<SearchResult[]> {
+  const host = asarvoBatch117NormalizeHost(adapter.host); const config = ASARVO_BATCH117_STABLE_READER_HOSTS.get(host); if (!config || externalSignal?.aborted) return []; const urls = asarvoBatch117PrimarySurfaces(parsed, adapter); if (urls.length === 0) return [];
+  if (config.source === "b115_cloudflare_reader") {
+    for (const url of urls) {
+      try { const local = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(14_500)]) : AbortSignal.timeout(14_500); const text = await fetchViaJina(url, 13_500, true, local, undefined, 100); const products = asarvoBatch117ParseSurface(text, url, parsed, adapter, true); if (products.length > 0) { console.log("[AIShopping] ASARVO_BATCH117_STABLE_READER_RECOVERY", { host, source: config.source, kind: config.kind, lane: "reader_standard", products: products.length }); return products.slice(0,24); } } catch {}
+      if (externalSignal?.aborted) return [];
+      try { const local = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(10_500)]) : AbortSignal.timeout(10_500); const text = await fetchViaJinaFresh(url, 9_500, local); const products = asarvoBatch117ParseSurface(text, url, parsed, adapter, true); if (products.length > 0) { console.log("[AIShopping] ASARVO_BATCH117_STABLE_READER_RECOVERY", { host, source: config.source, kind: config.kind, lane: "reader_fresh", products: products.length }); return products.slice(0,24); } } catch {}
+      if (externalSignal?.aborted) return [];
+    }
+    return [];
+  }
+  const searchText = normalizeText(parsed.intent.productPhrase || parsed.intent.searchBase || parsed.queryText || ""); if (!searchText) return []; let origin = ""; try { origin = new URL(urls[0] || ("https://" + host + "/")).origin; } catch { return []; }
+  const gql = "query B117($search:String!){products(search:$search,pageSize:10){items{name sku url_key}}}"; const gqlUrl = origin + "/graphql?query=" + encodeURIComponent(gql) + "&variables=" + encodeURIComponent(JSON.stringify({ search: searchText }));
+  try { const local = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(11_500)]) : AbortSignal.timeout(11_500); const fetched = await fetchHtml(gqlUrl, 10_500, local); let data: any = null; try { data = JSON.parse(String(fetched?.html || "")); } catch {} const out: SearchResult[] = []; for (const item of Array.isArray(data?.data?.products?.items) ? data.data.products.items : []) { const key = String(item?.url_key || ""); if (!key) continue; for (const suffix of [".html", ""]) { const candidate = asarvoBatch117CandidateFromMagentoItem(host, parsed, adapter, origin + "/" + key + suffix, String(item?.name || ""), String(item?.sku || "")); if (candidate) { out.push(candidate); break; } } } if (out.length > 0) { console.log("[AIShopping] ASARVO_BATCH117_STABLE_READER_RECOVERY", { host, source: config.source, kind: config.kind, lane: "magento_graphql_get", products: out.length }); return out.slice(0,24); } } catch {}
+  if (externalSignal?.aborted) return []; const searchUrl = origin + "/catalogsearch/result/?q=" + encodeURIComponent(searchText);
+  try { const local = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(11_500)]) : AbortSignal.timeout(11_500); const fetched = await fetchHtml(searchUrl, 10_500, local); if (fetched) { const products = asarvoBatch117ParseSurface(fetched.html, fetched.finalUrl || searchUrl, parsed, adapter, false); if (products.length > 0) { console.log("[AIShopping] ASARVO_BATCH117_STABLE_READER_RECOVERY", { host, source: config.source, kind: config.kind, lane: "magento_catalogsearch_direct", products: products.length }); return products.slice(0,24); } } } catch {}
+  if (externalSignal?.aborted) return []; try { const local = externalSignal ? AbortSignal.any([externalSignal, AbortSignal.timeout(10_500)]) : AbortSignal.timeout(10_500); const text = await fetchViaJinaFresh(searchUrl, 9_500, local); const products = asarvoBatch117ParseSurface(text, searchUrl, parsed, adapter, true); if (products.length > 0) { console.log("[AIShopping] ASARVO_BATCH117_STABLE_READER_RECOVERY", { host, source: config.source, kind: config.kind, lane: "magento_catalogsearch_reader_fresh", products: products.length }); return products.slice(0,24); } } catch {} return [];
+}
+
+// ASARVO_BATCH120_EXACT28_MATCHER_QUALIFIER_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH120_MATCHER_QUALIFIER_HOSTS = new Map<string, { preferredMethod: "direct" | "reader" }>([
+  ["iparts.pl", { preferredMethod: "direct" as "direct" | "reader" }],
+  ["motochemia.pl", { preferredMethod: "reader" as "direct" | "reader" }],
+]);
+function asarvoBatch120NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch120ProductishUrl(urlRaw: string): boolean {
+  try {
+    const u = new URL(urlRaw); const lower = decodeURIComponent(u.pathname).toLowerCase(); const parts = lower.split("/").filter(Boolean); const last = parts[parts.length - 1] ?? "";
+    if (!last || /^(?:search|szukaj|wyszukiwanie|kategoria|category|categories|produkty|products|sklep|shop|blog|news|tag|cart|koszyk|login|konto)$/iu.test(last)) return false;
+    if (/(?:^|\/)(?:blog|poradnik|poradniki|artykul|artykuly|news|search|szukaj|kategoria|category|categories|tag|ranking|rankingi|review|reviews|recenzja|recenzje)(?:\/|$)/iu.test(lower)) return false;
+    return looksLikeOpenWebProductUrl(urlRaw);
+  } catch { return false; }
+}
+function asarvoBatch120SafeQualifierFalseNegative(nameRaw: string, urlRaw: string, parsed: ParsedQuery): boolean {
+  const name = cleanTitle(nameRaw); const url = normalizeUrl(urlRaw); if (!name || !url || !asarvoBatch120ProductishUrl(url)) return false;
+  const original = evaluateUniversalProductMatch(name, name, url, parsed, "discovery", "RetailerRescue", true); if (original.pass) return false;
+  const reasons = (original.reasons ?? []).map((x) => String(x)); if (reasons.length === 0 || !reasons.every((x) => x === "product-class-mismatch" || x === "product-qualifier-mismatch")) return false;
+  const noQualifier: ParsedQuery = { ...parsed, intent: { ...parsed.intent, qualifierTerms: [] } }; const relaxed = evaluateUniversalProductMatch(name, name, url, noQualifier, "discovery", "RetailerRescue", true); if (!relaxed.pass) return false;
+  const evidence = normalizeMatchText(name + " " + url); const hard = parsed.intent.required.filter((r) => r.hard); if (hard.some((r) => !requirementHasEvidence(r, evidence))) return false;
+  const exactAnchor = getUniversalExactModelAnchor(parsed, parsed.intent.productPhrase || parsed.intent.searchBase || parsed.queryText); if (exactAnchor && !titleContainsUniversalModelCode(evidence, exactAnchor)) return false;
+  const strong = parsed.intent.strongIdentityTerms.map((x) => normalizeMatchText(x)).filter(Boolean); if (strong.length === 0) return false; const hits = strong.filter((term) => universalEvidenceHasBoundedIdentityTerm(term, evidence) || phraseMorphologicallyMatches(term, evidence) || automotiveLexicalTermMatches(term, evidence)).length; if (hits < Math.max(1, Math.ceil(strong.length * 0.6))) return false;
+  return true;
+}
+function asarvoBatch120RowsFromText(text: string, pageUrl: string, parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, markdown: boolean): SearchResult[] {
+  const host = asarvoBatch120NormalizeHost(adapter.host); const out: SearchResult[] = []; const seen = new Set<string>();
+  const push = (hrefRaw: string, labelRaw: string) => { let url = ""; try { url = normalizeUrl(new URL(decodeHtml(hrefRaw), pageUrl).toString()); } catch { return; } if (!url || seen.has(url) || !retailerHostMatchesDomain(getResultHostname(url), host) || isClearlyNonOfferAssetUrl(url)) return; let slug = ""; try { slug = cleanTitle(decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop() ?? "").replace(/[-_]+/g, " ")); } catch {} const label = cleanTitle(decodeHtml(String(labelRaw || "").replace(/<[^>]+>/g, " "))); const name = [label, slug].filter((x) => x && x.length >= 4).sort((a,b) => b.length-a.length)[0] ?? ""; if (name.length < 4 || !asarvoBatch120SafeQualifierFalseNegative(name, url, parsed)) return; const evidence = normalizeText(name + " " + url); const candidate: SearchResult = { url, name, snippet: evidence, source: "RetailerRescue", searchRank: out.length, retailerOwnedCardEvidence: true, retailerCatalogCardPrice: extractFirstBoundedRetailerCatalogCardPrice(evidence, name, parsed.condition), retailerCatalogCardAvailability: getAvailabilityFromHtml(evidence) }; seen.add(url); out.push(candidate); };
+  let m: RegExpExecArray | null; if (markdown) { const re=/\[([^\]]{1,700})\]\(([^)\s]+)\)/giu; while((m=re.exec(text))!==null&&out.length<32)push(m[2],m[1]); } else { const re=/<a\b[^>]*?href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/giu; while((m=re.exec(text))!==null&&out.length<32)push(m[1],m[2]); } return out;
+}
+function asarvoBatch120PrimarySurfaces(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter): string[] { const host=asarvoBatch120NormalizeHost(adapter.host); const built=buildDirectRetailerCatalogRequests(parsed,{hosts:[adapter.host],maxAdapters:1,maxUrlsPerAdapter:4}); const own=built.find((x)=>asarvoBatch120NormalizeHost(x.adapter.host)===host); return Array.from(new Set([...(own?.urls??[]),"https://"+host+"/"].map((u)=>normalizeUrl(u)).filter(Boolean))).slice(0,4); }
+async function asarvoBatch120RecoverMatcherQualifier(parsed: ParsedQuery, adapter: DirectRetailerCatalogAdapter, externalSignal?: AbortSignal): Promise<SearchResult[]> {
+  const host = asarvoBatch120NormalizeHost(adapter.host); const config = ASARVO_BATCH120_MATCHER_QUALIFIER_HOSTS.get(host); if (!config || externalSignal?.aborted) return []; const urls = asarvoBatch120PrimarySurfaces(parsed, adapter); if (urls.length===0) return [];
+  const run = async(method:"direct"|"reader",url:string):Promise<SearchResult[]>=>{try{if(method==="reader"){const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(13_500)]):AbortSignal.timeout(13_500);const text=await fetchViaJina(url,12_500,true,local,undefined,100);if(!text||text.length<100||isBlockedOrChallengePage(text))return[];return asarvoBatch120RowsFromText(text,url,parsed,adapter,true);}const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(10_500)]):AbortSignal.timeout(10_500);const fetched=await fetchHtml(url,9_800,local);if(!fetched||fetched.status<200||fetched.status>=400||fetched.html.length<100||isBlockedOrChallengePage(fetched.html))return[];return asarvoBatch120RowsFromText(fetched.html,fetched.finalUrl||url,parsed,adapter,false);}catch{return[];}};
+  let rows:SearchResult[]=[];for(const url of urls.slice(0,3)){if(externalSignal?.aborted)break;const found=await run(config.preferredMethod,url);rows.push(...found);if(rows.length>0)break;}if(rows.length===0&&urls[0]&&!externalSignal?.aborted)rows.push(...await run(config.preferredMethod==="reader"?"direct":"reader",urls[0])); const seen=new Set<string>();const unique=rows.filter((x)=>{const k=normalizeUrl(x.url);if(!k||seen.has(k))return false;seen.add(k);return true;}).slice(0,20);if(unique.length>0)console.log("[AIShopping] ASARVO_BATCH120_MATCHER_QUALIFIER_RECOVERY",{host,preferredMethod:config.preferredMethod,products:unique.length});return unique;
+}
+
+// ASARVO_BATCH126_EXACT26_PARSER_HYDRATION_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH126_PARSER_HYDRATION_HOSTS = new Map<string, { preferredMethod: "direct" }>([
+  ["strefakierowcy.pl", { preferredMethod: "direct" as "direct" }],
+]);
+function asarvoBatch126NormalizeHost(value: string): string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch126ProductishUrl(urlRaw: string): boolean {
+  try { const u=new URL(urlRaw); const p=decodeURIComponent(u.pathname).toLowerCase(); const parts=p.split("/").filter(Boolean); const last=parts[parts.length-1]??""; if(!last||/(?:^|\/)(?:blog|poradnik|poradniki|artykul|artykuly|news|search|szukaj|wyszukiwanie|kategoria|category|categories|tag|ranking|rankingi|review|reviews|recenzja|recenzje|cart|koszyk|login|konto)(?:\/|$)/iu.test(p))return false; return looksLikeOpenWebProductUrl(urlRaw)||/(?:^|\/)(?:product|produkt|towar|oferta|item|p)(?:\/|[-_])/iu.test(p)||/(?:^|[-_])(?:p|prod|sku)?\d{3,}(?:\.|[-_/]|$)/iu.test(last)||/\.html?$/iu.test(last)||(parts.length>=2&&last.length>=8); } catch { return false; }
+}
+function asarvoBatch126UniqueUrls(rows: string[]): string[] { return Array.from(new Set(rows.map((x)=>{try{return normalizeUrl(new URL(x).toString());}catch{return "";}}).filter(Boolean))); }
+function asarvoBatch126ExtractLinks(text: string, base: string, host: string): string[] { const out:string[]=[]; const patterns=[/<a\b[^>]*?href=["']([^"']+)["'][^>]*>/giu,/\[[^\]]{1,700}\]\(([^)\s]+)\)/giu]; for(const re of patterns){let m:RegExpExecArray|null;while((m=re.exec(text))!==null&&out.length<64){let raw=String(m[1]||"").replace(/\\\//g,"/");try{const u=normalizeUrl(new URL(raw,base).toString());if(!u||!retailerHostMatchesDomain(getResultHostname(u),host)||isClearlyNonOfferAssetUrl(u)||!asarvoBatch126ProductishUrl(u))continue;out.push(u);}catch{}}} return asarvoBatch126UniqueUrls(out).slice(0,36); }
+function asarvoBatch126HtmlText(html:string):string { return normalizeText(html.replace(/<script\b[\s\S]*?<\/script>/giu," ").replace(/<style\b[\s\S]*?<\/style>/giu," ").replace(/<[^>]+>/g," ")); }
+function asarvoBatch126Meta(html:string,url:string):{title:string;desc:string;body:string} { const pick=(r:RegExp)=>{const m=html.match(r);return normalizeText(String(m?.[1]||"").replace(/<[^>]+>/g," "));}; const title=pick(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["'][^>]*>/iu)||pick(/<h1[^>]*>([\s\S]*?)<\/h1>/iu)||pick(/<title[^>]*>([\s\S]*?)<\/title>/iu)||normalizeText(decodeURIComponent(new URL(url).pathname.split("/").filter(Boolean).pop()??"").replace(/[-_]+/g," ")); const desc=pick(/<meta[^>]+(?:name|property)=["'](?:description|og:description)["'][^>]+content=["']([^"']+)["'][^>]*>/iu); return{title,desc,body:asarvoBatch126HtmlText(html).slice(0,26000)}; }
+function asarvoBatch126PriceSignal(text:string):boolean { return /(?:\b\d{1,3}(?:[ .]\d{3})*(?:[,.]\d{2})?\s*(?:zł|pln)\b|["']price["']\s*:\s*["']?\d+(?:[.,]\d+)?)/iu.test(text); }
+function asarvoBatch126Identity(parsed:ParsedQuery,evidence:string):boolean { const strong=parsed.intent.strongIdentityTerms.map((x)=>normalizeMatchText(x)).filter((x)=>x&&!isUniversalCategoryIdentityTerm(x,parsed)); const ids=parsed.intent.identityTerms.map((x)=>normalizeMatchText(x)).filter((x)=>x&&!isUniversalCategoryIdentityTerm(x,parsed)); const terms=strong.length?strong:ids; if(terms.length===0)return true; const hits=terms.filter((t)=>universalEvidenceHasBoundedIdentityTerm(t,evidence)||phraseMorphologicallyMatches(t,evidence)||automotiveLexicalTermMatches(t,evidence)).length; return hits>=Math.max(1,Math.ceil(terms.length*(strong.length?0.6:0.5))); }
+async function asarvoBatch126HydrateDirect(url:string,parsed:ParsedQuery,adapter:DirectRetailerCatalogAdapter,externalSignal?:AbortSignal):Promise<SearchResult|null> { const host=asarvoBatch126NormalizeHost(adapter.host); try { const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(14_500)]):AbortSignal.timeout(14_500); const fetched=await fetchHtml(url,13_500,local); if(!fetched||fetched.status<200||fetched.status>=400||!fetched.html||fetched.html.length<120||isBlockedOrChallengePage(fetched.html))return null; const pageUrl=normalizeUrl(fetched.finalUrl||url); if(!pageUrl||!retailerHostMatchesDomain(getResultHostname(pageUrl),host)||!asarvoBatch126ProductishUrl(pageUrl))return null; const meta=asarvoBatch126Meta(fetched.html,pageUrl); const name=cleanTitle(meta.title); if(name.length<4)return null; const evidence=normalizeMatchText((name+" "+meta.desc+" "+meta.body+" "+pageUrl).slice(0,35000)); if(!asarvoBatch126PriceSignal(fetched.html))return null; const hard=parsed.intent.required.filter((r)=>r.hard); if(hard.some((r)=>!requirementHasEvidence(r,evidence)))return null; if(!asarvoBatch126Identity(parsed,evidence))return null; const match=evaluateUniversalProductMatch(name,evidence,pageUrl,parsed,"discovery","RetailerRescue",true); if(!match.pass)return null; const price=extractFirstBoundedRetailerCatalogCardPrice(evidence,name,parsed.condition); const candidate:SearchResult={url:pageUrl,name,snippet:normalizeText(meta.desc+" "+meta.body).slice(0,6000),source:"RetailerRescue",searchRank:0,retailerOwnedCardEvidence:true,retailerCatalogCardPrice:price,retailerCatalogCardAvailability:getAvailabilityFromHtml(fetched.html)}; return candidate; } catch { return null; } }
+function asarvoBatch126PrimarySurfaces(parsed:ParsedQuery,adapter:DirectRetailerCatalogAdapter):string[] { const host=asarvoBatch126NormalizeHost(adapter.host); const built=buildDirectRetailerCatalogRequests(parsed,{hosts:[adapter.host],maxAdapters:1,maxUrlsPerAdapter:4}); const own=built.find((x)=>asarvoBatch126NormalizeHost(x.adapter.host)===host); return asarvoBatch126UniqueUrls([...(own?.urls??[]),"https://"+host+"/"]).slice(0,4); }
+async function asarvoBatch126RecoverParserHydration(parsed:ParsedQuery,adapter:DirectRetailerCatalogAdapter,externalSignal?:AbortSignal):Promise<SearchResult[]> { const host=asarvoBatch126NormalizeHost(adapter.host); if(!ASARVO_BATCH126_PARSER_HYDRATION_HOSTS.has(host)||externalSignal?.aborted)return[]; const surfaces=asarvoBatch126PrimarySurfaces(parsed,adapter); const links:string[]=[]; for(const surface of surfaces.slice(0,3)){if(externalSignal?.aborted)break;try{const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(11_500)]):AbortSignal.timeout(11_500);const d=await fetchHtml(surface,10_500,local);if(d&&d.status>=200&&d.status<400&&d.html.length>=120&&!isBlockedOrChallengePage(d.html))links.push(...asarvoBatch126ExtractLinks(d.html,d.finalUrl||surface,host));}catch{} if(links.length<8&&!externalSignal?.aborted){try{const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(13_000)]):AbortSignal.timeout(13_000);const text=await fetchViaJina(surface,12_000,true,local,undefined,100);if(text&&text.length>=120&&!isBlockedOrChallengePage(text))links.push(...asarvoBatch126ExtractLinks(text,surface,host));}catch{}} if(links.length>=10)break;} const unique=asarvoBatch126UniqueUrls(links).slice(0,10); for(const productUrl of unique.slice(0,8)){if(externalSignal?.aborted)break;const candidate=await asarvoBatch126HydrateDirect(productUrl,parsed,adapter,externalSignal);if(candidate){console.log("[AIShopping] ASARVO_BATCH126_PARSER_HYDRATION_RECOVERY",{host,lane:"direct_product_hydration",url:candidate.url});return[candidate];}} return[]; }
+
+// ASARVO_BATCH129_EXACT25_DETECTED_SEARCH_ENDPOINT_PRODUCTION_RECOVERY_V1
+const ASARVO_BATCH129_DETECTED_SEARCH_ENDPOINT_HOSTS = new Map<string, { preferredMethod: "direct" }>([
+  ["zadowolenie.pl", { preferredMethod: "direct" as "direct" }],
+]);
+function asarvoBatch129NormalizeHost(value:string):string { return value.trim().toLowerCase().replace(/^www\./, ""); }
+function asarvoBatch129SameHost(urlRaw:string,host:string):boolean { try { return retailerHostMatchesDomain(getResultHostname(urlRaw), asarvoBatch129NormalizeHost(host)); } catch { return false; } }
+function asarvoBatch129UniqueResults(rows:SearchResult[]):SearchResult[] { const seen=new Set<string>(),out:SearchResult[]=[]; for(const r of rows){const k=normalizeUrl(r.url);if(!k||seen.has(k))continue;seen.add(k);out.push(r);} return out; }
+function asarvoBatch129ExtractEndpoints(text:string,base:string,host:string):Array<{url:string;source:string}> { const out:Array<{url:string;source:string}>=[]; const add=(raw:string,source:string)=>{ if(!raw)return; const v=String(raw).replace(/\\\//g,"/").replace(/&amp;/g,"&").trim(); try { const u=new URL(v,base); if(!asarvoBatch129SameHost(u.toString(),host))return; const s=(u.pathname+u.search).toLowerCase(); if(!/(search|szukaj|catalogsearch|autocomplete|suggest|typeahead|find)/iu.test(s))return; if(isClearlyNonOfferAssetUrl(u.toString()))return; out.push({url:u.toString(),source}); } catch {} }; for(const m of text.matchAll(/<form\b[^>]*action=["']([^"']+)["'][^>]*>/giu))add(String(m[1]||""),"form_action"); for(const m of text.matchAll(/(?:searchUrl|search_url|autocompleteUrl|autocomplete_url|suggestUrl|suggest_url|action)["']?\s*[:=]\s*["']([^"']+)["']/giu))add(String(m[1]||""),"config_url"); for(const m of text.matchAll(/["']((?:https?:\\?\/\\?\/|\/)[^"']{1,240}(?:search|szukaj|catalogsearch|autocomplete|suggest|typeahead|find)[^"']{0,160})["']/giu))add(String(m[1]||""),"literal_url"); const seen=new Set<string>(); return out.filter(x=>{const k=normalizeUrl(x.url);if(!k||seen.has(k))return false;seen.add(k);return true;}).slice(0,12); }
+function asarvoBatch129EndpointQuery(raw:string,query:string):string { try { const u=new URL(raw); const keys=["q","query","search","term","text","keyword","s"]; let set=false; for(const k of keys){if(u.searchParams.has(k)){u.searchParams.set(k,query);set=true;break;}} if(!set)u.searchParams.set("q",query); return u.toString(); } catch { return raw; } }
+function asarvoBatch129Identity(parsed:ParsedQuery,evidence:string):boolean { const strong=parsed.intent.strongIdentityTerms.map(x=>normalizeMatchText(x)).filter(x=>x&&!isUniversalCategoryIdentityTerm(x,parsed)); const ids=parsed.intent.identityTerms.map(x=>normalizeMatchText(x)).filter(x=>x&&!isUniversalCategoryIdentityTerm(x,parsed)); const terms=strong.length?strong:ids; if(terms.length===0)return true; const hits=terms.filter(t=>universalEvidenceHasBoundedIdentityTerm(t,evidence)||phraseMorphologicallyMatches(t,evidence)||automotiveLexicalTermMatches(t,evidence)).length; return hits>=Math.max(1,Math.ceil(terms.length*(strong.length?0.6:0.5))); }
+function asarvoBatch129Validate(result:SearchResult,parsed:ParsedQuery):boolean { const evidence=normalizeMatchText((String(result.name||"")+" "+String(result.snippet||"")+" "+String(result.url||"")).slice(0,18000)); const match=evaluateUniversalProductMatch(String(result.name||""),String(result.snippet||""),String(result.url||""),parsed,"discovery","RetailerRescue",true); if(!match.pass)return false; if(parsed.intent.required.filter(x=>x.hard).some(x=>!requirementHasEvidence(x,evidence)))return false; return asarvoBatch129Identity(parsed,evidence); }
+async function asarvoBatch129ParseEndpointSurface(url:string,parsed:ParsedQuery,host:string,externalSignal?:AbortSignal):Promise<SearchResult|null> { const products:SearchResult[]=[]; let d:any=null; try { const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(15_500)]):AbortSignal.timeout(15_500); d=await fetchHtml(url,14_500,local); } catch {} if(d?.html&&d.html.length>=100&&!isBlockedOrChallengePage(d.html)){const p=String(d.finalUrl||url);try{products.push(...parseRescuedRetailerLandingHtml(d.html,p,parsed,host,true));}catch{}try{products.push(...parseEmbeddedRetailerProductRoutesFromHtmlCore179(d.html,p,parsed,host,true));}catch{}try{products.push(...parseRescuedRetailerJsonLdProducts(d.html,p,parsed,host));}catch{}} let reader=""; if(products.length===0&&!externalSignal?.aborted){try{const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(18_500)]):AbortSignal.timeout(18_500);reader=await fetchViaJina(url,17_500,true,local,undefined,100);}catch{}if(reader&&reader.length>=100&&!isBlockedOrChallengePage(reader)){try{products.push(...parseRescuedRetailerLandingMarkdown(reader,url,parsed,host,true));}catch{}}} const unique=asarvoBatch129UniqueResults(products.filter(x=>asarvoBatch129SameHost(x.url,host))); for(const p of unique){if(asarvoBatch129Validate(p,parsed))return p;} return null; }
+function asarvoBatch129Seeds(parsed:ParsedQuery,adapter:DirectRetailerCatalogAdapter):string[] { const host=asarvoBatch129NormalizeHost(adapter.host); const built=buildDirectRetailerCatalogRequests(parsed,{hosts:[adapter.host],maxAdapters:1,maxUrlsPerAdapter:4}); const own=built.find(x=>asarvoBatch129NormalizeHost(x.adapter.host)===host); return Array.from(new Set(["https://"+host+"/",...(own?.urls??[])].map(x=>normalizeUrl(x)).filter(Boolean))).slice(0,4); }
+async function asarvoBatch129RecoverDetectedSearchEndpoint(parsed:ParsedQuery,adapter:DirectRetailerCatalogAdapter,externalSignal?:AbortSignal):Promise<SearchResult[]> { const host=asarvoBatch129NormalizeHost(adapter.host); if(!ASARVO_BATCH129_DETECTED_SEARCH_ENDPOINT_HOSTS.has(host)||externalSignal?.aborted)return[]; const query=normalizeText(parsed.queryText||parsed.query||parsed.intent.searchBase||parsed.intent.productPhrase||""); if(!query)return[]; const seeds=asarvoBatch129Seeds(parsed,adapter); for(const seed of seeds){if(externalSignal?.aborted)break;let d:any=null,reader="";try{const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(13_500)]):AbortSignal.timeout(13_500);d=await fetchHtml(seed,12_500,local);}catch{}try{const local=externalSignal?AbortSignal.any([externalSignal,AbortSignal.timeout(16_500)]):AbortSignal.timeout(16_500);reader=await fetchViaJina(seed,15_500,true,local,undefined,100);}catch{}const text=String(d?.html||"")+"\n"+String(reader||"");if(!text.trim())continue;const base=String(d?.finalUrl||seed);for(const hint of asarvoBatch129ExtractEndpoints(text,base,host).slice(0,8)){if(externalSignal?.aborted)break;const qurl=asarvoBatch129EndpointQuery(hint.url,query);const candidate=await asarvoBatch129ParseEndpointSurface(qurl,parsed,host,externalSignal);if(candidate){console.log("[AIShopping] ASARVO_BATCH129_DETECTED_SEARCH_ENDPOINT_RECOVERY",{host,lane:"explicit_detected_search_endpoint",source:hint.source,url:candidate.url});return[candidate];}}} return[]; }
+
+// ASARVO_MVP_POWER_TOOL_HOME_SCOPING_V4
+// A generic power-tool query should not fan out to unrelated retailer homepages.
+// Explicit host-scoped searches keep their original fallback behavior.
+function asarvoMvpPowerToolIsUnscopedHomepage(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    return /^https?:$/.test(parsedUrl.protocol) &&
+      (parsedUrl.pathname === "/" || parsedUrl.pathname === "") &&
+      parsedUrl.search.length === 0 && parsedUrl.hash.length === 0;
+  } catch {
+    return false;
+  }
+}
+
 function buildDirectRetailerCatalogRequests(
   parsed: ParsedQuery,
   options: DirectRetailerCatalogSearchOptions = {}
@@ -18959,6 +30817,64 @@ function buildDirectRetailerCatalogRequests(
   const matchedVerticalDirectoryHosts = new Set(
     getIntentVerticalAcceleratorDomains(parsed)
   );
+
+  // ASARVO_HOME_FURNITURE_DIRECT_MESH_SCALE_V1
+  // Home/furniture now has a much larger direct-store registry. Keeping the
+  // historical 7-adapter cap permanently starves later valid adapters even
+  // when they have a concrete category URL. Raise only this vertical to 10;
+  // all other verticals keep the established default of 7.
+  // ASARVO_HOME_FURNITURE_DIRECT_MESH_SCALE_V2_14
+  // ASARVO_HOME_FURNITURE_DIRECT_MESH_SCALE_V3_18
+  // ASARVO_HOME_FURNITURE_DIRECT_MESH_SCALE_V4_24
+  // ASARVO_ELECTRONICS_TECH_DIRECT_MESH_SCALE_V1_16
+  // ASARVO_ELECTRONICS_TECH_DIRECT_MESH_SCALE_V2_24
+  // ASARVO_FASHION_DIRECT_MESH_SCALE_V1_16
+  // ASARVO_MEGA42_VERTICAL_MESH_SCALE_V1
+  // ASARVO_HOME_DIY_GARDEN_MESH_SCALE_V1_20
+  // ASARVO_BEAUTY_PHOTO_MESH_SCALE_V1
+  // ASARVO_SPORTS_HEALTH_MESH_SCALE_V1
+  // ASARVO_BOOKS_KIDS_MESH_SCALE_V1
+  // ASARVO_GROCERY_PETS_MESH_SCALE_V1
+  // ASARVO_WATCHES_OFFICE_MESH_SCALE_V1
+  // ASARVO_MUSIC_INSTRUMENTS_MESH_SCALE_V1_12
+  const asarvoDefaultDirectAdapterLimit =
+    matchedVerticals.has("home_furniture")
+      ? 24
+      : matchedVerticals.has("electronics_tech")
+        ? 24
+        : matchedVerticals.has("fashion")
+          ? 24
+          : matchedVerticals.has("home_diy_garden")
+            ? 20
+            : matchedVerticals.has("beauty")
+              ? 18
+              : matchedVerticals.has("sports_nutrition")
+                ? 14
+                : matchedVerticals.has("health_pharmacy")
+                  ? 12
+                  : matchedVerticals.has("books_hobby")
+                    ? 16
+                    : matchedVerticals.has("children_toys")
+                      ? 16
+                      : matchedVerticals.has("grocery_household")
+                        ? 16
+                        : matchedVerticals.has("pets")
+                          ? 14
+                          : matchedVerticals.has("watches_jewelry")
+                            ? 14
+                            : matchedVerticals.has("office_stationery")
+                              ? 10
+                              : matchedVerticals.has("music_instruments")
+                                ? 12
+                                : matchedVerticals.has("photo_video")
+                                  ? 10
+                                  : matchedVerticals.has("outdoor_sport")
+                                    ? 20
+                                    : matchedVerticals.has("automotive_parts")
+                                      ? 16
+                                      : matchedVerticals.has("automotive_tires")
+                                        ? 12
+                                        : 7;
   const preciseSearchText = normalizeText(
     buildUniversalPreciseDiscoveryCore(parsed) ||
     parsed.intent.searchBase ||
@@ -19021,46 +30937,368 @@ function buildDirectRetailerCatalogRequests(
     "delkom.pl",
   ]);
 
-return V28_DIRECT_RETAILER_CATALOG_ADAPTERS
-    .filter((adapter) =>
-      (hostAllowlist.size === 0 || hostAllowlist.has(adapter.host)) &&
-      (
-        adapter.categories.includes(parsed.category ?? "") ||
-        adapter.verticals.some((vertical) => matchedVerticals.has(vertical)) ||
-        matchedVerticalDirectoryHosts.has(adapter.host)
+// ASARVO_STORE_MESH_FAIRNESS_V1_ANCHOR_ROTATION
+  // At 100+ direct adapters, plain registry-order slicing permanently starves
+  // later valid stores. Keep a stable anchor half for proven/high-ranked
+  // sources and fill the remaining half from a deterministic query-rotated
+  // tail. Explicit host allowlists retain the previous strict ordering.
+  // ASARVO_MVP_ROUTING_SCOPE_V1: when a product category and vertical are known,
+  // exclude directory-only adapters from the ordinary mesh. A horizontal
+  // MEGA25 directory can contain unrelated shops (e.g. jewelry for phones
+  // or garden/power tools for washing machines). Explicit targeted hosts
+  // and unknown-category fallback keep the original routing behavior.
+  const asarvoMvpKnownCategoryVertical =
+    hostAllowlist.size === 0 &&
+    Boolean(parsed.category) &&
+    matchedVerticals.size > 0;
+
+  // ASARVO_MVP_FASTTRACK_V1: a washer query should not spend its ordinary
+  // first-party catalog budget on the Delkom IT catalog. The observed washer
+  // run returned 24 SSD/monitor cards from this host, none useful for washers.
+  // Explicit host-targeted requests remain unchanged.
+  const asarvoMvpWasherDropUnrelatedOrdinaryHost =
+    parsed.category === "washing_machine" && hostAllowlist.size === 0;
+
+  const rankedDirectRetailerAdapters =
+    V28_DIRECT_RETAILER_CATALOG_ADAPTERS
+      .filter((adapter) =>
+        (hostAllowlist.size === 0 || hostAllowlist.has(adapter.host)) &&
+        (!asarvoMvpWasherDropUnrelatedOrdinaryHost || adapter.host !== "delkom.pl" ||
+          adapter.categories.includes("washing_machine")) &&
+        (
+          adapter.categories.includes(parsed.category ?? "") ||
+          adapter.verticals.some((vertical) => matchedVerticals.has(vertical)) ||
+          (!asarvoMvpKnownCategoryVertical && matchedVerticalDirectoryHosts.has(adapter.host))
+        )
       )
-    )
-    .map((adapter, index) => ({
-      adapter,
-      index,
-      categorySpecific: adapter.categories.includes(parsed.category ?? ""),
+      .map((adapter, index) => ({
+        adapter,
+        index,
+        categorySpecific: adapter.categories.includes(parsed.category ?? ""),
+        verticalSpecific: adapter.verticals.some((vertical) => matchedVerticals.has(vertical)),
+        directoryMatched: matchedVerticalDirectoryHosts.has(adapter.host),
+      }))
+      .sort((a, b) =>
+        Number(b.categorySpecific) - Number(a.categorySpecific) ||
+        Number(b.verticalSpecific) - Number(a.verticalSpecific) ||
+        Number(b.directoryMatched) - Number(a.directoryMatched) ||
+        a.index - b.index
+      );
 
-      brandDirectorySpecific:
+  const directRetailerAdapterLimit = Math.max(
+    1,
+    options.maxAdapters ??
+      Math.max(
+        asarvoDefaultDirectAdapterLimit,
+        getMega25CategoryDirectAdapterLimit(parsed)
+      )
+  );
 
-        Boolean(context.brand) && brandOwnedDirectoryHosts.has(adapter.host),
-      verticalSpecific: adapter.verticals.some((vertical) => matchedVerticals.has(vertical)),
-      directoryMatched: matchedVerticalDirectoryHosts.has(adapter.host),
-    }))
-    .sort((a, b) =>
-      Number(b.categorySpecific) - Number(a.categorySpecific) ||
+  const selectedDirectRetailerAdapters =
+    hostAllowlist.size > 0 ||
+    rankedDirectRetailerAdapters.length <= directRetailerAdapterLimit
+      ? rankedDirectRetailerAdapters.slice(0, directRetailerAdapterLimit)
+      : (() => {
+          const anchorCount = Math.min(
+            rankedDirectRetailerAdapters.length,
+            Math.max(4, Math.floor(directRetailerAdapterLimit / 2))
+          );
+          const anchors =
+            rankedDirectRetailerAdapters.slice(0, anchorCount);
+          const tail =
+            rankedDirectRetailerAdapters.slice(anchorCount);
 
-      Number(b.brandDirectorySpecific) - Number(a.brandDirectorySpecific) ||
-      Number(b.verticalSpecific) - Number(a.verticalSpecific) ||
-      Number(b.directoryMatched) - Number(a.directoryMatched) ||
-      a.index - b.index
-    )
-    // V32.12 First-party Store Mesh: query up to seven matched retailer-owned
-    // catalogs in parallel. Each adapter has its own deadline and the whole
-    // mesh remains under the existing outer discovery ceiling, so extra
-    // coverage does not serialize route latency.
-    .slice(0, Math.max(1, options.maxAdapters ?? 7))
+          const seedText = normalizeMatchText(
+            [
+              parsed.queryText,
+              parsed.category ?? "",
+              parsed.brand ?? "",
+              parsed.intent.productPhrase,
+              parsed.intent.searchBase,
+              context.pivotSearchText,
+              context.secondaryPivotSearchText,
+            ]
+              .filter(Boolean)
+              .join("|")
+          );
+
+          let seed = 2166136261;
+
+          for (
+            let index = 0;
+            index < seedText.length;
+            index += 1
+          ) {
+            seed ^= seedText.charCodeAt(index);
+            seed = Math.imul(seed, 16777619) >>> 0;
+          }
+
+          const offset =
+            tail.length > 0
+              ? seed % tail.length
+              : 0;
+
+          const rotatedTail =
+            tail.length > 0
+              ? [
+                  ...tail.slice(offset),
+                  ...tail.slice(0, offset),
+                ]
+              : [];
+
+          return [
+            ...anchors,
+            ...rotatedTail.slice(
+              0,
+              Math.max(
+                0,
+                directRetailerAdapterLimit -
+                  anchors.length
+              )
+            ),
+          ];
+        })();
+
+  if (
+    rankedDirectRetailerAdapters.length >
+    directRetailerAdapterLimit
+  ) {
+    console.log(
+      "[AIShopping] ASARVO_STORE_MESH_FAIRNESS_V1_ANCHOR_ROTATION:",
+      {
+        category: parsed.category,
+        verticals: [...matchedVerticals],
+        eligible:
+          rankedDirectRetailerAdapters.length,
+        limit: directRetailerAdapterLimit,
+        explicitHostAllowlist:
+          hostAllowlist.size > 0,
+        selectedHosts:
+          selectedDirectRetailerAdapters.map(
+            ({ adapter }) => adapter.host
+          ),
+      }
+    );
+  }
+
+  // V5: the internal first wave supplies ~20 automatically routed hosts via
+  // options.hosts. That is not a user-targeted single-store request. Skip
+  // unrelated root pages there too; preserve explicit 1-9 host scopes.
+  const asarvoMvpPowerToolSkipOrdinaryHomepages =
+    parsed.category === "power_tool" &&
+    (hostAllowlist.size === 0 || hostAllowlist.size >= 10);
+  return selectedDirectRetailerAdapters
     .map(({ adapter }) => ({
       adapter,
-      urls: Array.from(new Set(adapter.buildSearchUrls(context)))
-        .filter((url) => /^https?:\/\//i.test(url))
-        .slice(0, options.maxUrlsPerAdapter ?? adapter.maxSearchUrls ?? (context.pivotSearchText ? 3 : 2)),
+      urls: Array.from(
+        new Set(
+          adapter.buildSearchUrls(context)
+        )
+      )
+        .filter((url) => {
+          if (!/^https?:\/\//i.test(url)) return false;
+          if (
+            asarvoMvpPowerToolSkipOrdinaryHomepages &&
+            asarvoMvpPowerToolIsUnscopedHomepage(url)
+          ) {
+            console.log("[AIShopping] ASARVO_MVP_POWER_TOOL_ROOT_V4 skipped-unscoped-homepage:", adapter.host);
+            return false;
+          }
+          return true;
+        })
+        .slice(
+          0,
+          options.maxUrlsPerAdapter ??
+            adapter.maxSearchUrls ??
+            (context.pivotSearchText ? 3 : 2)
+        ),
     }))
-    .filter((request) => request.urls.length > 0);
+    .filter(
+      (request) =>
+        request.urls.length > 0
+    );
+}
+
+// ASARVO_BATCH33_REQUESTABLE_COHORT_BACKFILL_V1
+// Permanent MEGA25 cohort backfill: a rescue candidate is usable only when
+// its existing first-party adapter can build at least one URL for THIS query.
+// Scan extra ranked candidates only to replace zero-URL/used slots; final V6/V7/V8
+// cohort caps remain unchanged at four hosts and verifier/price gates are untouched.
+function getMega25RequestableDirectRescueRetailerDomains(
+  parsed: ParsedQuery,
+  rankedLimit: number
+): string[] {
+  const scanLimit = Math.max(48, Math.min(96, Math.max(1, rankedLimit) * 4));
+  return getMega25DirectRescueRetailerDomains(parsed, scanLimit)
+    .filter((candidateHost) =>
+      buildDirectRetailerCatalogRequests(parsed, {
+        hosts: [candidateHost],
+        maxAdapters: 1,
+        maxUrlsPerAdapter: 1,
+      }).length > 0
+    );
+}
+
+
+
+// ASARVO_DIRECT_RETAILER_ADMISSION_DEADLINE_ALIGNMENT_FIX
+function getAsarvoReaderAlignedDirectAdapterBudgetMs(
+  parsed: ParsedQuery,
+  adapter: DirectRetailerCatalogAdapter,
+  urls: string[],
+  overrideBudgetMs?: number
+): number {
+  const hardCount = parsed.intent.required.filter(
+    (requirement) => requirement.hard
+  ).length;
+
+  const highConstraintRetailIntent = Boolean(
+    parsed.brand &&
+    hardCount >= 2 &&
+    getRetailVerticalMatches(parsed).length > 0
+  );
+
+  const baseBudgetMs =
+    overrideBudgetMs ??
+    (highConstraintRetailIntent ? 4_750 : 5_550);
+
+  // ASARVO_BATCH91_MORELE_DIRECT_FIRST_READER_RECOVERY_V1
+  // One Morele page can fall back only AFTER direct transport settles. Give
+  // that bounded direct-first branch enough room for the configured 3.4 s
+  // reader without increasing the global discovery/verifier deadlines.
+  const asarvoBatch91MoreleReaderRecoveryBudgetMs =
+    adapter.host === "morele.net" && highConstraintRetailIntent
+      ? Math.max(baseBudgetMs, 6_600)
+      : baseBudgetMs;
+
+  // ASARVO_BATCH101_CONFIRMED_SURFACE_PRODUCTION_RECOVERY_V1
+  const asarvoBatch101ConfirmedSurfaceBudgetMs =
+    ASARVO_BATCH101_CONFIRMED_READER_HOSTS.has(asarvoBatch101NormalizeHost(adapter.host))
+      ? Math.max(asarvoBatch91MoreleReaderRecoveryBudgetMs, 14_000)
+      : ASARVO_BATCH101_CONFIRMED_DIRECT_HOSTS.has(asarvoBatch101NormalizeHost(adapter.host))
+        ? Math.max(asarvoBatch91MoreleReaderRecoveryBudgetMs, 8_500)
+        : asarvoBatch91MoreleReaderRecoveryBudgetMs;
+
+  // ASARVO_BATCH103_EXACT47_CONFIRMED_SURFACE_PRODUCTION_RECOVERY_V1
+  const asarvoBatch103ConfirmedSurfaceBudgetMs =
+    ASARVO_BATCH103_CONFIRMED_READER_HOSTS.has(asarvoBatch103NormalizeHost(adapter.host))
+      ? Math.max(asarvoBatch101ConfirmedSurfaceBudgetMs, 14_000)
+      : ASARVO_BATCH103_CONFIRMED_DIRECT_HOSTS.has(asarvoBatch103NormalizeHost(adapter.host))
+        ? Math.max(asarvoBatch101ConfirmedSurfaceBudgetMs, 8_500)
+        : asarvoBatch101ConfirmedSurfaceBudgetMs;
+
+  // ASARVO_BATCH105_EXACT37_CONFIRMED_MECHANISM_PRODUCTION_RECOVERY_V1
+  const asarvoBatch105ConfirmedSurfaceBudgetMs = ASARVO_BATCH105_CONFIRMED_READER_HOSTS.has(asarvoBatch105NormalizeHost(adapter.host))
+    ? Math.max(asarvoBatch103ConfirmedSurfaceBudgetMs, 16_500)
+    : asarvoBatch103ConfirmedSurfaceBudgetMs;
+
+  // ASARVO_BATCH108_EXACT34_CONFIRMED_DEEP_PRODUCTION_RECOVERY_V1
+  const asarvoBatch108ConfirmedSurfaceBudgetMs = ASARVO_BATCH108_CONFIRMED_READER_HOSTS.has(asarvoBatch108NormalizeHost(adapter.host))
+    ? Math.max(asarvoBatch105ConfirmedSurfaceBudgetMs, 18_000)
+    : ASARVO_BATCH108_CONFIRMED_DIRECT_HOSTS.has(asarvoBatch108NormalizeHost(adapter.host))
+      ? Math.max(asarvoBatch105ConfirmedSurfaceBudgetMs, 9_500)
+      : asarvoBatch105ConfirmedSurfaceBudgetMs;
+
+  // ASARVO_BATCH111_EXACT30_MATCHER_GAP_PRODUCTION_BRIDGE_V1
+  const asarvoBatch111CandidateGateBudgetMs = ASARVO_BATCH111_MATCHER_GAP_HOSTS.has(asarvoBatch111NormalizeHost(adapter.host))
+    ? Math.max(asarvoBatch108ConfirmedSurfaceBudgetMs, 22_000)
+    : asarvoBatch108ConfirmedSurfaceBudgetMs;
+
+  // ASARVO_BATCH117_EXACT29_STABLE_READER_PRODUCTION_RECOVERY_V1
+  const asarvoBatch117StableReaderBudgetMs = ASARVO_BATCH117_STABLE_READER_HOSTS.has(asarvoBatch117NormalizeHost(adapter.host))
+    ? Math.max(asarvoBatch111CandidateGateBudgetMs, 42_000)
+    : asarvoBatch111CandidateGateBudgetMs;
+
+  // ASARVO_BATCH120_EXACT28_MATCHER_QUALIFIER_PRODUCTION_RECOVERY_V1
+  const asarvoBatch120MatcherQualifierBudgetMs = ASARVO_BATCH120_MATCHER_QUALIFIER_HOSTS.has(asarvoBatch120NormalizeHost(adapter.host))
+    ? Math.max(asarvoBatch117StableReaderBudgetMs, 30_000)
+    : asarvoBatch117StableReaderBudgetMs;
+
+  // ASARVO_BATCH126_EXACT26_PARSER_HYDRATION_PRODUCTION_RECOVERY_V1
+  const asarvoBatch126ParserHydrationBudgetMs = ASARVO_BATCH126_PARSER_HYDRATION_HOSTS.has(asarvoBatch126NormalizeHost(adapter.host))
+    ? Math.max(asarvoBatch120MatcherQualifierBudgetMs, 48_000)
+    : asarvoBatch120MatcherQualifierBudgetMs;
+
+  // ASARVO_BATCH129_EXACT25_DETECTED_SEARCH_ENDPOINT_PRODUCTION_RECOVERY_V1
+  const asarvoBatch129DetectedSearchEndpointBudgetMs = ASARVO_BATCH129_DETECTED_SEARCH_ENDPOINT_HOSTS.has(asarvoBatch129NormalizeHost(adapter.host))
+    ? Math.max(asarvoBatch126ParserHydrationBudgetMs, 58_000)
+    : asarvoBatch126ParserHydrationBudgetMs;
+
+  const parallelSinglePageReader =
+    adapter.readerCatalogStrategy === "parallel" &&
+    urls.length === 1 &&
+    Number.isFinite(adapter.readerCatalogTimeoutMs) &&
+    Number(adapter.readerCatalogTimeoutMs) > 0;
+
+  if (!parallelSinglePageReader) {
+    return asarvoBatch129DetectedSearchEndpointBudgetMs;
+  }
+
+  const readerAlignedBudgetMs = Math.min(
+    7_250,
+    Number(adapter.readerCatalogTimeoutMs) + 250
+  );
+
+  return Math.max(
+    asarvoBatch129DetectedSearchEndpointBudgetMs,
+    readerAlignedBudgetMs
+  );
+}
+
+// ASARVO_BATCH51_GLOBAL_READER_RECOVERY48_V1
+const ASARVO_BATCH51_GLOBAL_READER_RECOVERY_HOSTS = new Set<string>([
+  "2407.pl",
+  "24garden.pl",
+  "alezwierzaki.pl",
+  "aptekacodzienna.pl",
+  "apteline.pl",
+  "autofixer.com",
+  "beafoto.pl",
+  "bieganie.pl",
+  "bobowozki.com.pl",
+  "bonito.pl",
+  "butsklep.pl",
+  "bytom.com.pl",
+  "czytam.pl",
+  "delio.com.pl",
+  "drewmax-online.pl",
+  "e-glamour.pl",
+  "e-horyzont.pl",
+  "e-insportline.pl",
+  "fera.pl",
+  "fotoplus.pl",
+  "fryzomania.pl",
+  "gemini.pl",
+  "hard-pc.pl",
+  "helion.pl",
+  "hop-sport.pl",
+  "interfoto.eu",
+  "jubilersezam.pl",
+  "komputronik.pl",
+  "kontri.pl",
+  "lazienkabezbarier.com.pl",
+  "loczek.pl",
+  "makeup.pl",
+  "mediamarkt.pl",
+  "mennicaswidnicka.pl",
+  "nutrend.pl",
+  "organic24.pl",
+  "petkarma.pl",
+  "rolmarket.pl",
+  "runcolors.pl",
+  "swiss.com.pl",
+  "trec.pl",
+  "ucando.pl",
+  "wapteka.pl",
+  "zalando.pl",
+  "zegarek.net",
+  "zegarki.pl",
+  "zegarownia.pl",
+  "zooart.com.pl",
+]);
+function asarvoBatch51UseGlobalReaderRecovery(hostRaw: string): boolean {
+  const host = String(hostRaw || "").toLowerCase().replace(/^www\./, "");
+  return ASARVO_BATCH51_GLOBAL_READER_RECOVERY_HOSTS.has(host);
 }
 
 async function searchDirectRetailerCatalogPages(
@@ -19070,6 +31308,7 @@ async function searchDirectRetailerCatalogPages(
   options: DirectRetailerCatalogSearchOptions = {}
 ): Promise<SearchResult[]> {
   const requests = buildDirectRetailerCatalogRequests(parsed, options);
+  asarvoBatch31DiagObserveCall(parsed, options, requests, externalSignal?.aborted === true);
 
 
   console.log("[AIShopping] STORE-B21_FIX5 ordinary retailer selection JSON:", JSON.stringify({
@@ -19087,6 +31326,7 @@ async function searchDirectRetailerCatalogPages(
 
   const chunks = await Promise.all(
     requests.map(({ adapter, urls }) => {
+      asarvoBatch31DiagObserveTask(parsed, adapter.host);
       // V32.17 PARTIAL-ADAPTER PRESERVATION:
       // Each catalog page publishes concrete cards into this adapter-owned
       // collector immediately after parsing. If a sibling page stalls, the
@@ -19139,12 +31379,29 @@ async function searchDirectRetailerCatalogPages(
                 adapter.readerCatalogTimeoutMs ?? 3_200;
               const parallelReaderPageLimit =
                 adapter.readerCatalogMaxPages ?? 1;
+
+              // ASARVO_BATCH91_MORELE_DIRECT_FIRST_READER_RECOVERY_V1
+              // CORE164 intentionally disables generic reader fallback in its
+              // first wave. Morele, however, is an explicitly configured
+              // first-party electronics adapter whose direct catalog transport
+              // can be empty/network-blocked. Admit ONE direct-first fallback
+              // page only for high-constraint tech intent; never eager-parallel.
+              const asarvoBatch91MoreleHighConstraintReaderRecovery =
+                adapter.host === "morele.net" &&
+                isV34Core164HighConstraintRetailIntent(parsed) &&
+                pageIndex === 0;
+              const asarvoBatch91ReaderFallbackAllowed =
+                options.disableReaderFallback !== true ||
+                asarvoBatch91MoreleHighConstraintReaderRecovery;
+
               // V34.STORE-B64 FIX4 DIRECT-FIRST READER POLICY
               const storeB64Fix4WouldRunReaderInParallel =
                 options.disableReaderFallback !== true &&
                 readerStrategy === "parallel" &&
                 pageIndex < parallelReaderPageLimit;
-              const runReaderInParallel = false;
+              const asarvoBatch51GlobalReaderRecovery =
+                pageIndex === 0 && asarvoBatch51UseGlobalReaderRecovery(adapter.host);
+              const runReaderInParallel = asarvoBatch51GlobalReaderRecovery || (options.forceParallelReaderFallback === true || (false));
 
               if (storeB64Fix4WouldRunReaderInParallel) {
                 console.log(
@@ -19183,19 +31440,16 @@ async function searchDirectRetailerCatalogPages(
               }
 
               if (runReaderInParallel && !(pageIndex > 0 && stopSiblingReaderPages)) {
-                parallelReaderPromise = fetchViaJina(
-                  url,
-                  readerTimeoutMs,
-                  false,
-                  adapterSignal
-                );
+                parallelReaderPromise = asarvoBatch40ObserveReaderFetch(parsed, adapter.host, url, readerTimeoutMs, false, adapterSignal, asarvoBatch51GlobalReaderRecovery ? 100 : (options.forceParallelReaderFallback === true ? 100 : 0), adapterDeadlineSignal, externalSignal, asarvoBatch51GlobalReaderRecovery ? adapterDeadlineSignal : (options.forceParallelReaderFallback === true ? adapterDeadlineSignal : undefined));
               }
 
+              asarvoBatch31DiagObserveFetchStart(parsed, adapter.host);
               let fetched = await fetchHtml(
                 url,
                 options.directFetchTimeoutMs ?? 2_800,
                 adapterSignal
               );
+              asarvoBatch31DiagObserveFetchSettled(parsed, adapter.host);
               if (
                 options.disableDirectRetries !== true &&
                 adapter.retryRateLimitedDirectOnce === true &&
@@ -19231,6 +31485,7 @@ async function searchDirectRetailerCatalogPages(
               // payload after the owning discovery phase has been aborted; that
               // ghost CPU work can delay recovery timers and steal the verifier
               // reserve even though its result can no longer enter discovery.
+              asarvoBatch32DiagObservePreHealth(parsed, adapter.host, fetched, adapterSignal.aborted, externalSignal?.aborted === true, adapterDeadlineSignal.aborted);
               if (adapterSignal.aborted) return;
 
               mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
@@ -19255,6 +31510,7 @@ async function searchDirectRetailerCatalogPages(
                   }
                 }
               });
+              asarvoBatch32DiagObserveHealthCommitted(parsed, adapter.host);
 
               if (
                 fetched?.status === 403 ||
@@ -19343,8 +31599,18 @@ async function searchDirectRetailerCatalogPages(
 
               if (
                 parsedCatalogProducts.length === 0 &&
+                asarvoBatch91ReaderFallbackAllowed
+              ) {
+                mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
+                  state.readerEligible += 1;
+                  if (adapterSignal.aborted) state.readerSkippedAborted += 1;
+                });
+              }
+
+              if (
+                parsedCatalogProducts.length === 0 &&
                 !adapterSignal.aborted &&
-                options.disableReaderFallback !== true
+                asarvoBatch91ReaderFallbackAllowed
               ) {
                 if (pageIndex > 0 && stopSiblingReaderPages) {
                   jinaCatalogText = "";
@@ -19378,12 +31644,18 @@ async function searchDirectRetailerCatalogPages(
                       );
                     }
 
-                    jinaCatalogText = await fetchViaJina(
-                      finalUrl,
-                      readerTimeoutMs,
-                      false,
-                      adapterSignal
-                    );
+                    if (asarvoBatch91MoreleHighConstraintReaderRecovery) {
+                      console.log(
+                        "[AIShopping] ASARVO_BATCH91_MORELE_DIRECT_FIRST_READER_RECOVERY",
+                        {
+                          url: finalUrl,
+                          directStatus: fetched?.status ?? null,
+                          usableHtml,
+                          readerTimeoutMs,
+                        }
+                      );
+                    }
+                    jinaCatalogText = await asarvoBatch40ObserveReaderFetch(parsed, adapter.host, finalUrl, readerTimeoutMs, false, adapterSignal, asarvoBatch51GlobalReaderRecovery ? 100 : (options.forceParallelReaderFallback === true ? 100 : 0), adapterDeadlineSignal, externalSignal, asarvoBatch51GlobalReaderRecovery ? adapterDeadlineSignal : (options.forceParallelReaderFallback === true ? adapterDeadlineSignal : undefined));
                   }
                 }
 
@@ -19399,13 +31671,31 @@ async function searchDirectRetailerCatalogPages(
                   mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
                     state.readerSuccesses += 1;
                   });
-                  parsedCatalogProducts = parseRescuedRetailerLandingMarkdown(
+                  
+              const asarvoBatch46Funnel = asarvoBatch46AnalyzeReaderMarkdownFunnel(
+                jinaCatalogText, finalUrl, parsed, adapter.host
+              );
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
+                state.readerMarkdownParseCalls += 1;
+                state.readerMarkdownLinks += asarvoBatch46Funnel.links;
+                state.readerMarkdownSameHostLinks += asarvoBatch46Funnel.sameHost;
+                state.readerMarkdownConcreteAnchors += asarvoBatch46Funnel.concrete;
+                state.readerMarkdownClusters += asarvoBatch46Funnel.clusters;
+                state.readerMarkdownNamedClusters += asarvoBatch46Funnel.named;
+                state.readerMarkdownPriceCards += asarvoBatch46Funnel.priceCards;
+                state.readerMarkdownGateRejects += asarvoBatch46Funnel.gateRejects;
+                state.readerMarkdownGateAccepts += asarvoBatch46Funnel.gateAccepts;
+              });
+parsedCatalogProducts = parseRescuedRetailerLandingMarkdown(
                     jinaCatalogText,
                     finalUrl,
                     parsed,
                     adapter.host,
                     Boolean(adapter.allowDeferredModelIdentityBridge)
                   );
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
+                state.readerMarkdownProducts += parsedCatalogProducts.length;
+              });
 
                   console.log(
                     "[AIShopping] V34.CORE120 direct retailer Jina catalog rescue:",
@@ -19471,6 +31761,91 @@ async function searchDirectRetailerCatalogPages(
             })
           );
 
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch101Recovered = await asarvoBatch101RecoverConfirmedSurface(parsed, adapter, adapterSignal);
+            if (asarvoBatch101Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch101Recovered);
+              onPartialResults?.(asarvoBatch101Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
+                state.products = Math.max(state.products, partialProducts.length);
+              });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch103Recovered = await asarvoBatch103RecoverConfirmedSurface(parsed, adapter, adapterSignal);
+            if (asarvoBatch103Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch103Recovered);
+              onPartialResults?.(asarvoBatch103Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
+                state.products = Math.max(state.products, partialProducts.length);
+              });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch105Recovered = await asarvoBatch105RecoverConfirmedSurface(parsed, adapter, adapterSignal);
+            if (asarvoBatch105Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch105Recovered);
+              onPartialResults?.(asarvoBatch105Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => { state.products = Math.max(state.products, partialProducts.length); });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch108Recovered = await asarvoBatch108RecoverConfirmedSurface(parsed, adapter, adapterSignal);
+            if (asarvoBatch108Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch108Recovered);
+              onPartialResults?.(asarvoBatch108Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => { state.products = Math.max(state.products, partialProducts.length); });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch111Recovered = await asarvoBatch111RecoverMatcherGap(parsed, adapter, adapterSignal);
+            if (asarvoBatch111Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch111Recovered);
+              onPartialResults?.(asarvoBatch111Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => { state.products = Math.max(state.products, partialProducts.length); });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch117Recovered = await asarvoBatch117RecoverStableReader(parsed, adapter, adapterSignal);
+            if (asarvoBatch117Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch117Recovered);
+              onPartialResults?.(asarvoBatch117Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => { state.products = Math.max(state.products, partialProducts.length); });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch120Recovered = await asarvoBatch120RecoverMatcherQualifier(parsed, adapter, adapterSignal);
+            if (asarvoBatch120Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch120Recovered);
+              onPartialResults?.(asarvoBatch120Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => { state.products = Math.max(state.products, partialProducts.length); });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch126Recovered = await asarvoBatch126RecoverParserHydration(parsed, adapter, adapterSignal);
+            if (asarvoBatch126Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch126Recovered);
+              onPartialResults?.(asarvoBatch126Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => { state.products = Math.max(state.products, partialProducts.length); });
+            }
+          }
+
+          if (partialProducts.length === 0 && !adapterDeadlineSignal.aborted) {
+            const asarvoBatch129Recovered = await asarvoBatch129RecoverDetectedSearchEndpoint(parsed, adapter, adapterSignal);
+            if (asarvoBatch129Recovered.length > 0) {
+              collectPartialProducts(asarvoBatch129Recovered);
+              onPartialResults?.(asarvoBatch129Recovered);
+              mutateRetailerRequestHealth(parsed, adapter.host, (state) => { state.products = Math.max(state.products, partialProducts.length); });
+            }
+          }
+
           const unique = [...partialProducts];
           mutateRetailerRequestHealth(parsed, adapter.host, (state) => {
             state.products = Math.max(state.products, unique.length);
@@ -19489,7 +31864,7 @@ async function searchDirectRetailerCatalogPages(
 
           return unique;
         },
-        options.adapterBudgetMs ?? getV34Core164DefaultDirectAdapterBudgetMs(parsed),
+        getAsarvoReaderAlignedDirectAdapterBudgetMs(parsed, adapter, urls, options.adapterBudgetMs),
         getPartialSnapshot,
         `direct retailer adapter: ${adapter.host}`
       );
@@ -19673,6 +32048,22 @@ function getNegativeTerms(category: string | null): string[] {
       "skórka na pada",
       "skorka na pada",
       "skin do pada",
+    ];
+  }
+
+  // ASARVO_INTENT_CORE_V1_TV_NEGATIVES
+  if (category === "tv") {
+    return [
+      ...common,
+      "pilot do telewizora", "pilot do tv", "remote do telewizora", "remote for tv",
+      "matryca do telewizora", "ekran do telewizora", "panel do telewizora",
+      "lcd do telewizora", "panel lcd do telewizora",
+      "uchwyt do telewizora", "uchwyt tv", "tv wall mount",
+      "podstawa do telewizora", "podstawka do telewizora", "stojak do telewizora",
+      "nóżki do telewizora", "nozki do telewizora",
+      "zasilacz do telewizora", "płyta główna tv", "plyta glowna tv",
+      "taśma led do telewizora", "tasma led do telewizora",
+      "podświetlenie do telewizora", "podswietlenie do telewizora"
     ];
   }
 
@@ -20228,6 +32619,83 @@ function acquireOutboundFetchSlot(
   });
 }
 
+// ASARVO_MVP_BING_SHIELD_V2: independently budget Bing HTML/RSS concurrency.
+// Network traces (2026-10-19) observed 366 Bing requests across two 3-query
+// runs competing with first-party catalogs in the shared 18-slot pool.
+// Bing waiters hold NO global fetch slot. AbortSignal.timeout and the owning
+// discovery AbortSignal include queue time, so expired queries never start.
+// Do not change fetch retries, matching, pricing, or first-party adapter rules.
+const ASARVO_MVP_BING_FETCH_MAX_CONCURRENCY = 6;
+let asarvoMvpBingFetchActive = 0;
+type AsarvoMvpBingWaiter = { grant: () => void; signal: AbortSignal; cancel: () => void };
+const asarvoMvpBingFetchQueue: AsarvoMvpBingWaiter[] = [];
+
+function asarvoMvpBingDrainQueue(): void {
+  while (
+    asarvoMvpBingFetchActive < ASARVO_MVP_BING_FETCH_MAX_CONCURRENCY &&
+    asarvoMvpBingFetchQueue.length > 0
+  ) {
+    const waiter = asarvoMvpBingFetchQueue.shift();
+    if (!waiter) break;
+    if (waiter.signal.aborted) { waiter.cancel(); continue; }
+    waiter.grant();
+  }
+}
+
+function asarvoMvpAcquireBingFetchSlot(signal: AbortSignal): Promise<() => void> {
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let released = false;
+    let waiter: AsarvoMvpBingWaiter;
+    const onAbort = () => {
+      if (settled) return;
+      settled = true;
+      const index = asarvoMvpBingFetchQueue.indexOf(waiter);
+      if (index >= 0) asarvoMvpBingFetchQueue.splice(index, 1);
+      signal.removeEventListener("abort", onAbort);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const grant = () => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener("abort", onAbort);
+      asarvoMvpBingFetchActive += 1;
+      resolve(() => {
+        if (released) return;
+        released = true;
+        asarvoMvpBingFetchActive = Math.max(0, asarvoMvpBingFetchActive - 1);
+        asarvoMvpBingDrainQueue();
+      });
+    };
+    waiter = { grant, signal, cancel: onAbort };
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (asarvoMvpBingFetchActive < ASARVO_MVP_BING_FETCH_MAX_CONCURRENCY) {
+      grant();
+    } else {
+      asarvoMvpBingFetchQueue.push(waiter);
+    }
+  });
+}
+
+function asarvoMvpIsBingSearchUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.hostname.toLowerCase() === "www.bing.com" && u.pathname === "/search";
+  } catch { return false; }
+}
+
+// ASARVO_MVP_BING_DEADLINE_V3: use the earlier branch deadline as a real
+// AbortSignal for main-discovery Bing requests. An expired branch must not
+// keep occupying one of the six Bing slots or a shared global fetch slot.
+// Other sources and later targeted recovery stay unchanged.
+function asarvoMvpBingDiscoverySignal(
+  parentSignal: AbortSignal | undefined,
+  branchSignal: AbortSignal
+): AbortSignal {
+  return parentSignal ? AbortSignal.any([parentSignal, branchSignal]) : branchSignal;
+}
+
 async function fetchHtml(
   url: string,
   timeoutMs = FETCH_TIMEOUT_MS,
@@ -20239,8 +32707,16 @@ async function fetchHtml(
     : timeoutSignal;
 
   let releaseSlot: (() => void) | null = null;
+  let releaseBingSlot: (() => void) | null = null;
 
   try {
+    if (fetchSignal.aborted) return null;
+
+    // Search-index requests must not occupy all 18 global slots before
+    // retailer-owned catalog and verified product-page work can start.
+    if (asarvoMvpIsBingSearchUrl(url)) {
+      releaseBingSlot = await asarvoMvpAcquireBingFetchSlot(fetchSignal);
+    }
     if (fetchSignal.aborted) return null;
 
     releaseSlot = await acquireOutboundFetchSlot(fetchSignal);
@@ -20272,6 +32748,7 @@ async function fetchHtml(
     return null;
   } finally {
     releaseSlot?.();
+    releaseBingSlot?.();
   }
 }
 
@@ -20280,7 +32757,62 @@ const JINA_MIN_INTERVAL_MS = 1000;
 const JINA_RETRY_DELAY_MS = 1800;
 
 let jinaNextStartAt = 0;
-let jinaStartQueue: Promise<void> = Promise.resolve();
+// ASARVO_BATCH43_PRIORITY_JINA_RESCUE_SCHEDULER_V1
+type AsarvoBatch43JinaStartWaiter = {
+  priority: number;
+  sequence: number;
+  signal?: AbortSignal;
+  grant: () => void;
+  cancel: () => void;
+};
+let asarvoBatch43JinaStartSequence = 0;
+const asarvoBatch43JinaStartWaiters: AsarvoBatch43JinaStartWaiter[] = [];
+let asarvoBatch43JinaStartPumpRunning = false;
+
+function asarvoBatch43CancelAbortedJinaWaiters(): void {
+  for (let index = asarvoBatch43JinaStartWaiters.length - 1; index >= 0; index -= 1) {
+    const waiter = asarvoBatch43JinaStartWaiters[index];
+    if (!waiter.signal?.aborted) continue;
+    asarvoBatch43JinaStartWaiters.splice(index, 1);
+    waiter.cancel();
+  }
+}
+
+function asarvoBatch43TakeNextJinaWaiter(): AsarvoBatch43JinaStartWaiter | null {
+  asarvoBatch43CancelAbortedJinaWaiters();
+  if (asarvoBatch43JinaStartWaiters.length === 0) return null;
+  let bestIndex = 0;
+  for (let index = 1; index < asarvoBatch43JinaStartWaiters.length; index += 1) {
+    const candidate = asarvoBatch43JinaStartWaiters[index];
+    const best = asarvoBatch43JinaStartWaiters[bestIndex];
+    if (candidate.priority > best.priority ||
+        (candidate.priority === best.priority && candidate.sequence < best.sequence)) {
+      bestIndex = index;
+    }
+  }
+  return asarvoBatch43JinaStartWaiters.splice(bestIndex, 1)[0] ?? null;
+}
+
+async function asarvoBatch43PumpJinaStartQueue(): Promise<void> {
+  if (asarvoBatch43JinaStartPumpRunning) return;
+  asarvoBatch43JinaStartPumpRunning = true;
+  try {
+    while (true) {
+      asarvoBatch43CancelAbortedJinaWaiters();
+      if (asarvoBatch43JinaStartWaiters.length === 0) break;
+      const waitMs = Math.max(0, jinaNextStartAt - Date.now());
+      if (waitMs > 0) await sleep(waitMs);
+      const waiter = asarvoBatch43TakeNextJinaWaiter();
+      if (!waiter) continue;
+      if (waiter.signal?.aborted) { waiter.cancel(); continue; }
+      jinaNextStartAt = Date.now() + JINA_MIN_INTERVAL_MS;
+      waiter.grant();
+    }
+  } finally {
+    asarvoBatch43JinaStartPumpRunning = false;
+    if (asarvoBatch43JinaStartWaiters.length > 0) void asarvoBatch43PumpJinaStartQueue();
+  }
+}
 
 function sleep(ms: number, externalSignal?: AbortSignal): Promise<void> {
   if (externalSignal?.aborted) return Promise.resolve();
@@ -20301,50 +32833,80 @@ function sleep(ms: number, externalSignal?: AbortSignal): Promise<void> {
   });
 }
 
+
+
+// ASARVO_BATCH42_JINA_START_PIPELINE_DIAGNOSTICS_V1
+type AsarvoBatch42JinaObserver = (
+  event: "queue-enter" | "slot-granted" | "http-start" | "http-response" | "internal-error" | "local-timeout",
+  value?: number
+) => void;
 async function waitForJinaStartSlot(
-  externalSignal?: AbortSignal
+  externalSignal?: AbortSignal,
+  observer?: AsarvoBatch42JinaObserver,
+  priority = 0
 ): Promise<void> {
-  const turn = jinaStartQueue.then(async () => {
-    const now = Date.now();
-    const waitMs = Math.max(0, jinaNextStartAt - now);
-
-    if (waitMs > 0) {
-      await sleep(waitMs, externalSignal);
-    }
-
-    if (externalSignal?.aborted) return;
-
-    jinaNextStartAt = Date.now() + JINA_MIN_INTERVAL_MS;
+  observer?.("queue-enter", Date.now());
+  if (externalSignal?.aborted) return;
+  await new Promise<void>((resolve) => {
+    let settled = false;
+    let waiter: AsarvoBatch43JinaStartWaiter;
+    const finish = (granted: boolean) => {
+      if (settled) return;
+      settled = true;
+      externalSignal?.removeEventListener("abort", onAbort);
+      if (granted) observer?.("slot-granted", Date.now());
+      resolve();
+    };
+    const onAbort = () => {
+      const index = asarvoBatch43JinaStartWaiters.indexOf(waiter);
+      if (index >= 0) asarvoBatch43JinaStartWaiters.splice(index, 1);
+      finish(false);
+    };
+    waiter = {
+      priority: Number.isFinite(priority) ? priority : 0,
+      sequence: asarvoBatch43JinaStartSequence++,
+      signal: externalSignal,
+      grant: () => finish(true),
+      cancel: () => finish(false),
+    };
+    externalSignal?.addEventListener("abort", onAbort, { once: true });
+    asarvoBatch43JinaStartWaiters.push(waiter);
+    void asarvoBatch43PumpJinaStartQueue();
   });
-
-  jinaStartQueue = turn.then(
-    () => undefined,
-    () => undefined
-  );
-
-  await turn;
 }
+
+// ASARVO_BATCH45_RESCUE_HTTP_SETTLE2600_V1
+const ASARVO_BATCH45_RESCUE_HTTP_SETTLE_MS = 2_600;
 
 async function performJinaRequest(
   clean: string,
   timeoutMs: number,
   externalSignal?: AbortSignal,
-  forceFresh = false
+  forceFresh = false,
+  observer?: AsarvoBatch42JinaObserver,
+  priority = 0,
+  httpSignalOverride?: AbortSignal
 ): Promise<Response> {
-  await waitForJinaStartSlot(externalSignal);
+  await waitForJinaStartSlot(externalSignal, observer, priority);
 
   if (externalSignal?.aborted) {
     throw new DOMException("Aborted", "AbortError");
   }
 
+  observer?.("http-start", Date.now());
   return fetch(`https://r.jina.ai/${clean}`, {
     cache: "no-store",
-    signal: externalSignal
+    signal: priority > 0 && httpSignalOverride
+      ? AbortSignal.any([
+          AbortSignal.timeout(Math.min(timeoutMs, ASARVO_BATCH45_RESCUE_HTTP_SETTLE_MS)),
+          httpSignalOverride,
+        ])
+      : (externalSignal
       ? AbortSignal.any([
           AbortSignal.timeout(timeoutMs),
           externalSignal,
         ])
-      : AbortSignal.timeout(timeoutMs),
+      : AbortSignal.timeout(timeoutMs)),
     headers: {
       Accept: "text/plain,text/markdown,*/*",
       "User-Agent": "AIShopping/1.0 (+free-fallback-reader)",
@@ -20362,7 +32924,10 @@ async function fetchViaJina(
   url: string,
   timeoutMs = 9000,
   allowTransientRetry = true,
-  externalSignal?: AbortSignal
+  externalSignal?: AbortSignal,
+  observer?: AsarvoBatch42JinaObserver,
+  priority = 0,
+  httpSignalOverride?: AbortSignal
 ): Promise<string> {
   const clean = normalizeUrl(url);
   if (!clean || externalSignal?.aborted) return "";
@@ -20371,8 +32936,13 @@ async function fetchViaJina(
     let response = await performJinaRequest(
       clean,
       timeoutMs,
-      externalSignal
+      externalSignal,
+      false,
+      observer,
+      priority,
+      httpSignalOverride
     );
+    observer?.("http-response", response.status);
 
     if (
       allowTransientRetry &&
@@ -20393,10 +32963,15 @@ async function fetchViaJina(
       if (externalSignal?.aborted) return "";
 
       response = await performJinaRequest(
-        clean,
-        timeoutMs,
-        externalSignal
-      );
+      clean,
+      timeoutMs,
+      externalSignal,
+      false,
+      observer,
+      priority,
+      httpSignalOverride
+    );
+    observer?.("http-response", response.status);
     }
 
     if (!response.ok) {
@@ -20410,6 +32985,12 @@ async function fetchViaJina(
 
     return await response.text();
   } catch (error) {
+    if (!externalSignal?.aborted) {
+      const asarvoBatch44ErrorName = error && typeof error === "object" && "name" in error
+        ? String((error as { name?: unknown }).name ?? "")
+        : "";
+      observer?.(asarvoBatch44ErrorName === "TimeoutError" ? "local-timeout" : "internal-error", Date.now());
+    }
     if (externalSignal?.aborted) return "";
 
     console.log("[AIShopping] Jina fallback error:", clean, error);
@@ -20754,7 +33335,7 @@ function extractPriceNearProductName(
   debugLogging = true
 ): PriceInfo {
   const text = normalizeText(
-    decodeHtml(textRaw)
+    decodeHtml(normalizeAsarvoRetailDecimalDotBeforeCurrency(textRaw))
       .replace(/\u00a0/g, " ")
       .replace(/\u202f/g, " ")
   );
@@ -22209,16 +34790,28 @@ function parseCeneoMerchantOffersFromHtml(
       "iu"
     );
     const merchantSelectedPriceMatch = merchantSelectedPricePattern.exec(normalizeText(cardText));
+    // ASARVO_MVP_C1_PROMO_PRICE_FAIL_CLOSED:
+    // A merchant row may contain a promotional benefit amount (for example
+    // "Nawet 1400 zł bonusu") that is not the amount payable for the item.
+    // The selected number MUST be rejected when its own local occurrence is
+    // a financing or promotional-benefit amount. Do not guess another price.
     if (
       merchantSelectedPriceMatch &&
-      isLikelyFinancingAmountAt(
-        normalizeText(cardText),
-        merchantSelectedPriceMatch.index,
-        merchantSelectedPriceMatch[0].length
+      (
+        isLikelyFinancingAmountAt(
+          normalizeText(cardText),
+          merchantSelectedPriceMatch.index,
+          merchantSelectedPriceMatch[0].length
+        ) ||
+        isLikelyPromotionalBenefitAmountAt(
+          normalizeText(cardText),
+          merchantSelectedPriceMatch.index,
+          merchantSelectedPriceMatch[0].length
+        )
       )
     ) {
       console.log(
-        "[AIShopping] V34.CORE120 Ceneo merchant reject financing amount as item price:",
+        "[AIShopping] ASARVO_MVP_C1 Ceneo merchant reject non-payable amount:",
         offerName,
         priceInfo.price
       );
@@ -22653,10 +35246,10 @@ function isLikelyPromotionalBenefitAmountAt(
     /^\s*(?:do|na)\s+[A-ZĄĆĘŁŃÓŚŹŻ]{2,6}\b/u.test(afterRaw);
 
   return (
-    /(?:czek\s+blik|cashback|zwrot|rabat|kupon|bon|voucher|kod\s+rabatowy|oszczedz|oszczędź)(?:\s+[a-z0-9%+-]+){0,4}\s*(?:do|o|wartosc|wartość)?\s*$/iu.test(tail) ||
+    /(?:czek\s+blik|cashback|bonus|zwrot|rabat|kupon|bon|voucher|kod\s+rabatowy|oszczedz|oszczędź)(?:\s+[a-z0-9%+-]+){0,4}\s*(?:do|o|wartosc|wartość)?\s*$/iu.test(tail) ||
     /\b(?:zyskaj|otrzymaj|dobierz)\b.{0,65}\b(?:zestaw|akcesori\w*|produkt\w*|gratis)\b.{0,30}\bza\s*$/iu.test(tail) ||
     /\b(?:(?:drugi|trzeci|czwarty|piaty|piąty|szosty|szósty|kolejny|nastepny|następny)|\d{1,2}[.]?)\s+(?:wybrany\s+)?produkt\b.{0,35}\bza\s*$/iu.test(tail) ||
-    /^\s*(?:zwrotu|rabatu|cashbacku|bonu|kuponu|taniej|gratis)\b/iu.test(after) ||
+    /^\s*(?:zwrotu|rabatu|cashbacku|bonu|bonusu|bonusem|bonus|kuponu|taniej|gratis)\b/iu.test(after) ||
     explicitBenefitDestination ||
     shortProgramDestination
   );
@@ -23434,6 +36027,454 @@ function getStructuredIdentityScore(
   return score;
 }
 
+// ASARVO_SEARCH_CORE_V18_MEGA100M_SELECTED_SKU_STRUCTURED_OWNERSHIP
+//
+// Structured selected-SKU / variant ownership hardening.
+//
+// A concrete retailer page can expose JSON-LD for:
+// - the current Product,
+// - a ProductGroup,
+// - sibling hasVariant Products,
+// - multiple Offer/AggregateOffer nodes.
+//
+// V18 prevents transactional evidence from one sibling/family aggregate from
+// leaking into the currently selected product. Product-family metadata may
+// still identify the page, but price/availability/condition/shipping are
+// accepted only from a transactionally-owned concrete node/offer surface.
+//
+// This does NOT relax any verifier gate. It is a fail-closed ownership layer.
+
+function asarvoSearchCoreV18NormalizeStructuredIdentifier(
+  valueRaw: unknown
+): string {
+  return normalizeMatchText(
+    String(
+      valueRaw ?? ""
+    )
+  ).replace(
+    /[^a-z0-9]+/giu,
+    ""
+  );
+}
+
+function asarvoSearchCoreV18StructuredIdentifiers(
+  node: any
+): Set<string> {
+  const values: unknown[] = [
+    node?.sku,
+    node?.mpn,
+    node?.gtin,
+    node?.gtin8,
+    node?.gtin12,
+    node?.gtin13,
+    node?.gtin14,
+    node?.productID,
+    node?.productId,
+  ];
+
+  const identifierNodes =
+    Array.isArray(
+      node?.identifier
+    )
+      ? node.identifier
+      : node?.identifier
+        ? [node.identifier]
+        : [];
+
+  for (
+    const identifierNode of
+    identifierNodes
+  ) {
+    if (
+      typeof identifierNode === "string" ||
+      typeof identifierNode === "number"
+    ) {
+      values.push(
+        identifierNode
+      );
+      continue;
+    }
+
+    if (
+      identifierNode &&
+      typeof identifierNode === "object"
+    ) {
+      values.push(
+        identifierNode.value,
+        identifierNode.valueReference,
+        identifierNode.propertyID,
+        identifierNode.name
+      );
+    }
+  }
+
+  return new Set(
+    values
+      .map(
+        asarvoSearchCoreV18NormalizeStructuredIdentifier
+      )
+      .filter(
+        (value) =>
+          value.length >= 4
+      )
+  );
+}
+
+function asarvoSearchCoreV18StructuredNodeUrl(
+  node: any
+): string {
+  return normalizeUrl(
+    String(
+      node?.url ??
+      node?.["@id"] ??
+      ""
+    )
+  );
+}
+
+function asarvoSearchCoreV18HasVariantSurface(
+  node: any
+): boolean {
+  if (
+    hasSchemaType(
+      node,
+      "productgroup"
+    )
+  ) {
+    return true;
+  }
+
+  return Boolean(
+    node?.hasVariant ||
+    node?.variant ||
+    node?.variants ||
+    node?.variesBy ||
+    node?.productGroupID ||
+    node?.productGroupId
+  );
+}
+
+function asarvoSearchCoreV18OfferExplicitUrls(
+  offerNodes: any[]
+): Set<string> {
+  return new Set(
+    offerNodes
+      .map(
+        (offer) =>
+          asarvoSearchCoreV18StructuredNodeUrl(
+            offer
+          )
+      )
+      .filter(Boolean)
+  );
+}
+
+function asarvoSearchCoreV18OfferIdentifierUniverse(
+  offerNodes: any[]
+): Set<string> {
+  const values =
+    new Set<string>();
+
+  for (
+    const offer of
+    offerNodes
+  ) {
+    for (
+      const value of
+      asarvoSearchCoreV18StructuredIdentifiers(
+        offer
+      )
+    ) {
+      values.add(
+        value
+      );
+    }
+
+    const itemOffered =
+      offer?.itemOffered;
+
+    if (
+      itemOffered &&
+      typeof itemOffered === "object"
+    ) {
+      for (
+        const value of
+        asarvoSearchCoreV18StructuredIdentifiers(
+          itemOffered
+        )
+      ) {
+        values.add(
+          value
+        );
+      }
+    }
+  }
+
+  return values;
+}
+
+function asarvoSearchCoreV18SetsIntersect(
+  first: Set<string>,
+  second: Set<string>
+): boolean {
+  if (
+    first.size === 0 ||
+    second.size === 0
+  ) {
+    return false;
+  }
+
+  for (
+    const value of
+    first
+  ) {
+    if (
+      second.has(
+        value
+      )
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function asarvoSearchCoreV18StructuredOwnershipScore(
+  node: any,
+  expectedNameRaw: string,
+  expectedUrlRaw: string
+): number {
+  const base =
+    getStructuredIdentityScore(
+      node,
+      expectedNameRaw,
+      expectedUrlRaw
+    );
+
+  const expectedUrl =
+    normalizeUrl(
+      expectedUrlRaw
+    );
+
+  const nodeUrl =
+    asarvoSearchCoreV18StructuredNodeUrl(
+      node
+    );
+
+  let score =
+    base;
+
+  if (
+    expectedUrl &&
+    nodeUrl &&
+    expectedUrl === nodeUrl
+  ) {
+    score += 260;
+  }
+
+  if (
+    hasSchemaType(
+      node,
+      "individualproduct"
+    )
+  ) {
+    score += 90;
+  } else if (
+    hasSchemaType(
+      node,
+      "product"
+    )
+  ) {
+    score += 60;
+  }
+
+  if (
+    asarvoSearchCoreV18HasVariantSurface(
+      node
+    )
+  ) {
+    // ProductGroup/family nodes can identify the page but are deliberately
+    // weaker than a matching concrete Product/IndividualProduct child.
+    score -= 180;
+  }
+
+  return score;
+}
+
+function asarvoSearchCoreV18OwnedStructuredOffers(
+  node: any,
+  offerNodes: any[],
+  expectedUrlRaw: string
+): {
+  offers: any[];
+  transactionalSafe: boolean;
+  familyAggregate: boolean;
+  variantAmbiguous: boolean;
+} {
+  const expectedUrl =
+    normalizeUrl(
+      expectedUrlRaw
+    );
+
+  const familyAggregate =
+    asarvoSearchCoreV18HasVariantSurface(
+      node
+    );
+
+  if (
+    familyAggregate
+  ) {
+    // A ProductGroup (or Product carrying hasVariant) can contain a default or
+    // aggregate family price/stock. Never use those transactionally. A concrete
+    // child Product is ranked separately and can own its own Offer.
+    return {
+      offers: [],
+      transactionalSafe: false,
+      familyAggregate: true,
+      variantAmbiguous: true,
+    };
+  }
+
+  const nodeUrl =
+    asarvoSearchCoreV18StructuredNodeUrl(
+      node
+    );
+
+  const nodeIdentifiers =
+    asarvoSearchCoreV18StructuredIdentifiers(
+      node
+    );
+
+  const explicitOfferUrls =
+    asarvoSearchCoreV18OfferExplicitUrls(
+      offerNodes
+    );
+
+  const offerIdentifierUniverse =
+    asarvoSearchCoreV18OfferIdentifierUniverse(
+      offerNodes
+    );
+
+  const variantAmbiguous =
+    explicitOfferUrls.size >= 2 ||
+    (
+      nodeIdentifiers.size > 0 &&
+      offerIdentifierUniverse.size >= 2
+    );
+
+  // Old single-product JSON-LD remains fully compatible.
+  if (
+    !variantAmbiguous
+  ) {
+    return {
+      offers: offerNodes,
+      transactionalSafe: true,
+      familyAggregate: false,
+      variantAmbiguous: false,
+    };
+  }
+
+  const exactUrlOffers =
+    expectedUrl
+      ? offerNodes.filter(
+          (offer) =>
+            asarvoSearchCoreV18StructuredNodeUrl(
+              offer
+            ) === expectedUrl
+        )
+      : [];
+
+  if (
+    exactUrlOffers.length > 0
+  ) {
+    return {
+      offers: exactUrlOffers,
+      transactionalSafe: true,
+      familyAggregate: false,
+      variantAmbiguous: true,
+    };
+  }
+
+  if (
+    nodeIdentifiers.size > 0
+  ) {
+    const identifierOwned =
+      offerNodes.filter(
+        (offer) => {
+          const offerIdentifiers =
+            asarvoSearchCoreV18StructuredIdentifiers(
+              offer
+            );
+
+          const itemOfferedIdentifiers =
+            offer?.itemOffered &&
+            typeof offer.itemOffered === "object"
+              ? asarvoSearchCoreV18StructuredIdentifiers(
+                  offer.itemOffered
+                )
+              : new Set<string>();
+
+          return (
+            asarvoSearchCoreV18SetsIntersect(
+              nodeIdentifiers,
+              offerIdentifiers
+            ) ||
+            asarvoSearchCoreV18SetsIntersect(
+              nodeIdentifiers,
+              itemOfferedIdentifiers
+            )
+          );
+        }
+      );
+
+    if (
+      identifierOwned.length > 0
+    ) {
+      return {
+        offers: identifierOwned,
+        transactionalSafe: true,
+        familyAggregate: false,
+        variantAmbiguous: true,
+      };
+    }
+  }
+
+  // Exact page ownership lets URL-less offers stay attached to the selected
+  // concrete Product, but explicitly different sibling URLs are excluded.
+  if (
+    expectedUrl &&
+    nodeUrl &&
+    expectedUrl === nodeUrl
+  ) {
+    const urlLessOnly =
+      offerNodes.filter(
+        (offer) =>
+          !asarvoSearchCoreV18StructuredNodeUrl(
+            offer
+          )
+      );
+
+    if (
+      urlLessOnly.length > 0
+    ) {
+      return {
+        offers: urlLessOnly,
+        transactionalSafe: true,
+        familyAggregate: false,
+        variantAmbiguous: true,
+      };
+    }
+  }
+
+  return {
+    offers: [],
+    transactionalSafe: false,
+    familyAggregate: false,
+    variantAmbiguous: true,
+  };
+}
+
 function extractStructuredProductOfferEvidence(
   html: string,
   expectedNameRaw: string,
@@ -23454,133 +36495,429 @@ function extractStructuredProductOfferEvidence(
   };
 
   const productNodes: any[] = [];
-  const visit = (value: any, depth: number): void => {
-    if (!value || depth > 9) return;
-    if (Array.isArray(value)) {
-      value.forEach((item) => visit(item, depth + 1));
+
+  const visit = (
+    value: any,
+    depth: number
+  ): void => {
+    if (
+      !value ||
+      depth > 9
+    ) {
       return;
     }
-    if (typeof value !== "object") return;
 
     if (
-      hasSchemaType(value, "product") ||
-      hasSchemaType(value, "productgroup") ||
-      hasSchemaType(value, "individualproduct")
+      Array.isArray(
+        value
+      )
     ) {
-      productNodes.push(value);
+      value.forEach(
+        (item) =>
+          visit(
+            item,
+            depth + 1
+          )
+      );
+      return;
     }
 
-    for (const child of Object.values(value)) {
-      if (typeof child === "object" && child !== null) visit(child, depth + 1);
+    if (
+      typeof value !==
+      "object"
+    ) {
+      return;
+    }
+
+    if (
+      hasSchemaType(
+        value,
+        "product"
+      ) ||
+      hasSchemaType(
+        value,
+        "productgroup"
+      ) ||
+      hasSchemaType(
+        value,
+        "individualproduct"
+      )
+    ) {
+      productNodes.push(
+        value
+      );
+    }
+
+    for (
+      const child of
+      Object.values(
+        value
+      )
+    ) {
+      if (
+        typeof child === "object" &&
+        child !== null
+      ) {
+        visit(
+          child,
+          depth + 1
+        );
+      }
     }
   };
 
-  for (const document of parseJsonLdDocuments(html)) visit(document, 0);
-  if (productNodes.length === 0) return empty;
+  for (
+    const document of
+    parseJsonLdDocuments(
+      html
+    )
+  ) {
+    visit(
+      document,
+      0
+    );
+  }
 
-  const ranked = productNodes
-    .map((node) => ({
+  if (
+    productNodes.length === 0
+  ) {
+    return empty;
+  }
+
+  const ranked =
+    productNodes
+      .map(
+        (node) => ({
+          node,
+          identityScore:
+            getStructuredIdentityScore(
+              node,
+              expectedNameRaw,
+              expectedUrlRaw
+            ),
+          ownershipScore:
+            asarvoSearchCoreV18StructuredOwnershipScore(
+              node,
+              expectedNameRaw,
+              expectedUrlRaw
+            ),
+        })
+      )
+      .sort(
+        (first, second) =>
+          second.ownershipScore -
+            first.ownershipScore ||
+          second.identityScore -
+            first.identityScore
+      );
+
+  const selected =
+    ranked[0];
+
+  if (
+    !selected ||
+    selected.identityScore < 70
+  ) {
+    return empty;
+  }
+
+  const node =
+    selected.node;
+
+  const rawOfferNodes =
+    collectStructuredOfferNodes(
+      node
+    );
+
+  const ownership =
+    asarvoSearchCoreV18OwnedStructuredOffers(
       node,
-      score: getStructuredIdentityScore(node, expectedNameRaw, expectedUrlRaw),
-    }))
-    .sort((a, b) => b.score - a.score);
+      rawOfferNodes,
+      expectedUrlRaw
+    );
 
-  const selected = ranked[0];
-  if (!selected || selected.score < 70) return empty;
+  const offerNodes =
+    ownership.offers;
 
-  const node = selected.node;
-  const offerNodes = collectStructuredOfferNodes(node);
   const priceCandidates: Array<{
     price: number;
     currency: string;
     score: number;
   }> = [];
 
-  for (const offer of offerNodes) {
-    const specification = offer?.priceSpecification;
-    const specs = Array.isArray(specification)
-      ? specification
-      : specification
-        ? [specification]
-        : [];
+  if (
+    ownership.transactionalSafe
+  ) {
+    for (
+      const offer of
+      offerNodes
+    ) {
+      const specification =
+        offer?.priceSpecification;
 
-    const addStructuredPrice = (
-      rawPrice: unknown,
-      rawCurrency: unknown,
-      score: number
-    ) => {
-      if (rawPrice == null) return;
-      const price = parseNumber(String(rawPrice));
-      const currency = normalizeCurrency(String(rawCurrency ?? ""));
-      if (price !== null && price > 0 && currency) {
-        priceCandidates.push({ price, currency, score });
-      }
-    };
+      const specs =
+        Array.isArray(
+          specification
+        )
+          ? specification
+          : specification
+            ? [specification]
+            : [];
 
-    addStructuredPrice(
-      offer?.price,
-      offer?.priceCurrency,
-      320
-    );
+      const addStructuredPrice = (
+        rawPrice: unknown,
+        rawCurrency: unknown,
+        score: number
+      ) => {
+        if (
+          rawPrice == null
+        ) {
+          return;
+        }
 
-    for (const spec of specs) {
+        const price =
+          parseNumber(
+            String(
+              rawPrice
+            )
+          );
+
+        const currency =
+          normalizeCurrency(
+            String(
+              rawCurrency ??
+              ""
+            )
+          );
+
+        if (
+          price !== null &&
+          price > 0 &&
+          currency
+        ) {
+          priceCandidates.push({
+            price,
+            currency,
+            score,
+          });
+        }
+      };
+
       addStructuredPrice(
-        spec?.price ?? spec?.value,
-        spec?.priceCurrency ?? spec?.currency ?? offer?.priceCurrency,
-        300
+        offer?.price,
+        offer?.priceCurrency,
+        320
       );
-    }
 
-    addStructuredPrice(
-      offer?.lowPrice,
-      offer?.priceCurrency,
-      220
+      for (
+        const spec of
+        specs
+      ) {
+        addStructuredPrice(
+          spec?.price ??
+            spec?.value,
+          spec?.priceCurrency ??
+            spec?.currency ??
+            offer?.priceCurrency,
+          300
+        );
+      }
+
+      // Aggregate/family lowPrice is unsafe on a variant-ambiguous surface.
+      if (
+        !ownership.variantAmbiguous &&
+        !hasSchemaType(
+          offer,
+          "aggregateoffer"
+        )
+      ) {
+        addStructuredPrice(
+          offer?.lowPrice,
+          offer?.priceCurrency,
+          220
+        );
+      }
+    }
+  }
+
+  priceCandidates.sort(
+    (first, second) =>
+      second.score -
+        first.score ||
+      first.price -
+        second.price
+  );
+
+  const bestPrice =
+    priceCandidates[0];
+
+  const availabilityValues =
+    ownership.transactionalSafe
+      ? offerNodes
+          .map(
+            (offer) =>
+              normalizeSchemaAvailability(
+                offer?.availability
+              )
+          )
+          .filter(
+            (value) =>
+              value !==
+              "unknown"
+          )
+      : [];
+
+  const availability =
+    !ownership.transactionalSafe
+      ? "unknown"
+      : availabilityValues.includes(
+          "available"
+        )
+        ? "available"
+        : availabilityValues.includes(
+            "unavailable"
+          )
+          ? "unavailable"
+          : ownership.variantAmbiguous
+            ? "unknown"
+            : normalizeSchemaAvailability(
+                node?.availability
+              );
+
+  const condition =
+    !ownership.transactionalSafe
+      ? null
+      : offerNodes
+          .map(
+            (offer) =>
+              normalizeSchemaCondition(
+                offer?.itemCondition
+              )
+          )
+          .find(
+            (
+              value
+            ): value is Exclude<
+              Condition,
+              null
+            > =>
+              value !== null
+          ) ??
+        (
+          ownership.variantAmbiguous
+            ? null
+            : normalizeSchemaCondition(
+                node?.itemCondition
+              )
+        );
+
+  const ratingRaw =
+    node?.aggregateRating
+      ?.ratingValue ??
+    node?.reviewRating
+      ?.ratingValue;
+
+  const ratingParsed =
+    ratingRaw != null
+      ? Number(
+          String(
+            ratingRaw
+          ).replace(
+            ",",
+            "."
+          )
+        )
+      : NaN;
+
+  const safeDescription =
+    ownership.familyAggregate
+      ? ""
+      : normalizeText(
+          decodeHtml(
+            String(
+              node?.description ??
+              ""
+            )
+          )
+        ).slice(
+          0,
+          12_000
+        );
+
+  if (
+    ownership.variantAmbiguous &&
+    !ownership.transactionalSafe
+  ) {
+    console.log(
+      "[AIShopping] SEARCH_V18 suppress ambiguous structured variant transaction:",
+      getResultHostname(
+        expectedUrlRaw
+      ),
+      {
+        expectedUrl:
+          normalizeUrl(
+            expectedUrlRaw
+          ),
+        structuredName:
+          normalizeText(
+            String(
+              node?.name ??
+              ""
+            )
+          ),
+        familyAggregate:
+          ownership.familyAggregate,
+        rawOffers:
+          rawOfferNodes.length,
+      }
     );
   }
 
-  priceCandidates.sort((a, b) => b.score - a.score || a.price - b.price);
-  const bestPrice = priceCandidates[0];
-
-  const availabilityValues = offerNodes
-    .map((offer) => normalizeSchemaAvailability(offer?.availability))
-    .filter((value) => value !== "unknown");
-  const availability = availabilityValues.includes("available")
-    ? "available"
-    : availabilityValues.includes("unavailable")
-      ? "unavailable"
-      : normalizeSchemaAvailability(node?.availability);
-
-  const condition =
-    offerNodes
-      .map((offer) => normalizeSchemaCondition(offer?.itemCondition))
-      .find((value): value is Exclude<Condition, null> => value !== null) ??
-    normalizeSchemaCondition(node?.itemCondition);
-
-  const ratingRaw =
-    node?.aggregateRating?.ratingValue ?? node?.reviewRating?.ratingValue;
-  const ratingParsed = ratingRaw != null
-    ? Number(String(ratingRaw).replace(",", "."))
-    : NaN;
-
   return {
     matched: true,
-    identityScore: selected.score,
-    name: normalizeText(String(node?.name ?? "")),
-    description: normalizeText(
-      decodeHtml(String(node?.description ?? ""))
-    ).slice(0, 12_000),
-    url: normalizeUrl(String(node?.url ?? "")),
-    price: bestPrice?.price ?? null,
-    currency: bestPrice?.currency ?? null,
+    identityScore:
+      selected.identityScore,
+    name:
+      normalizeText(
+        String(
+          node?.name ??
+          ""
+        )
+      ),
+    description:
+      safeDescription,
+    url:
+      asarvoSearchCoreV18StructuredNodeUrl(
+        node
+      ),
+    price:
+      bestPrice?.price ??
+      null,
+    currency:
+      bestPrice?.currency ??
+      null,
     availability,
     condition,
-    shipping: extractStructuredShipping(
-      node,
-      offerNodes,
-      bestPrice?.price ?? null
-    ),
+    shipping:
+      ownership.transactionalSafe
+        ? extractStructuredShipping(
+            node,
+            offerNodes,
+            bestPrice?.price ??
+              null
+          )
+        : {
+            cost: null,
+            currency: null,
+            label: null,
+            verified: false,
+          },
     rating:
-      Number.isFinite(ratingParsed) && ratingParsed > 0 && ratingParsed <= 5
+      Number.isFinite(
+        ratingParsed
+      ) &&
+      ratingParsed > 0 &&
+      ratingParsed <= 5
         ? ratingParsed
         : null,
   };
@@ -31364,6 +44701,10 @@ function buildSemanticProductIdentityDiscoveryAlternates(
 ): string[] {
   const coverageCore = normalizeText(coverageCoreRaw ?? "");
   if (!coverageCore) return [];
+  const toolDiscAlternates = asarvoToolDiscSemanticDiscoveryAlternates(parsed);
+  if (toolDiscAlternates.length > 0) {
+    return toolDiscAlternates;
+  }
 
   // V34.CORE120: category-level lexical equivalence for construction-toy car
   // searches. This is intentionally narrow: it only substitutes the generic
@@ -31785,14 +45126,14 @@ async function runSearch(
         : Promise.resolve([] as SearchResult[]);
 
       const [bing, bingRss, duck] = await Promise.all([
-        withDeadline(
-          searchBing(query, discoverySignal),
+        withAbortableDeadline(
+          (deadlineSignal) => searchBing(query, asarvoMvpBingDiscoverySignal(discoverySignal, deadlineSignal)),
           3_350,
           [] as SearchResult[],
           `Bing generic: ${query}`
         ),
-        withDeadline(
-          searchBingRss(query, discoverySignal),
+        withAbortableDeadline(
+          (deadlineSignal) => searchBingRss(query, asarvoMvpBingDiscoverySignal(discoverySignal, deadlineSignal)),
           3_350,
           [] as SearchResult[],
           `Bing RSS generic: ${query}`
@@ -31823,7 +45164,10 @@ async function runSearch(
     secondaryCoverageLimit > 0
       ? getIntentSecondaryRetailerDomains(
           parsed,
-          Math.min(3, secondaryCoverageLimit)
+          Math.min(
+            secondaryCoverageLimit === 5 ? 5 : 3,
+            secondaryCoverageLimit
+          )
         )
       : [];
   const targetedHtmlRetailerHosts = new Set([
@@ -31844,8 +45188,254 @@ async function runSearch(
     [...targetedHtmlRetailerHosts]
   );
 
-  const targetedPromise = Promise.all(
-    targetedQueries.map(async (query, index) => {
+    // ASARVO_MEGA25_PHYSICAL_SUCCESS_V4_NONDISPLACING_RESCUE4
+  // Rescue is deliberately OUTSIDE targetedQueries. The old targeted-query
+  // ordering and slice stay intact; four first-party rescue queries run as a
+  // separate bounded extension of the same parallel network phase.
+  const mega25V4DirectRescueQueries =
+    buildMega25DirectRescueRetailerQueries(parsed);
+
+  const mega25V4DirectRescueHosts = new Set(
+    getMega25DirectRescueRetailerDomains(
+      parsed,
+      4
+    )
+  );
+
+  // ASARVO_MEGA25_PHYSICAL_SUCCESS_V6_DIRECT_CATALOG_RESCUE4
+  // V6 asks retailer-owned catalog adapters directly for weak MEGA25
+  // categories. Hosts already present in the normal direct mesh are excluded.
+  // The rescue is merged INSIDE the existing directRetailerCatalog Promise
+  // slot, so no later "all" array or result destructuring has to change.
+  const mega25V6PrimaryDirectHosts = new Set(
+    buildDirectRetailerCatalogRequests(parsed)
+      .map(({ adapter }) => adapter.host)
+  );
+
+  const mega25V6DirectCatalogRescueHosts =
+    getMega25RequestableDirectRescueRetailerDomains(
+      parsed,
+      12
+    )
+      .filter(
+        (host) =>
+          !mega25V6PrimaryDirectHosts.has(host)
+      )
+      .slice(0, 1);
+
+  const partialMega25V6DirectCatalog: SearchResult[] = [];
+  const partialMega25V6DirectCatalogSeen = new Set<string>();
+
+  const collectPartialMega25V6DirectCatalog =
+    (results: SearchResult[]) =>
+      mergePartialMarketplaceSnapshot(
+        partialMega25V6DirectCatalog,
+        partialMega25V6DirectCatalogSeen,
+        results
+      );
+
+  const mega25V6DirectCatalogRescuePromise =
+    mega25V6DirectCatalogRescueHosts.length > 0
+      ? withAbortableDeadlineSnapshot(
+          (phaseSignal) =>
+            (asarvoBatch37DiagRegisterCohortSignals(parsed, "V6", mega25V6DirectCatalogRescueHosts, discoverySignal, phaseSignal), searchDirectRetailerCatalogPages(
+              parsed,
+              asarvoBatch38RescueSignalWithDiscoveryGrace(discoverySignal, phaseSignal, 900),
+              collectPartialMega25V6DirectCatalog,
+              {
+                hosts:
+                  ((parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts ?? (mega25V6DirectCatalogRescueHosts)),
+                adapterBudgetMs: 4_650,
+                maxAdapters: 4,
+                maxUrlsPerAdapter: 1,
+                disableDirectRetries: true,
+                directFetchTimeoutMs: 2_850,
+              
+          forceParallelReaderFallback: true,
+        }
+            )),
+          Math.min(
+            PRIMARY_DISCOVERY_BUDGET_MS,
+            5_250
+          ),
+          () => [
+            ...partialMega25V6DirectCatalog,
+          ],
+          "MEGA25 V6 direct catalog rescue"
+        )
+      : Promise.resolve(
+          [] as SearchResult[]
+        );
+
+  // ASARVO_MEGA25_PHYSICAL_SUCCESS_V7_DIRECT_CATALOG_SECOND_COHORT4
+  // V6 proved that direct-catalog rescue can recover a real first-party shop
+  // (Oponeo). V7 keeps that working first cohort untouched and adds a second,
+  // DISJOINT four-host cohort. It excludes both the normal primary direct mesh
+  // and every V6 first-cohort host. Both cohorts run in parallel, one URL each.
+  const mega25V7FirstCohortHostSet = new Set(
+    mega25V6DirectCatalogRescueHosts
+  );
+
+  const mega25V7SecondCohortHosts =
+    getMega25RequestableDirectRescueRetailerDomains(
+      parsed,
+      20
+    )
+      .filter(
+        (host) =>
+          !mega25V6PrimaryDirectHosts.has(host)
+      )
+      .filter(
+        (host) =>
+          !mega25V7FirstCohortHostSet.has(host)
+      )
+      .slice(0, 1);
+
+  const partialMega25V7SecondCohort: SearchResult[] = [];
+  const partialMega25V7SecondCohortSeen = new Set<string>();
+
+  const collectPartialMega25V7SecondCohort =
+    (results: SearchResult[]) =>
+      mergePartialMarketplaceSnapshot(
+        partialMega25V7SecondCohort,
+        partialMega25V7SecondCohortSeen,
+        results
+      );
+
+  const mega25V7SecondCohortPromise =
+    mega25V7SecondCohortHosts.length > 0
+      ? withAbortableDeadlineSnapshot(
+          (phaseSignal) =>
+            (asarvoBatch37DiagRegisterCohortSignals(parsed, "V7", mega25V7SecondCohortHosts, discoverySignal, phaseSignal), searchDirectRetailerCatalogPages(
+              parsed,
+              asarvoBatch38RescueSignalWithDiscoveryGrace(discoverySignal, phaseSignal, 900),
+              collectPartialMega25V7SecondCohort,
+              {
+                hosts:
+                  ((parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts ? [] : (mega25V7SecondCohortHosts)),
+                adapterBudgetMs: 4_650,
+                maxAdapters: 4,
+                maxUrlsPerAdapter: 1,
+                disableDirectRetries: true,
+                directFetchTimeoutMs: 2_850,
+              
+          forceParallelReaderFallback: true,
+        }
+            )),
+          Math.min(
+            PRIMARY_DISCOVERY_BUDGET_MS,
+            5_250
+          ),
+          () => [
+            ...partialMega25V7SecondCohort,
+          ],
+          "MEGA25 V7 second direct catalog cohort"
+        )
+      : Promise.resolve(
+          [] as SearchResult[]
+        );
+
+  // ASARVO_MEGA25_PHYSICAL_SUCCESS_V8_DIRECT_CATALOG_THIRD_COHORT4
+  // V8 keeps primary + V6 + V7 intact and adds one final disjoint cohort.
+  // It excludes every host already used by primary, first cohort and second
+  // cohort. Max four adapters, one URL each, all in the same parallel phase.
+  const mega25V8UsedRescueHosts = new Set([
+    ...mega25V6DirectCatalogRescueHosts,
+    ...mega25V7SecondCohortHosts,
+  ]);
+
+  const mega25V8ThirdCohortHosts =
+    getMega25RequestableDirectRescueRetailerDomains(
+      parsed,
+      28
+    )
+      .filter(
+        (host) =>
+          !mega25V6PrimaryDirectHosts.has(host)
+      )
+      .filter(
+        (host) =>
+          !mega25V8UsedRescueHosts.has(host)
+      )
+      .slice(0, 1);
+
+  const partialMega25V8ThirdCohort: SearchResult[] = [];
+  const partialMega25V8ThirdCohortSeen = new Set<string>();
+
+  const collectPartialMega25V8ThirdCohort =
+    (results: SearchResult[]) =>
+      mergePartialMarketplaceSnapshot(
+        partialMega25V8ThirdCohort,
+        partialMega25V8ThirdCohortSeen,
+        results
+      );
+
+  const mega25V8ThirdCohortPromise =
+    mega25V8ThirdCohortHosts.length > 0
+      ? withAbortableDeadlineSnapshot(
+          (phaseSignal) =>
+            (asarvoBatch37DiagRegisterCohortSignals(parsed, "V8", mega25V8ThirdCohortHosts, discoverySignal, phaseSignal), searchDirectRetailerCatalogPages(
+              parsed,
+              asarvoBatch38RescueSignalWithDiscoveryGrace(discoverySignal, phaseSignal, 900),
+              collectPartialMega25V8ThirdCohort,
+              {
+                hosts:
+                  ((parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts ? [] : (mega25V8ThirdCohortHosts)),
+                adapterBudgetMs: 4_650,
+                maxAdapters: 4,
+                maxUrlsPerAdapter: 1,
+                disableDirectRetries: true,
+                directFetchTimeoutMs: 2_850,
+              
+          forceParallelReaderFallback: true,
+        }
+            )),
+          Math.min(
+            PRIMARY_DISCOVERY_BUDGET_MS,
+            5_250
+          ),
+          () => [
+            ...partialMega25V8ThirdCohort,
+          ],
+          "MEGA25 V8 third direct catalog cohort"
+        )
+      : Promise.resolve(
+          [] as SearchResult[]
+        );
+
+  if (
+    mega25V8ThirdCohortHosts.length > 0
+  ) {
+    console.log(
+      "[AIShopping] ASARVO V8 third direct catalog cohort:",
+      mega25V8ThirdCohortHosts
+    );
+  }
+
+
+  if (
+    mega25V7SecondCohortHosts.length > 0
+  ) {
+    console.log(
+      "[AIShopping] ASARVO V7 second direct catalog cohort:",
+      mega25V7SecondCohortHosts
+    );
+  }
+
+
+  if (
+    mega25V6DirectCatalogRescueHosts.length > 0
+  ) {
+    console.log(
+      "[AIShopping] ASARVO V6 direct catalog rescue hosts:",
+      mega25V6DirectCatalogRescueHosts
+    );
+  }
+
+
+const targetedPromise = Promise.all(
+    [...targetedQueries, ...mega25V4DirectRescueQueries].map(
+      async (query, index) => {
       // V32.12: reserve HTML-search capacity for both universal marketplaces
       // and the first retailer domains of the matched vertical. Previously the
       // first eight slots were almost entirely marketplaces/comparison sites,
@@ -31858,29 +45448,73 @@ async function runSearch(
           : v34Core228ExactModelHeadphonesStaticHardIntent
             ? index < 4
             : index < 8 ||
-              Boolean(siteHost && targetedHtmlRetailerHosts.has(siteHost));
+              Boolean(
+          siteHost &&
+          (
+            targetedHtmlRetailerHosts.has(siteHost) ||
+            mega25V4DirectRescueHosts.has(siteHost)
+          )
+        );
 
       if (useHtml) {
-        const [bing, bingRss] = await Promise.all([
-          withDeadline(
-            searchBing(query, discoverySignal),
+        // ASARVO_MEGA25_PHYSICAL_SUCCESS_V5_MULTI_ENGINE_RESCUE4
+        // V5 does not add more retailer hosts. Only the already-bounded four
+        // V4 direct-rescue site queries gain one independent DuckDuckGo lane.
+        // Normal targeted queries keep their exact old Bing HTML + RSS shape.
+        const mega25RescueDuckPromise =
+          siteHost &&
+          mega25V4DirectRescueHosts.has(siteHost)
+            ? withDeadline(
+                searchDuckDuckGo(
+                  query,
+                  discoverySignal
+                ),
+                2_600,
+                [] as SearchResult[],
+                `DuckDuckGo MEGA25 direct rescue: ${query}`
+              )
+            : Promise.resolve(
+                [] as SearchResult[]
+              );
+
+        const [
+          bing,
+          bingRss,
+          mega25RescueDuck,
+        ] = await Promise.all([
+          withAbortableDeadline(
+            (deadlineSignal) => searchBing(
+              query,
+              asarvoMvpBingDiscoverySignal(discoverySignal, deadlineSignal)
+            ),
             3_350,
             [] as SearchResult[],
             `Bing targeted: ${query}`
           ),
-          withDeadline(
-            searchBingRss(query, discoverySignal),
+          withAbortableDeadline(
+            (deadlineSignal) => searchBingRss(
+              query,
+              asarvoMvpBingDiscoverySignal(discoverySignal, deadlineSignal)
+            ),
             3_350,
             [] as SearchResult[],
             `Bing RSS targeted: ${query}`
           ),
+          mega25RescueDuckPromise,
         ]);
 
-        return enforceSiteQueryHostFidelity(query, [...bing, ...bingRss]);
+        return enforceSiteQueryHostFidelity(
+          query,
+          [
+            ...bing,
+            ...bingRss,
+            ...mega25RescueDuck,
+          ]
+        );
       }
 
-      const rss = await withDeadline(
-        searchBingRss(query, discoverySignal),
+      const rss = await withAbortableDeadline(
+        (deadlineSignal) => searchBingRss(query, asarvoMvpBingDiscoverySignal(discoverySignal, deadlineSignal)),
         3_350,
         [] as SearchResult[],
         `Bing RSS retailer: ${query}`
@@ -31906,7 +45540,25 @@ async function runSearch(
     targetedChunks,
   ] = await Promise.all([
     directPromise,
-    directRetailerCatalogPromise,
+    Promise.all([
+      directRetailerCatalogPromise,
+      mega25V6DirectCatalogRescuePromise,
+      mega25V7SecondCohortPromise,
+      mega25V8ThirdCohortPromise,
+    ]).then(
+      ([
+        primaryDirectRetailerCatalog,
+        rescueDirectRetailerCatalog,
+        secondCohortDirectRetailerCatalog,
+        thirdCohortDirectRetailerCatalog,
+      ]) =>
+        dedupeSearchResultsByUrl([
+          ...primaryDirectRetailerCatalog,
+          ...rescueDirectRetailerCatalog,
+          ...secondCohortDirectRetailerCatalog,
+          ...thirdCohortDirectRetailerCatalog,
+        ])
+    ),
     genericPromise,
     targetedPromise,
   ]);
@@ -34763,7 +48415,15 @@ function collectUniversalStaticRequirementConsensus(
     const retailer = isConfiguredCommerceDomain(result.url);
 
     for (const requirement of requirements) {
-      if (!requirementHasEvidence(requirement, evidence)) continue;
+      if (
+        !requirementHasEvidenceInContext(
+          requirement,
+          evidence,
+          requirements
+        )
+      ) {
+        continue;
+      }
       const current = votes.get(requirement.key) ?? {
         requirement,
         hosts: new Set<string>(),
@@ -34896,8 +48556,13 @@ function collectUniversalRequirementProofFromSearchResults(
       : false;
     if (!exactModelBound && !universalProofMatchesProductIdentity(phrase, evidence)) continue;
 
-    const matchedRequirements = requirements.filter((requirement) =>
-      requirementHasEvidence(requirement, evidence)
+    const matchedRequirements = requirements.filter(
+      (requirement) =>
+        requirementHasEvidenceInContext(
+          requirement,
+          evidence,
+          requirements
+        )
     );
     if (matchedRequirements.length === 0) continue;
 
@@ -35960,11 +49625,738 @@ function universalJsonFeatureDescriptionMatchesProduct(
   return matched >= 3;
 }
 
+// ASARVO_INTENT_CORE_V6_FIX2_MEGA3000_STRUCTURED_SPEC_EVIDENCE
+//
+// Structured-spec evidence lane for the CURRENT verified product page.
+//
+// Important properties:
+// - extracts short label/value pairs from real specification markup;
+// - truncates before recommendation/related-product sections;
+// - never injects raw arbitrary page text as proof;
+// - every candidate pair must be accepted by the mature
+//   requirementHasEvidenceInContext() for the exact requirement;
+// - canonical proof tokens are generated only AFTER contextual proof.
+
+type AsarvoIntentCoreV6StructuredSpecPair = {
+  label: string;
+  value: string;
+  evidence: string;
+};
+
+function asarvoIntentCoreV6CleanSpecCell(
+  valueRaw: string
+): string {
+  return normalizeText(
+    extractTagText(
+      String(valueRaw)
+        .replace(/<br\s*\/?>/giu, " ")
+        .replace(/&nbsp;/giu, " ")
+    )
+  )
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function asarvoIntentCoreV6TrimSpecHtmlAtRecommendationBoundary(
+  htmlRaw: string
+): string {
+  const html = String(htmlRaw || "");
+
+  const marker =
+    /(?:podobne\s+produkty|produkty\s+podobne|polecane\s+produkty|inni\s+kupili|może\s+ci\s+się\s+spodobać|moze\s+ci\s+sie\s+spodobac|recommended\s+products|related\s+products|you\s+may\s+also\s+like|customers\s+also\s+bought)/iu.exec(
+      html
+    );
+
+  if (
+    marker &&
+    typeof marker.index === "number" &&
+    marker.index >= 800
+  ) {
+    return html.slice(0, marker.index);
+  }
+
+  return html.slice(0, 220_000);
+}
+
+function asarvoIntentCoreV6SpecPairIsSafe(
+  labelRaw: string,
+  valueRaw: string
+): boolean {
+  const label = normalizeText(labelRaw);
+  const value = normalizeText(valueRaw);
+
+  if (!label || !value) return false;
+
+  if (
+    label.length < 2 ||
+    label.length > 120 ||
+    value.length > 700
+  ) {
+    return false;
+  }
+
+  // Navigation / CTA / price rows are not product-attribute evidence.
+  if (
+    /\b(?:cena|price|kup\s+teraz|buy\s+now|dodaj\s+do\s+koszyka|add\s+to\s+cart|raty|leasing|dostawa|delivery|wysy[lł]ka|shipping)\b/iu.test(
+      label
+    )
+  ) {
+    return false;
+  }
+
+  // Marketing paragraphs masquerading as a "label" are unsafe.
+  if (label.split(/\s+/).length > 12) return false;
+
+  return true;
+}
+
+// ASARVO_SEARCH_CORE_V19_MEGA100M_HTML_VARIANT_PROVENANCE_GUARD
+//
+// HTML sibling-variant provenance guard.
+//
+// JSON-LD ownership is protected by V18. V19 applies the same fail-closed idea
+// to HTML evidence lanes. Variant selectors, swatches, alternate capacities,
+// colors/sizes and "other variants" UI are configuration/navigation surfaces;
+// they do not prove that the CURRENT selected SKU owns every displayed value.
+
+function asarvoSearchCoreV19StrongVariantUiAttribute(
+  openingTagRaw: string
+): boolean {
+  const tag = String(openingTagRaw ?? "");
+
+  return /(?:class|id|data-[\w:-]+)\s*=\s*["'][^"']{0,320}(?:(?:product[-_ ]?)?variant(?:s|[-_ ](?:selector|picker|list|options?|swatches?))?|swatches?|product[-_ ]options?|alternate[-_ ]products?|other[-_ ]variants?|sibling[-_ ]products?|colour[-_ ](?:swatch|picker|selector)|color[-_ ](?:swatch|picker|selector)|capacity[-_ ](?:picker|selector|options?)|storage[-_ ](?:picker|selector|options?)|size[-_ ](?:picker|selector|options?))[^"']*["']/iu.test(
+    tag
+  );
+}
+
+function asarvoSearchCoreV19StrongVariantUiText(
+  valueRaw: string
+): boolean {
+  const text = normalizeMatchText(valueRaw);
+
+  return /\b(?:inne|pozostale|pozostałe|dostepne|dostępne|other|available|alternate)\s+(?:warianty?|variants?|kolory?|colors?|colours?|pojemnosci|pojemności|capacities|rozmiary?|sizes?)\b|\b(?:wybierz|wybor|wybór|choose|select)\s+(?:wariant|variant|kolor|color|colour|pojemnosc|pojemność|capacity|storage|rozmiar|size)\b|\b(?:variant|wariant)\s+(?:selector|picker|swatches?|options?|lista|list)\b/iu.test(
+    text
+  );
+}
+
+function asarvoSearchCoreV19StripSiblingVariantHtmlSurfaces(
+  htmlRaw: string
+): string {
+  let html = String(htmlRaw ?? "");
+  if (!html) return "";
+
+  const opening =
+    /<(div|section|ul|ol|form|aside)\b[^>]{0,1200}>/giu;
+
+  const removals: Array<{
+    start: number;
+    end: number;
+  }> = [];
+
+  let match: RegExpExecArray | null;
+
+  while (
+    (match = opening.exec(html)) !== null &&
+    removals.length < 200
+  ) {
+    if (
+      !asarvoSearchCoreV19StrongVariantUiAttribute(
+        match[0]
+      )
+    ) {
+      continue;
+    }
+
+    const tag =
+      String(match[1] ?? "")
+        .toLowerCase();
+
+    const closeRe =
+      new RegExp(
+        `<\\/${tag}\\s*>`,
+        "giu"
+      );
+
+    closeRe.lastIndex =
+      opening.lastIndex;
+
+    const close =
+      closeRe.exec(html);
+
+    const maxEnd =
+      Math.min(
+        html.length,
+        opening.lastIndex + 40_000
+      );
+
+    const end =
+      close &&
+      typeof close.index === "number" &&
+      close.index < maxEnd
+        ? close.index + close[0].length
+        : maxEnd;
+
+    removals.push({
+      start: match.index,
+      end,
+    });
+
+    opening.lastIndex =
+      end;
+  }
+
+  for (
+    let index = removals.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    const removal =
+      removals[index];
+
+    html =
+      html.slice(0, removal.start) +
+      " " +
+      html.slice(removal.end);
+  }
+
+  return html;
+}
+
+function asarvoSearchCoreV19StripSiblingVariantTextSurfaces(
+  textRaw: string
+): string {
+  let text = String(textRaw ?? "");
+  if (!text) return "";
+
+  const markerRe =
+    /\b(?:inne|pozostale|pozostałe|dostepne|dostępne|other|available|alternate)\s+(?:warianty?|variants?|kolory?|colors?|colours?|pojemnosci|pojemności|capacities|rozmiary?|sizes?)\b|\b(?:wybierz|wybor|wybór|choose|select)\s+(?:wariant|variant|kolor|color|colour|pojemnosc|pojemność|capacity|storage|rozmiar|size)\b|\b(?:variant|wariant)\s+(?:selector|picker|swatches?|options?|lista|list)\b/giu;
+
+  const restartRe =
+    /\b(?:specyfikacja|dane\s+techniczne|parametry|opis\s+produktu|features?|specifications?|technical\s+data|details?)\b/giu;
+
+  const spans: Array<{
+    start: number;
+    end: number;
+  }> = [];
+
+  let marker: RegExpExecArray | null;
+
+  while (
+    (marker = markerRe.exec(text)) !== null &&
+    spans.length < 100
+  ) {
+    if (
+      typeof marker.index !== "number"
+    ) {
+      continue;
+    }
+
+    const start =
+      Math.max(
+        0,
+        marker.index - 120
+      );
+
+    restartRe.lastIndex =
+      marker.index + marker[0].length;
+
+    const restart =
+      restartRe.exec(text);
+
+    let end =
+      Math.min(
+        text.length,
+        marker.index +
+          marker[0].length +
+          1_800
+      );
+
+    if (
+      restart &&
+      typeof restart.index === "number" &&
+      restart.index > marker.index &&
+      restart.index < end
+    ) {
+      end = restart.index;
+    }
+
+    spans.push({
+      start,
+      end,
+    });
+
+    markerRe.lastIndex =
+      end;
+  }
+
+  for (
+    let index = spans.length - 1;
+    index >= 0;
+    index -= 1
+  ) {
+    const span = spans[index];
+
+    text =
+      text.slice(0, span.start) +
+      " " +
+      text.slice(span.end);
+  }
+
+  return normalizeText(text);
+}
+
+function asarvoIntentCoreV6ExtractStructuredSpecPairsFromHtml(
+  htmlRaw: string
+): AsarvoIntentCoreV6StructuredSpecPair[] {
+  if (!htmlRaw) return [];
+
+  const html =
+    asarvoIntentCoreV6TrimSpecHtmlAtRecommendationBoundary(
+      asarvoSearchCoreV19StripSiblingVariantHtmlSurfaces(
+        htmlRaw
+      )
+    );
+
+  const pairs: AsarvoIntentCoreV6StructuredSpecPair[] = [];
+  const seen = new Set<string>();
+
+  const pushPair = (
+    labelRaw: string,
+    valueRaw: string
+  ): void => {
+    const label =
+      asarvoIntentCoreV6CleanSpecCell(labelRaw);
+    const value =
+      asarvoIntentCoreV6CleanSpecCell(valueRaw);
+
+    if (
+      !asarvoIntentCoreV6SpecPairIsSafe(
+        label,
+        value
+      )
+    ) {
+      return;
+    }
+
+    const evidence =
+      normalizeText(`${label} ${value}`);
+
+    const key =
+      normalizeMatchText(evidence);
+
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+
+    pairs.push({
+      label,
+      value,
+      evidence,
+    });
+  };
+
+  let rowMatch: RegExpExecArray | null;
+  const rowRegex =
+    /<tr\b[^>]*>([\s\S]{0,5000}?)<\/tr>/giu;
+
+  let rowCount = 0;
+
+  while (
+    (rowMatch = rowRegex.exec(html)) !== null &&
+    rowCount < 500
+  ) {
+    const cells = Array.from(
+      rowMatch[1].matchAll(
+        /<(?:th|td)\b[^>]*>([\s\S]{0,1800}?)<\/(?:th|td)>/giu
+      )
+    ).map((match) => match[1]);
+
+    if (cells.length >= 2 && cells.length <= 4) {
+      pushPair(cells[0], cells.slice(1).join(" "));
+    }
+
+    rowCount += 1;
+  }
+
+  let dlMatch: RegExpExecArray | null;
+  const dlRegex =
+    /<dt\b[^>]*>([\s\S]{0,1200}?)<\/dt>\s*<dd\b[^>]*>([\s\S]{0,2400}?)<\/dd>/giu;
+
+  let dlCount = 0;
+
+  while (
+    (dlMatch = dlRegex.exec(html)) !== null &&
+    dlCount < 500
+  ) {
+    pushPair(dlMatch[1], dlMatch[2]);
+    dlCount += 1;
+  }
+
+  let liMatch: RegExpExecArray | null;
+  const liRegex =
+    /<li\b[^>]*>[\s\S]{0,300}?<(?:strong|b)\b[^>]*>([\s\S]{1,500}?)<\/(?:strong|b)>\s*:?\s*([\s\S]{1,1800}?)<\/li>/giu;
+
+  let liCount = 0;
+
+  while (
+    (liMatch = liRegex.exec(html)) !== null &&
+    liCount < 500
+  ) {
+    pushPair(liMatch[1], liMatch[2]);
+    liCount += 1;
+  }
+
+  return pairs.slice(0, 600);
+}
+
+// ASARVO_INTENT_CORE_V7_MEGA3000_CROSS_SOURCE_CONFLICT_RESOLUTION
+//
+// Cross-source requirement provenance:
+// - concrete structured specification can MATCH, CONFLICT, be ABSENT,
+//   or be AMBIGUOUS for one exact requirement;
+// - conflicting/ambiguous HARD structured specs are fatal;
+// - canonical structured proof is emitted only for an unambiguous MATCH;
+// - multi-variant titles ("16GB / 32GB") need structured resolution;
+// - conflicting structured specs suppress a PREFERRED scoring bonus instead
+//   of turning a soft preference into a hard reject.
+
+type AsarvoIntentCoreV7RequirementState =
+  | "absent"
+  | "match"
+  | "conflict"
+  | "ambiguous";
+
+type AsarvoIntentCoreV7RequirementStateMap =
+  Record<string, AsarvoIntentCoreV7RequirementState>;
+
+function asarvoIntentCoreV7RequirementIdentity(
+  requirement: UniversalRequirement
+): string {
+  return asarvoIntentCoreV5RequirementIdentity(
+    requirement
+  );
+}
+
+function asarvoIntentCoreV7StructuredRequirementStateFromPairs(
+  requirement: UniversalRequirement,
+  pairs: readonly AsarvoIntentCoreV6StructuredSpecPair[],
+  allRequirements: readonly UniversalRequirement[]
+): AsarvoIntentCoreV7RequirementState {
+  if (pairs.length === 0) return "absent";
+
+  const conflictProbe: UniversalRequirement =
+    requirement.hard
+      ? requirement
+      : {
+          ...requirement,
+          hard: true,
+        };
+
+  let hasMatch = false;
+  let hasConflict = false;
+
+  for (const pair of pairs) {
+    if (
+      requirementHasEvidenceInContext(
+        requirement,
+        pair.evidence,
+        allRequirements
+      )
+    ) {
+      hasMatch = true;
+    }
+
+    if (
+      hasConflictingHardRequirementInTitle(
+        conflictProbe,
+        pair.evidence,
+        allRequirements
+      )
+    ) {
+      hasConflict = true;
+    }
+
+    if (hasMatch && hasConflict) {
+      return "ambiguous";
+    }
+  }
+
+  if (hasMatch) return "match";
+  if (hasConflict) return "conflict";
+  return "absent";
+}
+
+function asarvoIntentCoreV7BuildStructuredRequirementStates(
+  htmlRaw: string,
+  parsed: ParsedQuery
+): AsarvoIntentCoreV7RequirementStateMap {
+  const allRequirements =
+    asarvoIntentCoreV8AllIntentRequirements(
+      parsed
+    );
+
+  const pairs =
+    asarvoIntentCoreV6ExtractStructuredSpecPairsFromHtml(
+      htmlRaw
+    );
+
+  const states: AsarvoIntentCoreV7RequirementStateMap = {};
+
+  for (const requirement of allRequirements) {
+    states[
+      asarvoIntentCoreV7RequirementIdentity(
+        requirement
+      )
+    ] =
+      asarvoIntentCoreV7StructuredRequirementStateFromPairs(
+        requirement,
+        pairs,
+        allRequirements
+      );
+  }
+
+  return states;
+}
+
+function asarvoIntentCoreV7StructuredStateForRequirement(
+  requirement: UniversalRequirement,
+  states: AsarvoIntentCoreV7RequirementStateMap
+): AsarvoIntentCoreV7RequirementState {
+  return (
+    states[
+      asarvoIntentCoreV7RequirementIdentity(
+        requirement
+      )
+    ] ?? "absent"
+  );
+}
+
+function asarvoIntentCoreV7StructuredHardConflictRequirements(
+  parsed: ParsedQuery,
+  states: AsarvoIntentCoreV7RequirementStateMap
+): UniversalRequirement[] {
+  return parsed.intent.required.filter(
+    (requirement) => {
+      if (!requirement.hard) return false;
+
+      const state =
+        asarvoIntentCoreV7StructuredStateForRequirement(
+          requirement,
+          states
+        );
+
+      return (
+        state === "conflict" ||
+        state === "ambiguous"
+      );
+    }
+  );
+}
+
+function asarvoIntentCoreV7HasSegmentedRequirementAmbiguity(
+  requirement: UniversalRequirement,
+  titleRaw: string,
+  allRequirements: readonly UniversalRequirement[]
+): boolean {
+  if (!requirement.hard) return false;
+
+  const rawSegments = normalizeText(titleRaw)
+    .split(
+      /(?:\s*[|;]\s*|\s+\/\s+|\s+\b(?:lub|or)\b\s+)/iu
+    )
+    .map((part) => normalizeText(part))
+    .filter(Boolean)
+    .slice(0, 10);
+
+  if (rawSegments.length < 2) return false;
+
+  let hasMatch = false;
+  let hasConflict = false;
+
+  for (const segment of rawSegments) {
+    if (
+      requirementHasEvidenceInContext(
+        requirement,
+        segment,
+        allRequirements
+      )
+    ) {
+      hasMatch = true;
+    }
+
+    if (
+      hasConflictingHardRequirementInTitle(
+        requirement,
+        segment,
+        allRequirements
+      )
+    ) {
+      hasConflict = true;
+    }
+
+    if (hasMatch && hasConflict) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function asarvoIntentCoreV7UnresolvedTitleAmbiguityRequirements(
+  titleRaw: string,
+  parsed: ParsedQuery,
+  states: AsarvoIntentCoreV7RequirementStateMap
+): UniversalRequirement[] {
+  const allRequirements =
+    asarvoIntentCoreV8AllIntentRequirements(
+      parsed
+    );
+
+  return parsed.intent.required.filter(
+    (requirement) => {
+      if (!requirement.hard) return false;
+
+      if (
+        !asarvoIntentCoreV7HasSegmentedRequirementAmbiguity(
+          requirement,
+          titleRaw,
+          allRequirements
+        )
+      ) {
+        return false;
+      }
+
+      // A single selected structured value resolves a multi-variant title.
+      return (
+        asarvoIntentCoreV7StructuredStateForRequirement(
+          requirement,
+          states
+        ) !== "match"
+      );
+    }
+  );
+}
+
+function asarvoIntentCoreV7SuppressConflictingPreferredScore(
+  match: UniversalMatchResult,
+  parsed: ParsedQuery,
+  states: AsarvoIntentCoreV7RequirementStateMap
+): UniversalMatchResult {
+  if (
+    parsed.intent.preferred.length === 0 ||
+    match.reasons.length === 0
+  ) {
+    return match;
+  }
+
+  const conflictingKeys = new Set(
+    parsed.intent.preferred
+      .filter((requirement) => {
+        const state =
+          asarvoIntentCoreV7StructuredStateForRequirement(
+            requirement,
+            states
+          );
+
+        return (
+          state === "conflict" ||
+          state === "ambiguous"
+        );
+      })
+      .map((requirement) => requirement.key)
+  );
+
+  if (conflictingKeys.size === 0) return match;
+
+  let score = match.score;
+  const reasons: string[] = [];
+
+  for (const reason of match.reasons) {
+    if (!reason.startsWith("preferred:")) {
+      reasons.push(reason);
+      continue;
+    }
+
+    const key = reason.slice("preferred:".length);
+
+    if (!conflictingKeys.has(key)) {
+      reasons.push(reason);
+      continue;
+    }
+
+    // V5 verified preferred bonus is at most 7 points.
+    score = Math.max(0, score - 7);
+    reasons.push(`preferred-conflict:${key}`);
+  }
+
+  return {
+    ...match,
+    score,
+    reasons: Array.from(new Set(reasons)),
+  };
+}
+
+function asarvoIntentCoreV6CanonicalRequirementEvidenceFromStructuredSpecs(
+  htmlRaw: string,
+  parsed: ParsedQuery
+): string {
+  const allRequirements =
+    asarvoIntentCoreV8AllIntentRequirements(
+      parsed
+    );
+
+  if (allRequirements.length === 0) return "";
+
+  const pairs =
+    asarvoIntentCoreV6ExtractStructuredSpecPairsFromHtml(
+      htmlRaw
+    );
+
+  if (pairs.length === 0) return "";
+
+  const canonical: string[] = [];
+  const seen = new Set<string>();
+
+  for (const requirement of allRequirements) {
+    const structuredState =
+      asarvoIntentCoreV7StructuredRequirementStateFromPairs(
+        requirement,
+        pairs,
+        allRequirements
+      );
+
+    if (structuredState !== "match") continue;
+
+    const id = [
+      requirement.key,
+      universalRequirementComparison(requirement),
+      normalizeMatchText(requirement.value),
+    ].join(":");
+
+    if (seen.has(id)) continue;
+    seen.add(id);
+
+    canonical.push(
+      buildCanonicalRequirementProofToken(
+        requirement
+      )
+    );
+  }
+
+  return normalizeText(
+    canonical.join(" ")
+  ).slice(0, 8_000);
+}
+
 function extractUniversalFeatureEvidenceFromHtml(
   html: string,
   productNameRaw: string
 ): string {
   if (!html) return "";
+
+  html =
+    asarvoSearchCoreV19StripSiblingVariantHtmlSurfaces(
+      html
+    );
 
   const chunks: string[] = [];
   const metaDescription = extractDescriptionFromHtml(html);
@@ -36065,7 +50457,11 @@ function extractUniversalFeatureEvidenceFromHtml(
     }
   }
 
-  return normalizeText(chunks.join(" ")).slice(0, 16000);
+  return asarvoSearchCoreV19StripSiblingVariantTextSurfaces(
+    normalizeText(
+      chunks.join(" ")
+    )
+  ).slice(0, 16000);
 }
 
 function extractCanonicalHardRequirementEvidenceFromConcreteHtml(
@@ -36079,7 +50475,20 @@ function extractCanonicalHardRequirementEvidenceFromConcreteHtml(
   );
   if (!html || hardRequirements.length === 0) return "";
 
-  const visible = normalizeText(extractTagText(html));
+  html =
+    asarvoSearchCoreV19StripSiblingVariantHtmlSurfaces(
+      html
+    );
+
+  const visible =
+    asarvoSearchCoreV19StripSiblingVariantTextSurfaces(
+      normalizeText(
+        extractTagText(
+          html
+        )
+      )
+    );
+
   if (!visible) return "";
 
   const productName = normalizeText(productNameRaw);
@@ -37757,7 +52166,8 @@ async function verifyTrustedCeneoMerchantResult(
 async function expandCeneoMerchantVerificationCandidates(
   results: SearchResult[],
   parsed: ParsedQuery,
-  hardDeadlineAt: number
+  hardDeadlineAt: number,
+  externalSignal?: AbortSignal
 ): Promise<SearchResult[]> {
   const preciseTechIntent = isV34Core164PreciseTechIntent(parsed);
   const highConstraintRetailIntent = isV34Core164HighConstraintRetailIntent(parsed);
@@ -38244,7 +52654,7 @@ async function expandCeneoMerchantVerificationCandidates(
           candidateExpansionHeadroom - 450
         )
       );
-      const page = await fetchHtml(candidate.url, timeoutMs);
+      const page = await fetchHtml(candidate.url, timeoutMs, externalSignal);
       if (!page || page.status >= 400 || !page.html || isBlockedOrChallengePage(page.html)) {
         console.log(
           "[AIShopping] V34.CORE120 Ceneo merchant expansion unavailable:",
@@ -39881,6 +54291,9 @@ async function verifySearchResult(
   // the product-focused scope; broad discovery/category snippets never qualify.
   let trustedConcreteProductClassEvidence = "";
   let trustedBoundProductDescription = "";
+  let trustedStructuredSpecEvidence = "";
+  let trustedStructuredRequirementStates:
+    AsarvoIntentCoreV7RequirementStateMap = {};
   let trustedCeneoExactRequirementEvidence = "";
   let verifiedCondition: Condition =
     marketplaceIndexCondition ?? allegroLokalnieTitleCondition ?? vintedCatalogCondition;
@@ -40551,7 +54964,10 @@ async function verifySearchResult(
       }
     }
 
-    if (parsed.intent.required.length > 0) {
+    if (
+      parsed.intent.required.length > 0 ||
+      parsed.intent.preferred.length > 0
+    ) {
       if (isCeneoResult) {
         trustedCeneoExactRequirementEvidence =
           extractTrustedCeneoExactProductRequirementEvidence(
@@ -40577,9 +54993,59 @@ async function verifySearchResult(
             parsed
           );
 
+        trustedStructuredSpecEvidence =
+          asarvoIntentCoreV6CanonicalRequirementEvidenceFromStructuredSpecs(
+            page.html,
+            parsed
+          );
+        trustedStructuredRequirementStates =
+          asarvoIntentCoreV7BuildStructuredRequirementStates(
+            page.html,
+            parsed
+          );
+
+        const structuredHardConflicts =
+          asarvoIntentCoreV7StructuredHardConflictRequirements(
+            parsed,
+            trustedStructuredRequirementStates
+          );
+
+        if (structuredHardConflicts.length > 0) {
+          console.log(
+            "[AIShopping] INTENT.V7 structured HARD conflict:",
+            getResultHostname(finalUrl),
+            finalName,
+            structuredHardConflicts.map(
+              (requirement) => ({
+                key: requirement.key,
+                label: requirement.label,
+                state:
+                  asarvoIntentCoreV7StructuredStateForRequirement(
+                    requirement,
+                    trustedStructuredRequirementStates
+                  ),
+              })
+            )
+          );
+        }
+
+
+        if (trustedStructuredSpecEvidence) {
+          console.log(
+            "[AIShopping] INTENT.V6.FIX2 structured-spec proof:",
+            getResultHostname(finalUrl),
+            finalName,
+            trustedStructuredSpecEvidence
+          );
+        }
+
         universalFeatureEvidence = normalizeText(
           `${universalFeatureEvidence} ${boundPageDescription ?? ""} ${htmlRequirementEvidence} ${trustedCanonicalConcreteRequirementEvidence}`
         ).slice(0, 30_000);
+        universalFeatureEvidence = normalizeText(
+          `${universalFeatureEvidence} ${trustedStructuredSpecEvidence}`
+        ).slice(0, 30_000);
+
 
         if (trustedCanonicalConcreteRequirementEvidence) {
           console.log(
@@ -41176,6 +55642,127 @@ async function verifySearchResult(
         readerPageVerified = true;
         const jinaTitle = extractJinaPageTitle(jinaText);
         const jinaContext = extractJinaOfferContext(jinaText);
+
+        // ASARVO_DESCRIPTION_INTELLIGENCE_V1_FIX6_FIX2
+        // Concrete-page fact reasoning runs directly after offer description extraction.
+        if (jinaContext) {
+          const asarvoTraceQuery = normalizeMatchText(
+            parsed.intent.normalizedQuery
+          );
+          const asarvoTraceDescription = normalizeMatchText(jinaContext);
+          const asarvoTraceLength = parsed.intent.required.find(
+            (item) => item.hard && item.key === "length"
+          );
+
+          console.log(
+            "[AIShopping] ASARVO DESCRIPTION TRACE:",
+            finalName,
+            {
+              query: asarvoTraceQuery,
+              requestedLength: asarvoTraceLength?.value ?? null,
+              descriptionPreview: asarvoTraceDescription.slice(0, 260),
+            }
+          );
+
+          const asarvoToolDiscIntent =
+            /\btarcz\w*\b/iu.test(asarvoTraceQuery) &&
+            /\b(?:diax\w*|flex\w*|katow\w*|kątow\w*|szlifier\w*)\b/iu.test(
+              asarvoTraceQuery
+            );
+
+          if (asarvoToolDiscIntent && asarvoTraceLength) {
+            const asarvoLengthText = normalizeMatchText(
+              asarvoTraceLength.value
+            );
+            const asarvoLengthMatch = asarvoLengthText.match(
+              /\b(\d{1,4}(?:[.,]\d+)?)\s*(mm|cm)\b/i
+            );
+
+            if (asarvoLengthMatch) {
+              const asarvoNumber = Number(
+                asarvoLengthMatch[1].replace(",", ".")
+              );
+              const asarvoUnit = asarvoLengthMatch[2].toLowerCase();
+              const asarvoMm =
+                asarvoUnit === "cm"
+                  ? Math.round(asarvoNumber * 10)
+                  : Math.round(asarvoNumber);
+
+              const asarvoEscapedMm = String(asarvoMm).replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&"
+              );
+
+              const asarvoLocalSize =
+                new RegExp(
+                  `\\btarcz\\w*(?:\\s+[a-ząćęłńóśźż0-9-]+){0,6}\\s+${asarvoEscapedMm}\\b`,
+                  "iu"
+                ).test(asarvoTraceDescription) ||
+                new RegExp(
+                  `\\b${asarvoEscapedMm}\\s*mm\\b`,
+                  "iu"
+                ).test(asarvoTraceDescription);
+
+              if (
+                asarvoMm >= 75 &&
+                asarvoMm <= 500 &&
+                asarvoLocalSize
+              ) {
+                const asarvoCm = asarvoMm / 10;
+                const asarvoSizeEvidence = normalizeText(
+                  `średnica ${asarvoMm} mm wymiar ${asarvoCm} cm ${asarvoTraceLength.value}`
+                );
+
+                universalFeatureEvidence = normalizeText(
+                  `${universalFeatureEvidence} ${asarvoSizeEvidence}`
+                ).slice(0, 26_000);
+
+                trustedVerifiedDescription = normalizeText(
+                  `${jinaContext} ${asarvoSizeEvidence}`
+                ).slice(0, 12_000);
+
+                description = trustedVerifiedDescription;
+
+                console.log(
+                  "[AIShopping] ASARVO DESCRIPTION FACT:",
+                  finalName,
+                  {
+                    fact: "disc-diameter",
+                    requested: asarvoTraceLength.value,
+                    inferredMm: asarvoMm,
+                    source: "concrete-page-description",
+                  }
+                );
+              }
+            }
+
+            const asarvoAngleGrinderProof =
+              /\b(?:diax\w*|flex\w*|katowk\w*|kątowk\w*|szlifier\w*(?:\s+k[aą]tow\w*)?)\b/iu.test(
+                asarvoTraceDescription
+              );
+
+            const asarvoTableCutterProof =
+              /\b(?:przecinark\w*\s+stolow\w*|przecinark\w*\s+stołow\w*|pila\s+stolow\w*|piła\s+stołow\w*)\b/iu.test(
+                asarvoTraceDescription
+              );
+
+            if (
+              asarvoTableCutterProof &&
+              !asarvoAngleGrinderProof
+            ) {
+              console.log(
+                "[AIShopping] ASARVO DESCRIPTION COMPATIBILITY REJECT:",
+                finalName,
+                {
+                  requestedTool: "diax/flex/szlifierka-katowa",
+                  describedTool: "przecinarka-stolowa",
+                  source: "concrete-page-description",
+                }
+              );
+              return null;
+            }
+          }
+        }
 
         if (
           !trustedConcreteProductClassEvidence &&
@@ -41975,11 +56562,75 @@ async function verifySearchResult(
   }
 
   const listingBoundEvidence = normalizeText(
-    `${universalVerifiedIdentityTitle} ${trustedBoundProductDescription} ${trustedCatalogRequirementEvidence} ${trustedVerifiedDescription} ${universalFeatureEvidence}`
+    `${universalVerifiedIdentityTitle} ${trustedBoundProductDescription} ${trustedStructuredSpecEvidence} ${trustedCatalogRequirementEvidence} ${trustedVerifiedDescription} ${universalFeatureEvidence}`
   );
-  const missingListingBoundRequirements = listingBoundHardRequirements.filter(
-    (requirement) => !requirementHasEvidence(requirement, listingBoundEvidence)
-  );
+  const allIntentRequirements = [
+    ...parsed.intent.required,
+    ...parsed.intent.preferred,
+  ];
+
+  const v7StructuredHardConflicts =
+    asarvoIntentCoreV7StructuredHardConflictRequirements(
+      parsed,
+      trustedStructuredRequirementStates
+    );
+
+  if (v7StructuredHardConflicts.length > 0) {
+    console.log(
+      "[AIShopping] INTENT.V7 reject structured HARD conflict:",
+      finalUrl,
+      v7StructuredHardConflicts.map(
+        (requirement) => ({
+          key: requirement.key,
+          state:
+            asarvoIntentCoreV7StructuredStateForRequirement(
+              requirement,
+              trustedStructuredRequirementStates
+            ),
+        })
+      )
+    );
+
+    return null;
+  }
+
+  const v7UnresolvedTitleAmbiguity =
+    asarvoIntentCoreV7UnresolvedTitleAmbiguityRequirements(
+      universalVerifiedIdentityTitle,
+      parsed,
+      trustedStructuredRequirementStates
+    );
+
+  if (v7UnresolvedTitleAmbiguity.length > 0) {
+    console.log(
+      "[AIShopping] INTENT.V7 reject unresolved multi-variant title:",
+      finalUrl,
+      v7UnresolvedTitleAmbiguity.map(
+        (requirement) => requirement.key
+      )
+    );
+
+    return null;
+  }
+
+  preProofUniversalMatch =
+    asarvoIntentCoreV7SuppressConflictingPreferredScore(
+      preProofUniversalMatch,
+      parsed,
+      trustedStructuredRequirementStates
+    );
+
+
+  const missingListingBoundRequirements =
+    listingBoundHardRequirements.filter(
+      (requirement) =>
+        !requirementHasEvidenceInContext(
+          requirement,
+          listingBoundEvidence,
+          allIntentRequirements
+        )
+    );
+
   if (missingListingBoundRequirements.length > 0) {
     console.log(
       "[AIShopping] V34.CORE120 reject listing-bound requirement not proven:",
@@ -42012,12 +56663,25 @@ async function verifySearchResult(
   // exact-model evidence proves it.
   if (sourceRequiresIndependentRequirementProof(finalUrl)) {
     const titleEvidence = normalizeMatchText(`${result.name} ${finalName} ${finalUrl}`);
-    const unprovenOnAggregator = externallyProvableRequirements.filter(
-      (requirement) =>
-        !requirementHasEvidence(requirement, titleEvidence) &&
-        !requirementHasEvidence(requirement, trustedCeneoExactRequirementEvidence) &&
-        !requirementHasEvidence(requirement, universalIndependentRequirementProof)
-    );
+    const unprovenOnAggregator =
+      externallyProvableRequirements.filter(
+        (requirement) =>
+          !requirementHasEvidenceInContext(
+            requirement,
+            titleEvidence,
+            allIntentRequirements
+          ) &&
+          !requirementHasEvidenceInContext(
+            requirement,
+            trustedCeneoExactRequirementEvidence,
+            allIntentRequirements
+          ) &&
+          !requirementHasEvidenceInContext(
+            requirement,
+            universalIndependentRequirementProof,
+            allIntentRequirements
+          )
+      );
 
     if (unprovenOnAggregator.length > 0) {
       console.log(
@@ -42216,6 +56880,16 @@ async function verifySearchResult(
       "title=",
       finalName
     );
+    return null;
+  }
+
+  // ASARVO_FIX18_CONSOLE_FINAL_REJECT: do not allow product class to drift
+  // after the verified page is read. Price/used proof does NOT prove identity.
+  const asarvoFix18FinalReason = asarvoFix18ConsoleSoldObjectReject(finalName, parsed);
+  if (asarvoFix18FinalReason) {
+    console.log('[ASARVO_FIX18_CONSOLE_FINAL_REJECT]', JSON.stringify({
+      url: finalUrl, title: finalName.slice(0, 125), reason: asarvoFix18FinalReason,
+    }));
     return null;
   }
 
@@ -43041,11 +57715,26 @@ function capSlowMarketplaceReaderCandidates(
     // trusted HARD footprint. Queue order remains the deterministic tie-breaker.
     // This prevents a generic same-brand card from crowding out a listing whose
     // own title already proves a requested quantity/spec threshold.
-    const qualityIndex = [...indexes].sort((a, b) =>
-      getTrustedPortfolioHardCoverageScore(queue[b], parsed) -
-        getTrustedPortfolioHardCoverageScore(queue[a], parsed) ||
-      a - b
-    )[0];
+    const qualityIndex = [...indexes].sort((a, b) => {
+      // ASARVO_DESCRIPTION_INTELLIGENCE_V1_FIX3_FIX1
+      // Scheduling only: explicit requested tool-disc size (25 cm = 250 mm)
+      // wins the scarce slow-reader quality slot before weaker lexical matches.
+      // Final VERIFIED/HARD gates remain unchanged.
+      const bExactToolDiscSize =
+        asarvoToolDiscTitleHasRequestedSize(queue[b].name, parsed) ? 1 : 0;
+      const aExactToolDiscSize =
+        asarvoToolDiscTitleHasRequestedSize(queue[a].name, parsed) ? 1 : 0;
+
+      if (bExactToolDiscSize !== aExactToolDiscSize) {
+        return bExactToolDiscSize - aExactToolDiscSize;
+      }
+
+      return (
+        getTrustedPortfolioHardCoverageScore(queue[b], parsed) -
+          getTrustedPortfolioHardCoverageScore(queue[a], parsed) ||
+        a - b
+      );
+    })[0];
     selectedSlow.add(qualityIndex);
 
     if (limit > 1) {
@@ -43147,6 +57836,671 @@ function capSlowMarketplaceReaderCandidates(
   return limited;
 }
 
+// ASARVO_SEARCH_CORE_V14_MEGA1M_VERIFICATION_WAVE_FAIRNESS
+//
+// Verification-start fairness under a hard route deadline.
+//
+// The queue entering this helper is ALREADY ranked by the mature verification
+// cost/priority logic. V14 never chooses from the weak tail. It only reshuffles
+// the first bounded 2x-worker window so the first worker wave can cover more
+// independent hosts instead of starting several same-host readers first.
+//
+// Invariants:
+// - original strongest candidate stays index 0;
+// - only candidates from the original first 2x worker window may be promoted;
+// - relative order inside each host is preserved;
+// - one-host queues are exact no-ops;
+// - queue membership is unchanged;
+// - verifier acceptance rules are unchanged.
+
+function asarvoSearchCoreV14InterleaveVerificationHead(
+  rankedQueue: SearchResult[]
+): SearchResult[] {
+  if (
+    rankedQueue.length <= 1 ||
+    VERIFY_CONCURRENCY <= 1
+  ) {
+    return rankedQueue;
+  }
+
+  const waveSize =
+    Math.min(
+      rankedQueue.length,
+      Math.max(
+        1,
+        VERIFY_CONCURRENCY
+      )
+    );
+
+  if (
+    rankedQueue.length <= waveSize
+  ) {
+    return rankedQueue;
+  }
+
+  const scanLimit =
+    Math.min(
+      rankedQueue.length,
+      Math.max(
+        waveSize,
+        waveSize * 2
+      )
+    );
+
+  const topWindow =
+    rankedQueue.slice(
+      0,
+      scanLimit
+    );
+
+  const topHosts =
+    new Set(
+      topWindow
+        .map((result) =>
+          getResultHostname(
+            result.url
+          ) || "unknown"
+        )
+    );
+
+  if (
+    topHosts.size <= 1
+  ) {
+    return rankedQueue;
+  }
+
+  const selectedIndices =
+    new Set<number>();
+
+  const firstWave: SearchResult[] = [];
+
+  const representedHosts =
+    new Set<string>();
+
+  const addIndex = (
+    index: number
+  ): boolean => {
+    if (
+      index < 0 ||
+      index >= scanLimit ||
+      selectedIndices.has(index) ||
+      firstWave.length >= waveSize
+    ) {
+      return false;
+    }
+
+    const result =
+      rankedQueue[index];
+
+    selectedIndices.add(index);
+    firstWave.push(result);
+
+    representedHosts.add(
+      getResultHostname(
+        result.url
+      ) || "unknown"
+    );
+
+    return true;
+  };
+
+  // Strongest candidate is never displaced.
+  addIndex(0);
+
+  // First pass: one strong candidate from as many different hosts as fit.
+  for (
+    let index = 1;
+    index < scanLimit &&
+    firstWave.length < waveSize;
+    index += 1
+  ) {
+    const host =
+      getResultHostname(
+        rankedQueue[index].url
+      ) || "unknown";
+
+    if (
+      representedHosts.has(host)
+    ) {
+      continue;
+    }
+
+    addIndex(index);
+  }
+
+  // Second pass: if fewer hosts exist than workers, fill the remaining first
+  // wave directly from original rank order.
+  for (
+    let index = 1;
+    index < scanLimit &&
+    firstWave.length < waveSize;
+    index += 1
+  ) {
+    addIndex(index);
+  }
+
+  const remainder =
+    rankedQueue.filter(
+      (_result, index) =>
+        !selectedIndices.has(
+          index
+        )
+    );
+
+  return [
+    ...firstWave,
+    ...remainder,
+  ];
+}
+
+// ASARVO_SEARCH_CORE_V22_MEGA100M_MULTI_WAVE_HOST_FAIRNESS
+//
+// Preserve V14's first wave exactly. If at least two later waves exist, make
+// wave #2 host-fair using candidates only from original wave #2 + wave #3.
+// Nothing beyond top 3x workerCount is promoted. V15 budgets and all acceptance
+// semantics remain unchanged.
+
+function asarvoSearchCoreV22InterleaveLaterVerificationWaves(
+  queue: SearchResult[],
+  workerCountRaw = VERIFY_CONCURRENCY
+): SearchResult[] {
+  if (queue.length <= 1 || workerCountRaw <= 1) return queue;
+
+  const waveSize = Math.min(
+    queue.length,
+    Math.max(1, Math.floor(workerCountRaw))
+  );
+
+  // If all remaining work fits in one second wave, all of it starts together.
+  if (queue.length <= waveSize * 2) return queue;
+
+  const firstWave = queue.slice(0, waveSize);
+  const strongEnd = Math.min(queue.length, waveSize * 3);
+  const pool = queue.slice(waveSize, strongEnd);
+
+  const hosts = new Set(
+    pool.map((result) => getResultHostname(result.url) || "unknown")
+  );
+  if (hosts.size <= 1) return queue;
+
+  const secondWaveSize = Math.min(waveSize, pool.length);
+  const selected = new Set<number>();
+  const represented = new Set<string>();
+  const secondWave: SearchResult[] = [];
+
+  const add = (index: number): boolean => {
+    if (
+      index < 0 ||
+      index >= pool.length ||
+      selected.has(index) ||
+      secondWave.length >= secondWaveSize
+    ) return false;
+
+    const result = pool[index];
+    selected.add(index);
+    secondWave.push(result);
+    represented.add(getResultHostname(result.url) || "unknown");
+    return true;
+  };
+
+  // Old wave #2 strongest stays pinned.
+  add(0);
+
+  // Pull one strong candidate per new host from old wave #2 + #3.
+  for (
+    let index = 1;
+    index < pool.length && secondWave.length < secondWaveSize;
+    index += 1
+  ) {
+    const host = getResultHostname(pool[index].url) || "unknown";
+    if (represented.has(host)) continue;
+    add(index);
+  }
+
+  // Fill remaining wave #2 capacity in original rank order.
+  for (
+    let index = 1;
+    index < pool.length && secondWave.length < secondWaveSize;
+    index += 1
+  ) {
+    add(index);
+  }
+
+  const strongRemainder = pool.filter(
+    (_result, index) => !selected.has(index)
+  );
+
+  return [
+    ...firstWave,
+    ...secondWave,
+    ...strongRemainder,
+    ...queue.slice(strongEnd),
+  ];
+}
+
+// ASARVO_SEARCH_CORE_V15_MEGA1M_QUEUE_AWARE_VERIFICATION_BUDGETS
+//
+// Queue-aware verification budgets.
+//
+// V14 diversified who STARTS first. V15 ensures ordinary first-wave workers do
+// not all consume the entire remaining route window while strong candidates are
+// still waiting behind them.
+//
+// Safety:
+// - candidate #0 always keeps the mature full budget;
+// - OLX and Allegro Lokalnie keep their dedicated reader budgets;
+// - deferred exact-model bridge candidates keep their mature full budget;
+// - single-wave queues are exact no-ops;
+// - later waves are not artificially shortened;
+// - acceptance logic is untouched;
+// - only ordinary first-wave candidates are capped, and only when a second wave
+//   actually exists.
+
+function asarvoSearchCoreV15QueueAwareVerificationBudgetMs(
+  result: SearchResult,
+  index: number,
+  queueLength: number,
+  workerCount: number,
+  remainingMs: number,
+  baseBudgetMs: number
+): number {
+  const boundedBase =
+    Math.max(
+      0,
+      Math.min(
+        remainingMs,
+        baseBudgetMs
+      )
+    );
+
+  if (
+    boundedBase <= 0 ||
+    queueLength <= workerCount ||
+    index === 0 ||
+    index >= workerCount
+  ) {
+    return boundedBase;
+  }
+
+  const host =
+    getResultHostname(
+      result.url
+    );
+
+  if (
+    host === "olx.pl" ||
+    host === "allegrolokalnie.pl" ||
+    Boolean(
+      result.deferredModelIdentityBridgeCode
+    )
+  ) {
+    return boundedBase;
+  }
+
+  // Do not slice an already-small first-wave budget. The cap is useful only
+  // when enough time exists to preserve a meaningful second-wave attempt.
+  if (
+    remainingMs < 5_200 ||
+    boundedBase <= 3_600
+  ) {
+    return boundedBase;
+  }
+
+  const reserveForNextWaveMs =
+    Math.min(
+      2_800,
+      Math.max(
+        2_200,
+        Math.floor(
+          remainingMs * 0.30
+        )
+      )
+    );
+
+  const capped =
+    Math.max(
+      3_200,
+      remainingMs -
+        reserveForNextWaveMs
+    );
+
+  return Math.min(
+    boundedBase,
+    capped
+  );
+}
+
+// ASARVO_SEARCH_CORE_V23_MEGA100M_INFLIGHT_HOST_SERIALIZATION
+type AsarvoSearchCoreV23VerificationClaim = {
+  index: number;
+  lockHost: string;
+};
+
+function asarvoSearchCoreV23ShouldSerializeVerificationHost(
+  hostRaw: string,
+  parsed: ParsedQuery
+): boolean {
+  const host = hostRaw.trim().toLowerCase().replace(/^www\./, "");
+  if (!host) return false;
+  if (host === "olx.pl") return false;
+  if (host === "allegrolokalnie.pl" && parsed.condition !== null) return false;
+  return true;
+}
+
+// ASARVO_SEARCH_CORE_V25_MEGA100M_EXPLICIT_TRANSPORT_BREAKER
+//
+// Request-local quarantine based ONLY on explicit thrown transport/service
+// errors. verifySearchResult() => null is deliberately NOT a failure signal.
+
+type AsarvoSearchCoreV25TransportFailureKind =
+  | "http-403"
+  | "http-408"
+  | "http-425"
+  | "http-429"
+  | "http-5xx"
+  | "timeout"
+  | "network"
+  | "dns"
+  | "connection"
+  | "fetch";
+
+function asarvoSearchCoreV25ReadErrorNumber(
+  error: unknown,
+  key: string
+): number | null {
+  if (
+    !error ||
+    typeof error !== "object"
+  ) {
+    return null;
+  }
+
+  const value =
+    (
+      error as Record<string, unknown>
+    )[key];
+
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value)
+  ) {
+    return value;
+  }
+
+  if (
+    typeof value === "string"
+  ) {
+    const parsed =
+      Number(value);
+
+    if (
+      Number.isFinite(parsed)
+    ) {
+      return parsed;
+    }
+  }
+
+  return null;
+}
+
+function asarvoSearchCoreV25ExplicitTransportFailureKind(
+  error: unknown
+): AsarvoSearchCoreV25TransportFailureKind | null {
+  const status =
+    asarvoSearchCoreV25ReadErrorNumber(
+      error,
+      "status"
+    ) ??
+    asarvoSearchCoreV25ReadErrorNumber(
+      error,
+      "statusCode"
+    ) ??
+    asarvoSearchCoreV25ReadErrorNumber(
+      error,
+      "httpStatus"
+    );
+
+  if (status === 403) return "http-403";
+  if (status === 408) return "http-408";
+  if (status === 425) return "http-425";
+  if (status === 429) return "http-429";
+
+  if (
+    status !== null &&
+    status >= 500 &&
+    status <= 599
+  ) {
+    return "http-5xx";
+  }
+
+  let name = "";
+  let message = "";
+  let code = "";
+
+  if (
+    error &&
+    typeof error === "object"
+  ) {
+    const record =
+      error as Record<string, unknown>;
+
+    if (
+      typeof record.name === "string"
+    ) {
+      name = record.name;
+    }
+
+    if (
+      typeof record.message === "string"
+    ) {
+      message = record.message;
+    }
+
+    if (
+      typeof record.code === "string"
+    ) {
+      code = record.code;
+    }
+  } else if (
+    typeof error === "string"
+  ) {
+    message = error;
+  }
+
+  const text =
+    `${name} ${message} ${code}`
+      .toLowerCase();
+
+  if (
+    /\b(?:aborterror|timeouterror|timeout|timed out|etimedout|und_err_connect_timeout|und_err_headers_timeout|und_err_body_timeout)\b/u.test(
+      text
+    )
+  ) {
+    return "timeout";
+  }
+
+  if (
+    /\b(?:enotfound|eai_again|dns)\b/u.test(
+      text
+    )
+  ) {
+    return "dns";
+  }
+
+  if (
+    /\b(?:econnreset|econnrefused|epipe|socket hang up|connection reset|connection refused)\b/u.test(
+      text
+    )
+  ) {
+    return "connection";
+  }
+
+  if (
+    /\b(?:networkerror|network error|network request failed)\b/u.test(
+      text
+    )
+  ) {
+    return "network";
+  }
+
+  if (
+    /\b(?:fetch failed|failed to fetch)\b/u.test(
+      text
+    )
+  ) {
+    return "fetch";
+  }
+
+  const explicitHttp =
+    text.match(
+      /\b(?:http|status)\s*[:=]?\s*(403|408|425|429|5\d\d)\b/u
+    );
+
+  if (explicitHttp) {
+    const parsed =
+      Number(
+        explicitHttp[1]
+      );
+
+    if (parsed === 403) return "http-403";
+    if (parsed === 408) return "http-408";
+    if (parsed === 425) return "http-425";
+    if (parsed === 429) return "http-429";
+
+    if (
+      parsed >= 500 &&
+      parsed <= 599
+    ) {
+      return "http-5xx";
+    }
+  }
+
+  return null;
+}
+
+// ASARVO_SEARCH_CORE_V26_MEGA100M_REQUEST_WIDE_HOST_HEALTH
+//
+// V25 quarantine originally lived inside one verifyOffers() invocation. The
+// same ParsedQuery object is reused by the first verification wave, transient
+// retry, zero-result recovery verification and late price-coverage verification.
+// V26 therefore stores explicit transport-failure counts in a WeakMap keyed by
+// that ParsedQuery object.
+//
+// Same request => same host-health state.
+// New ParsedQuery object => clean state.
+// No global host blacklist or cross-request cooldown is introduced.
+
+type AsarvoSearchCoreV26RequestHostHealthState = {
+  explicitTransportFailureCountByHost: Map<string, number>;
+  quarantinedHosts: Set<string>;
+};
+
+const asarvoSearchCoreV26RequestHostHealthByParsed =
+  new WeakMap<
+    ParsedQuery,
+    AsarvoSearchCoreV26RequestHostHealthState
+  >();
+
+function asarvoSearchCoreV26GetRequestHostHealthState(
+  parsed: ParsedQuery
+): AsarvoSearchCoreV26RequestHostHealthState {
+  const existing =
+    asarvoSearchCoreV26RequestHostHealthByParsed.get(
+      parsed
+    );
+
+  if (existing) {
+    return existing;
+  }
+
+  const created: AsarvoSearchCoreV26RequestHostHealthState = {
+    explicitTransportFailureCountByHost:
+      new Map<string, number>(),
+    quarantinedHosts:
+      new Set<string>(),
+  };
+
+  asarvoSearchCoreV26RequestHostHealthByParsed.set(
+    parsed,
+    created
+  );
+
+  return created;
+}
+
+// ASARVO_SEARCH_CORE_V27_MEGA100M_QUARANTINE_AWARE_PRESCHEDULER_PRUNING
+//
+// V26 made host health request-wide, but a later verifyOffers() could still
+// build V14/V22/V15 scheduling windows from candidates belonging to a host that
+// was already quarantined earlier in the same request.
+//
+// V27 removes already-known quarantined ordinary hosts BEFORE verification
+// scheduling. Mid-call quarantine is still handled by V25's claimant skip.
+// This means:
+// - first verifyOffers() is a NOOP when request health is empty;
+// - retry/recovery/late verification no longer spends queue slots, fairness
+//   positions or budget ordinals on hosts already proven transport-unhealthy;
+// - no global or cross-request blacklist is introduced.
+
+function asarvoSearchCoreV27FilterKnownQuarantinedCandidates(
+  queue: SearchResult[],
+  parsed: ParsedQuery
+): SearchResult[] {
+  if (
+    queue.length === 0
+  ) {
+    return queue;
+  }
+
+  const requestState =
+    asarvoSearchCoreV26GetRequestHostHealthState(
+      parsed
+    );
+
+  if (
+    requestState.quarantinedHosts.size === 0
+  ) {
+    return queue;
+  }
+
+  let changed =
+    false;
+
+  const filtered =
+    queue.filter(
+      (result) => {
+        const host =
+          getResultHostname(
+            result.url
+          )
+            .trim()
+            .toLowerCase()
+            .replace(
+              /^www\./,
+              ""
+            );
+
+        if (
+          host &&
+          requestState.quarantinedHosts.has(
+            host
+          )
+        ) {
+          changed =
+            true;
+
+          return false;
+        }
+
+        return true;
+      }
+    );
+
+  return changed
+    ? filtered
+    : queue;
+}
+
 async function verifyOffers(
   results: SearchResult[],
   parsed: ParsedQuery,
@@ -43163,10 +58517,60 @@ async function verifyOffers(
   // the final UI shows actual sellers, item price and delivery. The expansion
   // reuses one already-selected product page and stays inside the hard route
   // deadline; if Ceneo exposes no merchant cards we keep the old fallback.
-  const merchantExpandedResults = await expandCeneoMerchantVerificationCandidates(
-    results,
-    parsed,
-    hardDeadlineAt
+  // ASARVO_CENEO_PREVERIFY_RESERVE_FIX
+  // Ceneo expansion is preparation work. It may improve seller fidelity,
+  // but it must never spend the whole first verification window before
+  // concrete retailer candidates reach verifySearchResult().
+  const asarvoCeneoPreverifyRemainingMs = Math.max(
+    0,
+    hardDeadlineAt -
+      Date.now() -
+      VERIFICATION_RESPONSE_SAFETY_MARGIN_MS
+  );
+
+  const asarvoCeneoVerifierReserveMs = Math.min(
+    3_400,
+    Math.max(
+      2_600,
+      Math.floor(
+        asarvoCeneoPreverifyRemainingMs * 0.6
+      )
+    )
+  );
+
+  const asarvoCeneoExpansionBudgetMs = Math.max(
+    0,
+    Math.min(
+      1_800,
+      asarvoCeneoPreverifyRemainingMs -
+        asarvoCeneoVerifierReserveMs
+    )
+  );
+
+  const merchantExpandedResults =
+    asarvoCeneoExpansionBudgetMs >= 900
+      ? await withAbortableDeadline(
+          (signal) =>
+            expandCeneoMerchantVerificationCandidates(
+              results,
+              parsed,
+              hardDeadlineAt,
+              signal
+            ),
+          asarvoCeneoExpansionBudgetMs,
+          results,
+          "Ceneo merchant pre-verification expansion"
+        )
+      : results;
+
+  console.log(
+    "[AIShopping] ASARVO Ceneo preverify reserve:",
+    {
+      remainingMs: asarvoCeneoPreverifyRemainingMs,
+      expansionBudgetMs: asarvoCeneoExpansionBudgetMs,
+      verifierReserveMs: asarvoCeneoVerifierReserveMs,
+      expanded: merchantExpandedResults !== results,
+    }
   );
 
   // V32.12 executes the already-selected diverse batch in cost-aware order.
@@ -43360,7 +58764,8 @@ async function verifyOffers(
     return comparable <= parsed.maxPrice ? 1 : -1;
   };
 
-  const verificationQueueUnbounded = [...merchantExpandedResults].sort((a, b) => {
+  const verificationQueueUnbounded = asarvoSearchCoreV27FilterKnownQuarantinedCandidates(
+      [...merchantExpandedResults].sort((a, b) => {
     const storageAlignmentDiff =
       core581StorageAlignmentRank(b) - core581StorageAlignmentRank(a);
     if (storageAlignmentDiff !== 0) return storageAlignmentDiff;
@@ -43369,7 +58774,20 @@ async function verifyOffers(
       core581BudgetSafetyRank(b) - core581BudgetSafetyRank(a);
     if (budgetSafetyDiff !== 0) return budgetSafetyDiff;
 
-    const tierDiff = costTier(a) - costTier(b);
+        // ASARVO_DESCRIPTION_INTELLIGENCE_V1_FIX4_FIX1
+    // Evidence-first reader ordering:
+    // if a candidate's OWN title already carries the exact requested tool-disc
+    // diameter (for example 250 for 25 cm), read that product page first.
+    // This changes scheduling only. Final VERIFIED/HARD acceptance remains strict.
+    const aExactToolDiscSize =
+      asarvoToolDiscTitleHasRequestedSize(a.name, parsed) ? 1 : 0;
+    const bExactToolDiscSize =
+      asarvoToolDiscTitleHasRequestedSize(b.name, parsed) ? 1 : 0;
+
+    if (aExactToolDiscSize !== bExactToolDiscSize) {
+      return bExactToolDiscSize - aExactToolDiscSize;
+    }
+const tierDiff = costTier(a) - costTier(b);
     if (tierDiff !== 0) return tierDiff;
 
     const priorityDiff = priorityOf(b) - priorityOf(a);
@@ -43402,12 +58820,20 @@ async function verifyOffers(
     }
 
     return a.searchRank - b.searchRank;
-  });
+  }),
+      parsed
+    );
 
-  const verificationQueue = capSlowMarketplaceReaderCandidates(
-    verificationQueueUnbounded,
-    parsed
-  );
+  const verificationQueue =
+    asarvoSearchCoreV22InterleaveLaterVerificationWaves(
+      asarvoSearchCoreV14InterleaveVerificationHead(
+        capSlowMarketplaceReaderCandidates(
+          verificationQueueUnbounded,
+          parsed
+        )
+      ),
+      VERIFY_CONCURRENCY
+    );
 
   console.log(
     "[AIShopping] V34.CORE581_QUEUE_JSON " +
@@ -43717,7 +59143,409 @@ async function verifyOffers(
     }
   });
 
-  const worker = async () => {
+    const v23StrongHostSerialWindow =
+    Math.min(
+      verificationQueue.length,
+      Math.max(
+        workerCount,
+        workerCount * 3
+      )
+    );
+
+  const v23ClaimedIndices =
+    new Set<number>();
+
+  const v23ActiveSerializedHosts =
+    new Set<string>();
+
+    const v26RequestHostHealthState =
+    asarvoSearchCoreV26GetRequestHostHealthState(
+      parsed
+    );
+
+  const v25ExplicitTransportFailureCountByHost =
+    v26RequestHostHealthState
+      .explicitTransportFailureCountByHost;
+
+    const v25QuarantinedHosts =
+    v26RequestHostHealthState
+      .quarantinedHosts;
+  // ASARVO_SEARCH_CORE_V30_MEGA100M_CONSECUTIVE_FAILURE_HYSTERESIS
+  //
+  // V25/V26 count explicit thrown transport failures across the request.
+  // V30 turns that into consecutive-failure hysteresis: a non-throwing verifier
+  // completion proves that the explicit failure streak has ended. Semantic
+  // rejection/null is allowed to reset the transport streak because it is not
+  // an explicit transport/service failure.
+  //
+  // Once a host has already crossed the threshold and entered quarantine, it is
+  // never resurrected inside the same request.
+  const v30RecordExplicitTransportSuccess =
+    (
+      hostRaw: string
+    ): void => {
+      const host =
+        v25NormalizeHost(
+          hostRaw
+        );
+
+      if (
+        !host ||
+        !asarvoSearchCoreV23ShouldSerializeVerificationHost(
+          host,
+          parsed
+        ) ||
+        v25QuarantinedHosts.has(
+          host
+        )
+      ) {
+        return;
+      }
+
+      if (
+        (
+          v25ExplicitTransportFailureCountByHost.get(
+            host
+          ) ?? 0
+        ) > 0
+      ) {
+        v25ExplicitTransportFailureCountByHost.delete(
+          host
+        );
+      }
+    };
+
+
+  const v25NormalizeHost =
+    (
+      hostRaw: string
+    ): string =>
+      hostRaw
+        .trim()
+        .toLowerCase()
+        .replace(
+          /^www\./,
+          ""
+        );
+
+  const v25RecordExplicitTransportFailure =
+    (
+      hostRaw: string,
+      error: unknown
+    ): boolean => {
+      const host =
+        v25NormalizeHost(
+          hostRaw
+        );
+
+      if (
+        !host ||
+        !asarvoSearchCoreV23ShouldSerializeVerificationHost(
+          host,
+          parsed
+        )
+      ) {
+        return false;
+      }
+
+      const failureKind =
+        asarvoSearchCoreV25ExplicitTransportFailureKind(
+          error
+        );
+
+      if (!failureKind) {
+        return false;
+      }
+
+      const nextCount =
+        (
+          v25ExplicitTransportFailureCountByHost.get(
+            host
+          ) ?? 0
+        ) + 1;
+
+      v25ExplicitTransportFailureCountByHost.set(
+        host,
+        nextCount
+      );
+
+      if (
+        nextCount < 2
+      ) {
+        return false;
+      }
+
+      const wasQuarantined =
+        v25QuarantinedHosts.has(
+          host
+        );
+
+      v25QuarantinedHosts.add(
+        host
+      );
+
+      if (!wasQuarantined) {
+        console.warn(
+          "[AIShopping] V25 host quarantine:",
+          host,
+          failureKind,
+          "count=",
+          nextCount
+        );
+      }
+
+      return true;
+    };
+
+  // ASARVO_SEARCH_CORE_V24_MEGA100M_HOST_LOCK_WAIT_WAKEUP
+  //
+  // V23 deliberately returned no claim while a stronger candidate was waiting
+  // on a same-host lock. A worker interpreted that as permanent exhaustion and
+  // exited. V24 distinguishes "temporarily blocked" from "fully exhausted" and
+  // wakes idle workers when any serialized host lock is released.
+  let v24HostLockEpoch =
+    0;
+
+  const v24HostLockWaiters =
+    new Set<() => void>();
+
+  const v24NotifyHostLockChange =
+    (): void => {
+      v24HostLockEpoch += 1;
+
+      const waiters =
+        Array.from(
+          v24HostLockWaiters
+        );
+
+      v24HostLockWaiters.clear();
+
+      for (
+        const wake of
+        waiters
+      ) {
+        wake();
+      }
+    };
+
+  const v24WaitForHostLockChange =
+    async (
+      observedEpoch: number,
+      waitMsRaw: number
+    ): Promise<void> => {
+      const waitMs =
+        Math.max(
+          1,
+          Math.floor(
+            waitMsRaw
+          )
+        );
+
+      if (
+        v24HostLockEpoch !==
+        observedEpoch
+      ) {
+        return;
+      }
+
+      await new Promise<void>(
+        (resolve) => {
+          let settled =
+            false;
+
+          let timer:
+            ReturnType<typeof setTimeout>;
+
+          const finish =
+            () => {
+              if (settled) {
+                return;
+              }
+
+              settled =
+                true;
+
+              clearTimeout(
+                timer
+              );
+
+              v24HostLockWaiters.delete(
+                finish
+              );
+
+              resolve();
+            };
+
+          timer =
+            setTimeout(
+              finish,
+              waitMs
+            );
+
+          v24HostLockWaiters.add(
+            finish
+          );
+
+          // Close the race where a host unlocks after the caller captures the
+          // epoch but before this waiter is inserted into the set.
+          if (
+            v24HostLockEpoch !==
+            observedEpoch
+          ) {
+            finish();
+          }
+        }
+      );
+    };
+
+  const v23ClaimNextCandidate =
+    (): AsarvoSearchCoreV23VerificationClaim | "wait" | null => {
+      const claimIndex =
+        (
+          index: number,
+          serializeHost: boolean,
+          host: string
+        ): AsarvoSearchCoreV23VerificationClaim => {
+          v23ClaimedIndices.add(index);
+
+          if (serializeHost && host) {
+            v23ActiveSerializedHosts.add(host);
+          }
+
+          return {
+            index,
+            lockHost: serializeHost ? host : "",
+          };
+        };
+
+      let hasUnclaimedStrongCandidate =
+        false;
+
+      for (
+        let index = 0;
+        index < v23StrongHostSerialWindow;
+        index += 1
+      ) {
+        if (v23ClaimedIndices.has(index)) {
+          continue;
+        }
+        const v25CandidateHost =
+          v25NormalizeHost(
+            getResultHostname(
+              verificationQueue[index]?.url ??
+              ""
+            )
+          );
+
+        if (
+          v25CandidateHost &&
+          v25QuarantinedHosts.has(
+            v25CandidateHost
+          )
+        ) {
+          v23ClaimedIndices.add(
+            index
+          );
+
+          continue;
+        }
+
+
+        hasUnclaimedStrongCandidate =
+          true;
+
+        const host =
+          getResultHostname(
+            verificationQueue[index]?.url ?? ""
+          );
+
+        const serializeHost =
+          asarvoSearchCoreV23ShouldSerializeVerificationHost(
+            host,
+            parsed
+          );
+
+        if (
+          serializeHost &&
+          host &&
+          v23ActiveSerializedHosts.has(host)
+        ) {
+          continue;
+        }
+
+        return claimIndex(
+          index,
+          serializeHost,
+          host
+        );
+      }
+
+      if (hasUnclaimedStrongCandidate) {
+        return "wait";
+      }
+
+      for (
+        let index = v23StrongHostSerialWindow;
+        index < verificationQueue.length;
+        index += 1
+      ) {
+        if (v23ClaimedIndices.has(index)) {
+          continue;
+        }
+        const v25CandidateHost =
+          v25NormalizeHost(
+            getResultHostname(
+              verificationQueue[index]?.url ??
+              ""
+            )
+          );
+
+        if (
+          v25CandidateHost &&
+          v25QuarantinedHosts.has(
+            v25CandidateHost
+          )
+        ) {
+          v23ClaimedIndices.add(
+            index
+          );
+
+          continue;
+        }
+
+
+        const host =
+          getResultHostname(
+            verificationQueue[index]?.url ?? ""
+          );
+
+        const serializeHost =
+          asarvoSearchCoreV23ShouldSerializeVerificationHost(
+            host,
+            parsed
+          );
+
+        if (
+          serializeHost &&
+          host &&
+          v23ActiveSerializedHosts.has(host)
+        ) {
+          return "wait";
+        }
+
+        return claimIndex(
+          index,
+          serializeHost,
+          host
+        );
+      }
+
+      return null;
+    };
+
+  void cursor;
+
+const worker = async () => {
     while (true) {
       const remaining =
         hardDeadlineAt - Date.now() - VERIFICATION_RESPONSE_SAFETY_MARGIN_MS;
@@ -43741,7 +59569,41 @@ async function verifyOffers(
         return;
       }
 
-      const index = cursor++;
+      const v24ObservedHostLockEpoch =
+        v24HostLockEpoch;
+
+      const claim =
+        v23ClaimNextCandidate();
+
+      if (
+        claim === "wait"
+      ) {
+        const waitRemaining =
+          hardDeadlineAt -
+          Date.now() -
+          VERIFICATION_RESPONSE_SAFETY_MARGIN_MS;
+
+        if (
+          waitRemaining <= 0
+        ) {
+          return;
+        }
+
+        await v24WaitForHostLockChange(
+          v24ObservedHostLockEpoch,
+          Math.min(
+            75,
+            waitRemaining
+          )
+        );
+
+        continue;
+      }
+
+      if (!claim) return;
+
+      const index =
+        claim.index;
       if (index >= verificationQueue.length) return;
 
       try {
@@ -43765,10 +59627,15 @@ async function verifyOffers(
               ? 8_500
               : 6_500;
 
-        const effectivePerOfferBudgetMs = Math.min(
-          remaining,
-          perOfferBudget
-        );
+        const effectivePerOfferBudgetMs =
+          asarvoSearchCoreV15QueueAwareVerificationBudgetMs(
+            verificationQueue[index],
+            index,
+            verificationQueue.length,
+            workerCount,
+            remaining,
+            perOfferBudget
+          );
 
         console.log(
           "[AIShopping] V34.CORE120 verification candidate budget:",
@@ -43793,14 +59660,40 @@ async function verifyOffers(
           null,
           `verify ${verificationQueue[index]?.url ?? index}`
         );
+        v30RecordExplicitTransportSuccess(
+          getResultHostname(
+            verificationQueue[index]?.url ??
+            ""
+          )
+        );
+
 
         if (offer) verified.push(offer);
       } catch (error) {
+        v25RecordExplicitTransportFailure(
+          getResultHostname(
+            verificationQueue[index]?.url ??
+            ""
+          ),
+          error
+        );
+
         console.error(
           "[AIShopping] verify error:",
           verificationQueue[index]?.url,
           error
         );
+      } finally {
+        if (claim.lockHost) {
+          const released =
+            v23ActiveSerializedHosts.delete(
+              claim.lockHost
+            );
+
+          if (released) {
+            v24NotifyHostLockChange();
+          }
+        }
       }
     }
   };
@@ -43946,6 +59839,149 @@ function capV34Core164VerificationCandidatesBySourceHealth(
     );
   }
   return kept;
+}
+
+// ASARVO_CORE30_VERIFIER_SLOT_BACKFILL_V1
+// Source-health capping may remove an unhealthy host AFTER the diverse
+// selector already used the entire verifier budget. Safely fill only vacated
+// slots from already discovered concrete candidates. No new discovery,
+// price inference, condition inference or verifier bypass is permitted.
+function asarvoCore30BackfillVerifierSlots(
+  verificationSelectionPool: SearchResult[],
+  parsed: ParsedQuery,
+  limit: number,
+  reserveUrls: ReadonlySet<string>,
+  selectedAfterHealth: SearchResult[],
+  remainingMs: number
+): SearchResult[] {
+  if (
+    limit < 1 ||
+    selectedAfterHealth.length >= limit ||
+    verificationSelectionPool.length <= selectedAfterHealth.length ||
+    remainingMs < 3_400
+  ) return selectedAfterHealth;
+
+  const expandedLimit = Math.min(
+    verificationSelectionPool.length,
+    limit + Math.min(limit, 8)
+  );
+  if (expandedLimit <= selectedAfterHealth.length) return selectedAfterHealth;
+
+  // Use the SAME eligibility/class/accessory gate as the primary selector.
+  const expansion = selectDiverseSearchResults(
+    verificationSelectionPool,
+    expandedLimit,
+    parsed,
+    reserveUrls
+  );
+  const combined = dedupeSearchResultsByUrl([
+    ...selectedAfterHealth,
+    ...expansion,
+  ]);
+  // Reapply source-health caps to the combined set so a previously unhealthy
+  // host cannot recover slots simply by appearing in the expanded tail.
+  const capped = capV34Core164VerificationCandidatesBySourceHealth(
+    combined,
+    parsed,
+    limit
+  );
+  if (capped.length <= selectedAfterHealth.length) return selectedAfterHealth;
+
+  console.log("[AIShopping] ASARVO_CORE30_VERIFIER_SLOT_BACKFILL", {
+    before: selectedAfterHealth.length,
+    after: capped.length,
+    limit,
+    pool: verificationSelectionPool.length,
+    remainingMs,
+    addedHosts: capped.slice(selectedAfterHealth.length).map((result) =>
+      getResultHostname(result.url)
+    ),
+  });
+  return capped;
+}
+
+// ASARVO_CORE31_PAGE_VERIFIED_POINTER_REPLAY_V1
+// Keep only public URLs and titles that were in a final, independently
+// PAGE-VERIFIED offer. A replayed pointer NEVER carries any card price,
+// condition, availability, trusted snippet, hydration, or verification proof.
+// Every replay goes through the ordinary discovery and page verifier again.
+type AsarvoCore31Pointer = { url: string; name: string; verifiedAt: number };
+const ASARVO_CORE31_POINTER_TTL_MS = 180_000;
+const ASARVO_CORE31_MAX_QUERY_KEYS = 48;
+const ASARVO_CORE31_POINTERS = new Map<string, AsarvoCore31Pointer[]>();
+function asarvoCore31Key(query: string, country: unknown): string {
+  return JSON.stringify({
+    q: normalizeText(query).toLowerCase().slice(0, 240),
+    c: typeof country === "string" ? country.toUpperCase().trim() : null,
+  });
+}
+function asarvoCore31Clean(now: number): void {
+  for (const [key, rows] of ASARVO_CORE31_POINTERS) {
+    const fresh = rows.filter((item) => now - item.verifiedAt < ASARVO_CORE31_POINTER_TTL_MS && now >= item.verifiedAt);
+    if (fresh.length) ASARVO_CORE31_POINTERS.set(key, fresh);
+    else ASARVO_CORE31_POINTERS.delete(key);
+  }
+  while (ASARVO_CORE31_POINTERS.size > ASARVO_CORE31_MAX_QUERY_KEYS) {
+    const key = ASARVO_CORE31_POINTERS.keys().next().value;
+    if (typeof key !== "string") break;
+    ASARVO_CORE31_POINTERS.delete(key);
+  }
+}
+function asarvoCore31IsSafePublicOfferUrl(url: string): boolean {
+  try {
+    const parsedUrl = new URL(url);
+    if (parsedUrl.protocol !== "https:") return false;
+    const host = parsedUrl.hostname.toLowerCase();
+    if (!host.includes(".") || host === "localhost" || host.endsWith(".local")) return false;
+    if (/^\d+\.\d+\.\d+\.\d+$/.test(host)) return false;
+    if (host === "ceneo.pl" || host === "www.ceneo.pl") return false;
+    return true;
+  } catch { return false; }
+}
+function asarvoCore31ReadPointers(key: string, existing: SearchResult[], now = Date.now()): SearchResult[] {
+  asarvoCore31Clean(now);
+  if (existing.length !== 0) return []; // CORE33: replay only after complete discovery failure
+  const prior = new Set(existing.map((item) => normalizeUrl(item.url)));
+  const rows = ASARVO_CORE31_POINTERS.get(key) ?? [];
+  const replay: SearchResult[] = [];
+  for (const item of rows) {
+    const normalized = normalizeUrl(item.url);
+    if (!normalized || prior.has(normalized) || !asarvoCore31IsSafePublicOfferUrl(item.url)) continue;
+    // Explicit untrusted search-result semantics; no transferable provenance.
+    replay.push({ url: item.url, name: item.name, snippet: "", source: "Bing", searchRank: 999 });
+    prior.add(normalized);
+    if (replay.length >= 4) break;
+  }
+  return replay;
+}
+function asarvoCore31RememberPointers(key: string, finalOffers: Offer[], now = Date.now()): void {
+  asarvoCore31Clean(now);
+  const fresh: AsarvoCore31Pointer[] = [];
+  const found = new Set<string>();
+  for (const offer of finalOffers) {
+    if (
+      offer.verification !== "verified" || offer.verificationTier !== "page-verified" ||
+      offer.priceVerified !== true || typeof offer.price !== "number" || offer.price <= 0 ||
+      !asarvoCore31IsSafePublicOfferUrl(offer.url)
+    ) continue;
+    const keyUrl = normalizeUrl(offer.url);
+    if (!keyUrl || found.has(keyUrl) || !offer.name.trim()) continue;
+    fresh.push({ url: offer.url, name: offer.name, verifiedAt: now });
+    found.add(keyUrl);
+    if (fresh.length >= 6) break;
+  }
+  if (!fresh.length) return;
+  const old = ASARVO_CORE31_POINTERS.get(key) ?? [];
+  const merged = [...fresh];
+  for (const item of old) {
+    const normalized = normalizeUrl(item.url);
+    if (!normalized || found.has(normalized)) continue;
+    merged.push(item); found.add(normalized);
+    if (merged.length >= 8) break;
+  }
+  ASARVO_CORE31_POINTERS.delete(key);
+  ASARVO_CORE31_POINTERS.set(key, merged);
+  asarvoCore31Clean(now);
 }
 
 type StagedVerificationBudgetProfile = {
@@ -44109,13 +60145,478 @@ function isPeerMarketplaceOffer(offer: Offer): boolean {
   );
 }
 
-function choosePreferredDuplicateOffer(existing: Offer, candidate: Offer): Offer {
-  const existingComparable = getOfferComparablePrice(existing);
-  const candidateComparable = getOfferComparablePrice(candidate);
+// ASARVO_INTENT_CORE_V11_MEGA10000_STABLE_RANK_DEDUPE
+//
+// Deterministic final-offer behavior.
+//
+// Existing business priority is preserved. V11 only resolves remaining ties
+// deterministically so identical verified offer sets do not change order just
+// because async sources finished in a different sequence.
+
+function asarvoIntentCoreV11VerificationTierRank(
+  offer: Offer
+): number {
+  switch (offer.verificationTier) {
+    case "page-verified":
+      return 4;
+    case "card-verified":
+      return 3;
+    case "strong-index":
+      return 2;
+    case "partial":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+function asarvoIntentCoreV11StableOfferKey(
+  offer: Offer
+): string {
+  const store =
+    normalizeOfferStoreKey(offer);
+
+  const name =
+    normalizeMatchText(offer.name)
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  const url =
+    normalizeUrl(offer.url);
+
+  return [
+    store,
+    name,
+    url,
+  ].join("|");
+}
+
+function asarvoIntentCoreV11StableOfferTieCompare(
+  first: Offer,
+  second: Offer
+): number {
+  if (
+    first.priceVerified !==
+    second.priceVerified
+  ) {
+    return first.priceVerified
+      ? -1
+      : 1;
+  }
 
   if (
+    first.verification !==
+    second.verification
+  ) {
+    return first.verification === "verified"
+      ? -1
+      : 1;
+  }
+
+  const firstTier =
+    asarvoIntentCoreV11VerificationTierRank(
+      first
+    );
+
+  const secondTier =
+    asarvoIntentCoreV11VerificationTierRank(
+      second
+    );
+
+  if (firstTier !== secondTier) {
+    return secondTier - firstTier;
+  }
+
+  const firstEvidence =
+    first.evidenceConfidence ?? 0;
+
+  const secondEvidence =
+    second.evidenceConfidence ?? 0;
+
+  if (firstEvidence !== secondEvidence) {
+    return secondEvidence - firstEvidence;
+  }
+
+  if (
+    first.availability !==
+    second.availability
+  ) {
+    return first.availability === "available"
+      ? -1
+      : 1;
+  }
+
+  const firstRelevance =
+    first.relevance ?? 0;
+
+  const secondRelevance =
+    second.relevance ?? 0;
+
+  if (
+    firstRelevance !==
+    secondRelevance
+  ) {
+    return secondRelevance - firstRelevance;
+  }
+
+  return asarvoIntentCoreV11StableOfferKey(
+    first
+  ).localeCompare(
+    asarvoIntentCoreV11StableOfferKey(
+      second
+    ),
+    "en"
+  );
+}
+
+function asarvoIntentCoreV11RankTieCompare(
+  first: Offer,
+  second: Offer
+): number {
+  const firstRelevance =
+    first.relevance ?? 0;
+
+  const secondRelevance =
+    second.relevance ?? 0;
+
+  if (
+    firstRelevance !==
+    secondRelevance
+  ) {
+    return secondRelevance - firstRelevance;
+  }
+
+  return asarvoIntentCoreV11StableOfferTieCompare(
+    first,
+    second
+  );
+}
+
+// ASARVO_SEARCH_CORE_V20_MEGA100M_CROSS_SOURCE_DUPLICATE_CONSENSUS
+//
+// Final cross-source duplicate arbitration.
+//
+// Same real retailer offer can arrive from direct page, retailer catalog,
+// comparison engine, Bing/DDG and recovery paths. The duplicate winner must be
+// chosen by evidence quality before price. Otherwise a cheaper but weaker
+// index/redirect value can replace stronger page-bound evidence.
+//
+// Exact-model retailer dedupe also gets a conservative title-derived variant
+// discriminator, so different sibling SKUs are not collapsed when the query
+// omitted the variant dimension.
+
+type AsarvoSearchCoreV20DuplicateTrustVector = {
+  priceVerified: number;
+  verified: number;
+  tier: number;
+  evidenceBucket: number;
+  available: number;
+};
+
+function asarvoSearchCoreV20DuplicateTrustVector(
+  offer: Offer
+): AsarvoSearchCoreV20DuplicateTrustVector {
+  const evidence =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(
+          offer.evidenceConfidence ?? 0
+        )
+      )
+    );
+
+  return {
+    priceVerified:
+      offer.priceVerified ? 1 : 0,
+    verified:
+      offer.verification === "verified" ? 1 : 0,
+    tier:
+      asarvoIntentCoreV11VerificationTierRank(
+        offer
+      ),
+    evidenceBucket:
+      Math.floor(
+        evidence / 5
+      ),
+    available:
+      offer.availability === "available" ? 1 : 0,
+  };
+}
+
+function asarvoSearchCoreV20CompareDuplicateTrust(
+  first: Offer,
+  second: Offer
+): number {
+  const a =
+    asarvoSearchCoreV20DuplicateTrustVector(
+      first
+    );
+
+  const b =
+    asarvoSearchCoreV20DuplicateTrustVector(
+      second
+    );
+
+  const fields: Array<
+    keyof AsarvoSearchCoreV20DuplicateTrustVector
+  > = [
+    "priceVerified",
+    "verified",
+    "tier",
+    "evidenceBucket",
+    "available",
+  ];
+
+  for (
+    const field of
+    fields
+  ) {
+    if (
+      a[field] !== b[field]
+    ) {
+      return b[field] - a[field];
+    }
+  }
+
+  return 0;
+}
+
+function asarvoSearchCoreV20NormalizeVariantNumber(
+  valueRaw: string
+): string {
+  return String(
+    valueRaw ?? ""
+  )
+    .replace(",", ".")
+    .replace(
+      /\.0+$/u,
+      ""
+    );
+}
+
+function asarvoSearchCoreV20VariantDiscriminatorFingerprint(
+  offer: Offer
+): string {
+  const title =
+    normalizeMatchText(
+      offer.name
+    );
+
+  if (!title) {
+    return "";
+  }
+
+  const tokens =
+    new Set<string>();
+
+  const addMatches = (
+    pattern: RegExp,
+    mapper: (
+      match: RegExpExecArray
+    ) => string | null
+  ) => {
+    const flags =
+      pattern.flags.includes("g")
+        ? pattern.flags
+        : pattern.flags + "g";
+
+    const global =
+      new RegExp(
+        pattern.source,
+        flags
+      );
+
+    let match: RegExpExecArray | null;
+
+    while (
+      (match = global.exec(title)) !== null
+    ) {
+      const mapped =
+        mapper(match);
+
+      if (mapped) {
+        tokens.add(
+          mapped
+        );
+      }
+
+      if (
+        match[0].length === 0
+      ) {
+        global.lastIndex += 1;
+      }
+    }
+  };
+
+  addMatches(
+    /\b(\d{2,4}(?:[.,]\d+)?)\s*(gb|tb)\b/giu,
+    (match) => {
+      const numeric =
+        Number(
+          String(
+            match[1]
+          ).replace(
+            ",",
+            "."
+          )
+        );
+
+      if (
+        !Number.isFinite(
+          numeric
+        ) ||
+        numeric < 32
+      ) {
+        return null;
+      }
+
+      return (
+        "capacity:" +
+        asarvoSearchCoreV20NormalizeVariantNumber(
+          match[1]
+        ) +
+        String(
+          match[2]
+        ).toLowerCase()
+      );
+    }
+  );
+
+  addMatches(
+    /\b(\d{2,4})\s*hz\b/giu,
+    (match) =>
+      "hz:" +
+      String(
+        match[1]
+      )
+  );
+
+  addMatches(
+    /\b(\d{2,3}(?:[.,]\d+)?)\s*(?:cal(?:i|a)?\b|inch(?:es)?\b|")/giu,
+    (match) =>
+      "inch:" +
+      asarvoSearchCoreV20NormalizeVariantNumber(
+        match[1]
+      )
+  );
+
+  addMatches(
+    /\b(?:rozmiar|size|eu)\s*[:\-]?\s*(\d{1,3}(?:[.,]\d+)?)\b/giu,
+    (match) =>
+      "size:" +
+      asarvoSearchCoreV20NormalizeVariantNumber(
+        match[1]
+      )
+  );
+
+  const colorAliases: Array<
+    [string, string]
+  > = [
+    ["black", "black"],
+    ["czarny", "black"],
+    ["czarna", "black"],
+    ["white", "white"],
+    ["bialy", "white"],
+    ["biały", "white"],
+    ["blue", "blue"],
+    ["niebieski", "blue"],
+    ["red", "red"],
+    ["czerwony", "red"],
+    ["green", "green"],
+    ["zielony", "green"],
+    ["silver", "silver"],
+    ["srebrny", "silver"],
+    ["gold", "gold"],
+    ["zloty", "gold"],
+    ["złoty", "gold"],
+    ["gray", "gray"],
+    ["grey", "gray"],
+    ["szary", "gray"],
+    ["pink", "pink"],
+    ["rozowy", "pink"],
+    ["różowy", "pink"],
+    ["purple", "purple"],
+    ["fioletowy", "purple"],
+  ];
+
+  for (
+    const [
+      alias,
+      canonical
+    ] of
+    colorAliases
+  ) {
+    const escaped =
+      alias.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        "\\$&"
+      );
+
+    if (
+      new RegExp(
+        `\\b${escaped}\\b`,
+        "iu"
+      ).test(
+        title
+      )
+    ) {
+      tokens.add(
+        "color:" +
+        canonical
+      );
+    }
+  }
+
+  return Array.from(
+    tokens
+  )
+    .sort()
+    .join(",");
+}
+
+function choosePreferredDuplicateOffer(
+  existing: Offer,
+  candidate: Offer
+): Offer {
+  const trustCompare =
+    asarvoSearchCoreV20CompareDuplicateTrust(
+      candidate,
+      existing
+    );
+
+  if (
+    trustCompare < 0
+  ) {
+    return candidate;
+  }
+
+  if (
+    trustCompare > 0
+  ) {
+    return existing;
+  }
+
+  const existingComparable =
+    getOfferComparablePrice(
+      existing
+    );
+
+  const candidateComparable =
+    getOfferComparablePrice(
+      candidate
+    );
+
+  // Price can arbitrate only after evidence trust is equivalent.
+  if (
     candidateComparable !== null &&
-    (existingComparable === null || candidateComparable < existingComparable)
+    (
+      existingComparable === null ||
+      candidateComparable <
+        existingComparable
+    )
   ) {
     return candidate;
   }
@@ -44123,16 +60624,60 @@ function choosePreferredDuplicateOffer(existing: Offer, candidate: Offer): Offer
   if (
     existingComparable !== null &&
     candidateComparable !== null &&
-    candidateComparable > existingComparable
+    candidateComparable >
+      existingComparable
   ) {
     return existing;
   }
 
-  if (candidate.priceVerified !== existing.priceVerified) {
-    return candidate.priceVerified ? candidate : existing;
+  if (
+    (
+      candidate.evidenceConfidence ??
+      0
+    ) !==
+    (
+      existing.evidenceConfidence ??
+      0
+    )
+  ) {
+    return (
+      candidate.evidenceConfidence ??
+      0
+    ) >
+      (
+        existing.evidenceConfidence ??
+        0
+      )
+      ? candidate
+      : existing;
   }
 
-  return (candidate.relevance ?? 0) > (existing.relevance ?? 0)
+  if (
+    (
+      candidate.relevance ??
+      0
+    ) !==
+    (
+      existing.relevance ??
+      0
+    )
+  ) {
+    return (
+      candidate.relevance ??
+      0
+    ) >
+      (
+        existing.relevance ??
+        0
+      )
+      ? candidate
+      : existing;
+  }
+
+  return asarvoIntentCoreV11StableOfferTieCompare(
+    candidate,
+    existing
+  ) < 0
     ? candidate
     : existing;
 }
@@ -44141,24 +60686,59 @@ function getRetailerExactModelDedupeKey(
   offer: Offer,
   parsed: ParsedQuery
 ): string | null {
-  if (isPeerMarketplaceOffer(offer)) return null;
-
-  const modelCore = normalizeMatchText(
-    getCompactExactModelDiscoveryCore(parsed) ||
-    getNamedVariantDiscoveryCore(parsed) ||
-    ""
-  );
-  if (!modelCore) return null;
-
-  const hardRequirementKey = parsed.intent.required
-    .filter((requirement) => requirement.hard)
-    .map((requirement) =>
-      `${requirement.key}:${normalizeMatchText(requirementPrimarySearchTerm(requirement))}`
+  if (
+    isPeerMarketplaceOffer(
+      offer
     )
-    .sort()
-    .join("|");
+  ) {
+    return null;
+  }
 
-  return `${normalizeOfferStoreKey(offer)}|${modelCore}|${hardRequirementKey}`;
+  const modelCore =
+    normalizeMatchText(
+      getCompactExactModelDiscoveryCore(
+        parsed
+      ) ||
+      getNamedVariantDiscoveryCore(
+        parsed
+      ) ||
+      ""
+    );
+
+  if (!modelCore) {
+    return null;
+  }
+
+  const hardRequirementKey =
+    parsed.intent.required
+      .filter(
+        (requirement) =>
+          requirement.hard
+      )
+      .map(
+        (requirement) =>
+          `${requirement.key}:${normalizeMatchText(
+            requirementPrimarySearchTerm(
+              requirement
+            )
+          )}`
+      )
+      .sort()
+      .join("|");
+
+  const variantFingerprint =
+    asarvoSearchCoreV20VariantDiscriminatorFingerprint(
+      offer
+    );
+
+  return [
+    normalizeOfferStoreKey(
+      offer
+    ),
+    modelCore,
+    hardRequirementKey,
+    variantFingerprint,
+  ].join("|");
 }
 
 function deduplicateOffers(offers: Offer[], parsed: ParsedQuery): Offer[] {
@@ -44226,7 +60806,12 @@ function deduplicateOffers(offers: Offer[], parsed: ParsedQuery): Offer[] {
     );
   }
 
-  return [...passthrough, ...exactRetailerGroups.values()];
+  return [
+    ...passthrough,
+    ...exactRetailerGroups.values(),
+  ].sort(
+    asarvoIntentCoreV11StableOfferTieCompare
+  );
 }
 
 
@@ -44839,6 +61424,184 @@ function buildAiReason(
   return parts.slice(0, 4).join(" • ");
 }
 
+// ASARVO_INTENT_CORE_V13_MEGA1M_COVERAGE_AWARE_FINAL_WINDOW
+//
+// Final-window coverage hardening.
+//
+// scoreAndRankOffers() remains the authority for quality order.
+// V13 only decides WHICH already-ranked verified offers survive the final
+// MAX_FINAL_OFFERS cut. It preserves the original order of every selected item.
+//
+// Guarantees:
+// - best / cheapest / safest are pinned when present;
+// - diversity can only promote candidates from the strong top 2x window;
+// - no candidate is re-scored here;
+// - final output remains a subsequence of the ranked list;
+// - single-store result sets behave exactly like the old slice(0, limit).
+
+function asarvoIntentCoreV13SelectCoverageAwareFinalOffers(
+  offers: Offer[],
+  limit: number
+): Offer[] {
+  if (
+    limit <= 0 ||
+    offers.length === 0
+  ) {
+    return [];
+  }
+
+  if (offers.length <= limit) {
+    return offers;
+  }
+
+  const topWindow =
+    offers.slice(
+      0,
+      Math.min(
+        offers.length,
+        Math.max(
+          limit,
+          limit * 2
+        )
+      )
+    );
+
+  const strongStores =
+    Array.from(
+      new Set(
+        topWindow
+          .map((offer) =>
+            normalizeOfferStoreKey(
+              offer
+            )
+          )
+          .filter(Boolean)
+      )
+    );
+
+  if (strongStores.length <= 1) {
+    return offers.slice(
+      0,
+      limit
+    );
+  }
+
+  const targetUniqueStores =
+    Math.min(
+      6,
+      strongStores.length,
+      limit
+    );
+
+  const selectedUrls =
+    new Set<string>();
+
+  const representedStores =
+    new Set<string>();
+
+  const addOffer = (
+    offer: Offer
+  ): void => {
+    if (
+      selectedUrls.size >= limit
+    ) {
+      return;
+    }
+
+    const url =
+      normalizeUrl(
+        offer.url
+      );
+
+    if (
+      !url ||
+      selectedUrls.has(url)
+    ) {
+      return;
+    }
+
+    selectedUrls.add(url);
+
+    const store =
+      normalizeOfferStoreKey(
+        offer
+      );
+
+    if (store) {
+      representedStores.add(
+        store
+      );
+    }
+  };
+
+  // Preserve recommendation callouts even if a large dominant retailer would
+  // otherwise push one of them just beyond the final cut.
+  for (const offer of offers) {
+    if (
+      offer.bestOffer ||
+      offer.cheapestOffer ||
+      offer.safestOffer
+    ) {
+      addOffer(offer);
+    }
+  }
+
+  // Add at most the first strong candidate from yet-unrepresented stores until
+  // the target coverage is reached. Candidates outside top 2x are never
+  // promoted by diversity.
+  for (const offer of topWindow) {
+    if (
+      representedStores.size >=
+        targetUniqueStores ||
+      selectedUrls.size >= limit
+    ) {
+      break;
+    }
+
+    const store =
+      normalizeOfferStoreKey(
+        offer
+      );
+
+    if (
+      !store ||
+      representedStores.has(
+        store
+      )
+    ) {
+      continue;
+    }
+
+    addOffer(offer);
+  }
+
+  // Fill remaining slots by the original ranking with no extra store cap.
+  // Therefore relevance/price/risk order still dominates after minimum
+  // coverage has been secured.
+  for (const offer of offers) {
+    if (
+      selectedUrls.size >= limit
+    ) {
+      break;
+    }
+
+    addOffer(offer);
+  }
+
+  // Restore exact original ranking order among selected offers.
+  return offers.filter(
+    (offer) =>
+      selectedUrls.has(
+        normalizeUrl(
+          offer.url
+        )
+      )
+  ).slice(
+    0,
+    limit
+  );
+}
+
 function scoreAndRankOffers(
   offers: Offer[],
   parsed: ParsedQuery
@@ -44940,9 +61703,20 @@ function scoreAndRankOffers(
   const cheapest = cheapestPool
     .filter((offer) => getOfferComparablePrice(offer) !== null)
     .sort(
-      (a, b) =>
-        (getOfferComparablePrice(a) ?? Number.POSITIVE_INFINITY) -
-        (getOfferComparablePrice(b) ?? Number.POSITIVE_INFINITY)
+      (a, b) => {
+        const priceDifference =
+          (getOfferComparablePrice(a) ?? Number.POSITIVE_INFINITY) -
+          (getOfferComparablePrice(b) ?? Number.POSITIVE_INFINITY);
+
+        if (priceDifference !== 0) {
+          return priceDifference;
+        }
+
+        return asarvoIntentCoreV11StableOfferTieCompare(
+          a,
+          b
+        );
+      }
     )[0];
 
   const safest = [...rankingPool].sort((a, b) => {
@@ -44970,7 +61744,10 @@ function scoreAndRankOffers(
       }
     }
 
-    return 0;
+    return asarvoIntentCoreV11StableOfferTieCompare(
+      a,
+      b
+    );
   })[0];
 
   const ranked = [...rankingPool].sort((a, b) => {
@@ -44988,7 +61765,10 @@ function scoreAndRankOffers(
       return aComparablePrice - bComparablePrice;
     }
 
-    return (b.relevance ?? 0) - (a.relevance ?? 0);
+    return asarvoIntentCoreV11RankTieCompare(
+      a,
+      b
+    );
   });
 
   // A verified offer that is BOTH the cheapest and the safest Pareto-dominates
@@ -45014,7 +61794,18 @@ function scoreAndRankOffers(
       if ((a.riskScore ?? 100) !== (b.riskScore ?? 100)) {
         return (a.riskScore ?? 100) - (b.riskScore ?? 100);
       }
-      return (b.dealScore ?? 0) - (a.dealScore ?? 0);
+      if (
+        (b.dealScore ?? 0) !==
+        (a.dealScore ?? 0)
+      ) {
+        return (b.dealScore ?? 0) -
+          (a.dealScore ?? 0);
+      }
+
+      return asarvoIntentCoreV11StableOfferTieCompare(
+        a,
+        b
+      );
     });
 
   const ordered = best
@@ -45052,7 +61843,10 @@ function sortOffers(offers: Offer[]): Offer[] {
       return a.price - b.price;
     }
 
-    return 0;
+    return asarvoIntentCoreV11StableOfferTieCompare(
+      a,
+      b
+    );
   });
 }
 
@@ -45096,54 +61890,416 @@ type AlternativeChildSearchResponse = {
   message?: string;
 };
 
-function mergeAlternativeOffers(
-  payloads: AlternativeChildSearchResponse[]
-): Array<Omit<Offer, "relevance">> {
-  const byUrl = new Map<string, Omit<Offer, "relevance">>();
+// ASARVO_SEARCH_CORE_V21_MEGA100M_ALTERNATIVE_BRANCH_CONSENSUS
+//
+// Alternative-query merge hardening.
+//
+// "A albo B" runs child searches independently. The parent merge used a
+// separate legacy path that did NOT inherit V20 trust-first duplicate
+// arbitration, deterministic stable ties or bounded branch representation.
+//
+// V21 makes the alternative merge obey the same final evidence principles:
+// - same-URL duplicates use V20 trust-before-price arbitration;
+// - final order is deterministic;
+// - each viable alternative branch can keep up to two strong representatives
+//   from the global top-2x final window;
+// - no weak tail promotion beyond that strong window;
+// - one-branch behavior remains a normal global top-N.
 
-  for (const payload of payloads) {
-    for (const offer of payload.offers ?? []) {
-      if (!offer || typeof offer.url !== "string" || !offer.url) continue;
-      const key = normalizeUrl(offer.url) || offer.url;
-      const existing = byUrl.get(key);
+type AsarvoSearchCoreV21AlternativeOffer =
+  Omit<Offer, "relevance">;
 
-      if (!existing) {
-        byUrl.set(key, offer);
+type AsarvoSearchCoreV21AlternativeEntry = {
+  offer: AsarvoSearchCoreV21AlternativeOffer;
+  branches: Set<string>;
+};
+
+function asarvoSearchCoreV21AlternativeBranchKey(
+  payload: AlternativeChildSearchResponse,
+  index: number
+): string {
+  const query =
+    normalizeMatchText(
+      payload.query ?? ""
+    );
+
+  return query ||
+    `branch-${index}`;
+}
+
+function asarvoSearchCoreV21AlternativeOfferCompare(
+  first: AsarvoSearchCoreV21AlternativeOffer,
+  second: AsarvoSearchCoreV21AlternativeOffer
+): number {
+  const trustCompare =
+    asarvoSearchCoreV20CompareDuplicateTrust(
+      first,
+      second
+    );
+
+  if (
+    trustCompare !== 0
+  ) {
+    return trustCompare;
+  }
+
+  if (
+    (second.dealScore ?? 0) !==
+    (first.dealScore ?? 0)
+  ) {
+    return (
+      (second.dealScore ?? 0) -
+      (first.dealScore ?? 0)
+    );
+  }
+
+  if (
+    (first.riskScore ?? 100) !==
+    (second.riskScore ?? 100)
+  ) {
+    return (
+      (first.riskScore ?? 100) -
+      (second.riskScore ?? 100)
+    );
+  }
+
+  const firstPrice =
+    getOfferComparablePrice(
+      first
+    );
+
+  const secondPrice =
+    getOfferComparablePrice(
+      second
+    );
+
+  if (
+    firstPrice !== null &&
+    secondPrice !== null &&
+    firstPrice !== secondPrice
+  ) {
+    return firstPrice - secondPrice;
+  }
+
+  if (
+    firstPrice !== null &&
+    secondPrice === null
+  ) {
+    return -1;
+  }
+
+  if (
+    firstPrice === null &&
+    secondPrice !== null
+  ) {
+    return 1;
+  }
+
+  return asarvoIntentCoreV11StableOfferKey(
+    first
+  ).localeCompare(
+    asarvoIntentCoreV11StableOfferKey(
+      second
+    ),
+    "en"
+  );
+}
+
+function asarvoSearchCoreV21SelectAlternativeCoverage(
+  ranked: AsarvoSearchCoreV21AlternativeEntry[],
+  limit: number
+): AsarvoSearchCoreV21AlternativeEntry[] {
+  if (
+    limit <= 0 ||
+    ranked.length === 0
+  ) {
+    return [];
+  }
+
+  if (
+    ranked.length <= limit
+  ) {
+    return ranked;
+  }
+
+  const strongWindow =
+    ranked.slice(
+      0,
+      Math.min(
+        ranked.length,
+        limit * 2
+      )
+    );
+
+  const branchKeys =
+    Array.from(
+      new Set(
+        strongWindow.flatMap(
+          (entry) =>
+            Array.from(
+              entry.branches
+            )
+        )
+      )
+    )
+      .sort();
+
+  if (
+    branchKeys.length <= 1
+  ) {
+    return ranked.slice(
+      0,
+      limit
+    );
+  }
+
+  const selectedIndices =
+    new Set<number>();
+
+  const branchCounts =
+    new Map<string, number>();
+
+  const selectIndex =
+    (index: number): void => {
+      if (
+        index < 0 ||
+        index >= strongWindow.length ||
+        selectedIndices.has(index) ||
+        selectedIndices.size >= limit
+      ) {
+        return;
+      }
+
+      selectedIndices.add(
+        index
+      );
+
+      for (
+        const branch of
+        strongWindow[index].branches
+      ) {
+        branchCounts.set(
+          branch,
+          (branchCounts.get(branch) ?? 0) + 1
+        );
+      }
+    };
+
+  // Preserve the global strongest offer.
+  selectIndex(0);
+
+  // splitAlternativeShoppingQuery currently allows max 3 branches, therefore
+  // reserving up to two strong representatives per branch consumes at most 6
+  // of 20 final slots. A branch can be satisfied by a shared same-URL offer.
+  for (
+    let targetRound = 1;
+    targetRound <= 2 &&
+    selectedIndices.size < limit;
+    targetRound += 1
+  ) {
+    for (
+      const branch of
+      branchKeys
+    ) {
+      if (
+        (branchCounts.get(branch) ?? 0) >= targetRound
+      ) {
         continue;
       }
 
-      const existingVerified = existing.verification === "verified" ? 1 : 0;
-      const candidateVerified = offer.verification === "verified" ? 1 : 0;
-      const existingScore = (existing.dealScore ?? 0) + existingVerified * 1000;
-      const candidateScore = (offer.dealScore ?? 0) + candidateVerified * 1000;
-      if (candidateScore > existingScore) byUrl.set(key, offer);
+      const candidateIndex =
+        strongWindow.findIndex(
+          (entry, index) =>
+            !selectedIndices.has(index) &&
+            entry.branches.has(branch)
+        );
+
+      if (
+        candidateIndex >= 0
+      ) {
+        selectIndex(
+          candidateIndex
+        );
+      }
+
+      if (
+        selectedIndices.size >= limit
+      ) {
+        break;
+      }
     }
   }
 
-  return [...byUrl.values()]
-    .sort((a, b) => {
-      const verifiedDiff =
-        (b.verification === "verified" ? 1 : 0) -
-        (a.verification === "verified" ? 1 : 0);
-      if (verifiedDiff !== 0) return verifiedDiff;
+  // Fill remaining capacity strictly by the global deterministic rank.
+  for (
+    let index = 0;
+    index < strongWindow.length &&
+    selectedIndices.size < limit;
+    index += 1
+  ) {
+    selectIndex(
+      index
+    );
+  }
 
-      const scoreDiff = (b.dealScore ?? 0) - (a.dealScore ?? 0);
-      if (scoreDiff !== 0) return scoreDiff;
+  // Keep final order equal to the global rank, not branch iteration order.
+  return strongWindow.filter(
+    (_entry, index) =>
+      selectedIndices.has(index)
+  ).slice(
+    0,
+    limit
+  );
+}
 
-      if (a.price !== null && b.price !== null) return a.price - b.price;
-      if (a.price !== null) return -1;
-      if (b.price !== null) return 1;
-      return 0;
+function mergeAlternativeOffers(
+  payloads: AlternativeChildSearchResponse[]
+): Array<Omit<Offer, "relevance">> {
+  const byUrl =
+    new Map<
+      string,
+      AsarvoSearchCoreV21AlternativeEntry
+    >();
+
+  payloads.forEach(
+    (payload, payloadIndex) => {
+      const branchKey =
+        asarvoSearchCoreV21AlternativeBranchKey(
+          payload,
+          payloadIndex
+        );
+
+      for (
+        const offer of
+        payload.offers ?? []
+      ) {
+        if (
+          !offer ||
+          typeof offer.url !== "string" ||
+          !offer.url
+        ) {
+          continue;
+        }
+
+        const normalizedUrl =
+          normalizeUrl(
+            offer.url
+          ) ||
+          offer.url;
+
+        const normalizedOffer: AsarvoSearchCoreV21AlternativeOffer = {
+          ...offer,
+          url: normalizedUrl,
+        };
+
+        const existing =
+          byUrl.get(
+            normalizedUrl
+          );
+
+        if (!existing) {
+          byUrl.set(
+            normalizedUrl,
+            {
+              offer:
+                normalizedOffer,
+              branches:
+                new Set([
+                  branchKey,
+                ]),
+            }
+          );
+          continue;
+        }
+
+        existing.branches.add(
+          branchKey
+        );
+
+        existing.offer =
+          choosePreferredDuplicateOffer(
+            existing.offer,
+            normalizedOffer
+          );
+      }
+    }
+  );
+
+  const ranked =
+    Array.from(
+      byUrl.values()
+    )
+      .sort(
+        (first, second) =>
+          asarvoSearchCoreV21AlternativeOfferCompare(
+            first.offer,
+            second.offer
+          )
+      );
+
+  const selected =
+    asarvoSearchCoreV21SelectAlternativeCoverage(
+      ranked,
+      MAX_FINAL_OFFERS
+    );
+
+  return selected.map(
+    (entry, index) => ({
+      ...entry.offer,
+      id: index + 1,
     })
-    .slice(0, MAX_FINAL_OFFERS)
-    .map((offer, index) => ({ ...offer, id: index + 1 }));
+  );
+}
+
+
+// ASARVO_ROUTING_V1_TABLE_FIX3_PARSEQUERY_FALLBACK
+// Runtime category fallback attached directly to parseQuery.
+// This is intentionally narrow: it only fills category when the primary
+// detector returned null. Existing recognized categories always win.
+// ASARVO_SOURCE_EXPANSION_V1_TABLE_OUTDOOR_INTENT_FIX
+function detectAsarvoRoutingCategoryFallback(query: string): string | null {
+  const normalized = normalizeMatchText(query);
+
+  if (
+    /\b(?:stolik|stoliki|stolika|stoliku|stolikiem|stolikach|stolikom|stolikow|stolików)\b/iu.test(normalized)
+  ) {
+    return "table";
+  }
+
+  if (
+    /\b(?:stol|stoly|stolu|table|dining\s+table)\b/iu.test(normalized) ||
+    /\b(?:stół|stoły|stołu)\b/iu.test(query)
+  ) {
+    return "table";
+  }
+
+  return null;
 }
 
 function parseQuery(query: string, bodyCountry: unknown): ParsedQuery {
   const normalizedShoppingQuery = normalizeOpenWorldShoppingQuery(query);
-  const category = detectCategory(normalizedShoppingQuery);
+  const category = (detectCategory(normalizedShoppingQuery)) ?? detectAsarvoRoutingCategoryFallback(normalizedShoppingQuery);
   const platform = detectPlatform(normalizedShoppingQuery);
-  const brand = detectBrand(normalizedShoppingQuery, category);
+  const detectedBrand =
+    detectBrand(
+      normalizedShoppingQuery,
+      category
+    );
+
+  const brandAlternativeGroups =
+    asarvoIntentCoreV10ExtractBrandAlternativeGroups(
+      normalizedShoppingQuery,
+      category
+    );
+
+  const brand =
+    brandAlternativeGroups.length > 0 ||
+    asarvoIntentCoreV8QueryNegatesTerm(
+      normalizedShoppingQuery,
+      detectedBrand
+    )
+      ? null
+      : detectedBrand;
   const condition = detectCondition(normalizedShoppingQuery);
   const original = detectOriginal(normalizedShoppingQuery);
   const maxPrice = extractMaxPrice(normalizedShoppingQuery);
@@ -47773,10 +64929,24 @@ async function searchPreVerificationRareHardGap(
   // bounded multi-retailer first-party portfolio query. This is not a new
   // request and it does not trust index snippets as proof: every recovered URL
   // still enters the unchanged concrete product-page verifier.
+  // ASARVO_MVP_C2_POWER_TOOL_SINGLE_HARD_FIRST_PARTY_SHARDS
+  // A generic cordless power-tool request may have exactly one HARD constraint
+  // (battery_powered) and ZERO discovered candidates. Use the EXISTING bounded
+  // CORE206 first-party search shards for this rare-HARD gap. This changes only
+  // source selection in an existing recovery slot; NEVER verifier acceptance.
   const genericCategoryHardIntent =
     Boolean(parsed.category) &&
     !parsed.brand &&
-    parsed.intent.required.filter((requirement) => requirement.hard).length >= 2;
+    (
+      parsed.intent.required.filter((requirement) => requirement.hard).length >= 2 ||
+      (
+        parsed.category === "power_tool" &&
+        existingResults.length === 0 &&
+        parsed.intent.required.some((requirement) =>
+          requirement.hard && requirement.key === "battery_powered"
+        )
+      )
+    );
 
   // V34.CORE207: when primary discovery already produced a healthy portfolio of
   // concrete retailer-owned category cards, replaying the SAME static category
@@ -48182,6 +65352,160 @@ async function searchPreVerificationRareHardGap(
   return recovered;
 }
 
+// ASARVO_SEARCH_CORE_V16_MEGA1M_RECOVERY_PORTFOLIO_DIVERSITY
+//
+// Zero-result recovery portfolio hardening.
+//
+// runZeroResultRecoverySearch() can aggregate useful candidates from many
+// independent lanes (marketplaces, first-party indexed results, open web,
+// adapter-derived landing expansion). Previously that mixed list was filtered
+// and immediately sliced to 10 before the later diverse selector got to see it.
+//
+// If the first 10 happened to be dominated by one host, candidates from other
+// strong hosts at positions 11-30 were permanently lost.
+//
+// V16 builds a host-aware recovery portfolio from a bounded strong window:
+// - candidate #0 is always preserved;
+// - promotions may only come from the original top 3x-limit window;
+// - first pass takes one strong candidate per host;
+// - remaining slots are filled by original rank order;
+// - returned portfolio preserves original relative ranking;
+// - one-host inputs are exactly equivalent to old slice(0, limit);
+// - no candidate outside the strong window can be promoted by diversity.
+
+function asarvoSearchCoreV16SelectRecoveryPortfolio(
+  results: SearchResult[],
+  limit: number
+): SearchResult[] {
+  if (
+    limit <= 0 ||
+    results.length === 0
+  ) {
+    return [];
+  }
+
+  if (
+    results.length <= limit
+  ) {
+    return results;
+  }
+
+  const strongWindow =
+    results.slice(
+      0,
+      Math.min(
+        results.length,
+        Math.max(
+          limit,
+          limit * 3
+        )
+      )
+    );
+
+  const strongHosts =
+    Array.from(
+      new Set(
+        strongWindow
+          .map((result) =>
+            getResultHostname(
+              result.url
+            ) || "unknown"
+          )
+      )
+    );
+
+  if (
+    strongHosts.length <= 1
+  ) {
+    return results.slice(
+      0,
+      limit
+    );
+  }
+
+  const targetUniqueHosts =
+    Math.min(
+      limit,
+      8,
+      strongHosts.length
+    );
+
+  const selectedIndices =
+    new Set<number>();
+
+  const representedHosts =
+    new Set<string>();
+
+  const selectIndex = (
+    index: number
+  ): void => {
+    if (
+      selectedIndices.size >= limit ||
+      index < 0 ||
+      index >= strongWindow.length ||
+      selectedIndices.has(index)
+    ) {
+      return;
+    }
+
+    selectedIndices.add(
+      index
+    );
+
+    representedHosts.add(
+      getResultHostname(
+        strongWindow[index].url
+      ) || "unknown"
+    );
+  };
+
+  // Preserve the strongest recovery candidate exactly.
+  selectIndex(0);
+
+  // One strong representative per new host.
+  for (
+    let index = 1;
+    index < strongWindow.length &&
+    selectedIndices.size < limit &&
+    representedHosts.size < targetUniqueHosts;
+    index += 1
+  ) {
+    const host =
+      getResultHostname(
+        strongWindow[index].url
+      ) || "unknown";
+
+    if (
+      representedHosts.has(
+        host
+      )
+    ) {
+      continue;
+    }
+
+    selectIndex(index);
+  }
+
+  // Fill the remaining slots by original rank order.
+  for (
+    let index = 1;
+    index < strongWindow.length &&
+    selectedIndices.size < limit;
+    index += 1
+  ) {
+    selectIndex(index);
+  }
+
+  // Exact original ranking among selected recovery candidates.
+  return strongWindow.filter(
+    (_result, index) =>
+      selectedIndices.has(index)
+  ).slice(
+    0,
+    limit
+  );
+}
+
 async function runZeroResultRecoverySearch(
   parsed: ParsedQuery,
   hardDeadlineAt: number,
@@ -48432,12 +65756,16 @@ async function runZeroResultRecoverySearch(
     ...lateOlxApi,
     ...lateOlx,
   ]);
-  let recovered = filterZeroResultRecoveryCandidates(
-    rawRecoveryResults,
-    parsed
-  )
-    .filter((item) => !seenUrls.has(normalizeUrl(item.url)))
-    .slice(0, 10);
+  let recovered =
+    asarvoSearchCoreV28SelectQuarantineAwareRecoveryPortfolio(
+        filterZeroResultRecoveryCandidates(
+        rawRecoveryResults,
+        parsed
+      )
+        .filter((item) => !seenUrls.has(normalizeUrl(item.url))),
+        10,
+        parsed
+      );
 
   // CORE70: public indexes often return a retailer-owned filtered category page
   // instead of the concrete product card that made the page relevant. CORE68
@@ -48505,12 +65833,16 @@ async function runZeroResultRecoverySearch(
         ...rawRecoveryResults,
         ...crawledLandingProducts,
       ]);
-      recovered = filterZeroResultRecoveryCandidates(
-        rawRecoveryResults,
+      recovered =
+        asarvoSearchCoreV28SelectQuarantineAwareRecoveryPortfolio(
+        filterZeroResultRecoveryCandidates(
+            rawRecoveryResults,
+            parsed
+          )
+            .filter((item) => !seenUrls.has(normalizeUrl(item.url))),
+        10,
         parsed
-      )
-        .filter((item) => !seenUrls.has(normalizeUrl(item.url)))
-        .slice(0, 10);
+      );
     }
 
     console.log(
@@ -48558,7 +65890,43 @@ function getSearchCacheKey(query: string, country: unknown): string {
   });
 }
 
-export async function POST(request: Request): Promise<NextResponse> {
+// ASARVO_SEARCH_CORE_V28_MEGA100M_QUARANTINE_AWARE_RECOVERY_PORTFOLIO
+//
+// V16 recovery selection may live in nested or helper request-flow functions.
+// V28 filters the FULL recovery pool with V27/V26 request-wide quarantine
+// BEFORE V16 spends its bounded diverse recovery slots.
+
+function asarvoSearchCoreV28SelectQuarantineAwareRecoveryPortfolio(
+  results: SearchResult[],
+  limit: number,
+  parsed: ParsedQuery
+): SearchResult[] {
+  if (
+    results.length === 0 ||
+    limit <= 0
+  ) {
+    return [];
+  }
+
+  const eligible =
+    asarvoSearchCoreV27FilterKnownQuarantinedCandidates(
+      results,
+      parsed
+    );
+
+  if (
+    eligible.length === 0
+  ) {
+    return [];
+  }
+
+  return asarvoSearchCoreV16SelectRecoveryPortfolio(
+    eligible,
+    limit
+  );
+}
+
+async function executeAsarvoSearchRequest(request: Request): Promise<NextResponse> {
   try {
     const body = await request.json();
 
@@ -48592,7 +65960,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       // identity contamination (category/brand/model/requirements).
       const childResponses: NextResponse[] = await Promise.all(
         alternativeQueries.map((alternativeQuery) =>
-          POST(
+          executeAsarvoSearchRequest(
             new Request(request.url, {
               method: "POST",
               headers: { "content-type": "application/json" },
@@ -48669,6 +66037,70 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     const v34Core244PowerToolOlxPrefetch =
       startV34Core244PowerToolOlxPrefetch(parsed);
+
+    // ASARVO_MVP_C3_EARLY_GENERIC_CORDLESS_CENEO_INDEX
+    // Start one bounded, existing product-URL index lane at request start.
+    // This is discovery ONLY. The returned concrete URLs still enter the
+    // unchanged price/identity/HARD/condition verifier.
+    const asarvoMvpC3CordlessIndexPrefetch =
+      parsed.country === "PL" &&
+      parsed.category === "power_tool" &&
+      !parsed.brand &&
+      parsed.intent.required.filter((requirement) => requirement.hard).length === 1 &&
+      parsed.intent.required.some((requirement) =>
+        requirement.hard && requirement.key === "battery_powered"
+      )
+        ? searchCeneoIndexedEmptyPageFallback(parsed, 1_950)
+            .catch((error) => {
+              console.log(
+                "[AIShopping] ASARVO_MVP_C3_INDEX_PREFETCH_ERROR",
+                error instanceof Error ? error.message : String(error)
+              );
+              return [] as SearchResult[];
+            })
+        : null;
+
+    // ASARVO_BATCH85_24GARDEN_PRIMARY_PREFETCH_AND_VERIFY_RESERVE_V1
+    // Scheduling only. BATCH84 proved the existing 24garden production adapter
+    // returns four valid, page-verifiable sprayer offers under its normal budget.
+    // Start that exact source-owned category request beside broad discovery so a
+    // large home/garden mesh cannot starve it. Reader fallback is deliberately
+    // disabled here because BATCH84's direct HTML path already succeeded.
+    const asarvoBatch85GardenHost = "24garden.pl";
+    const asarvoBatch85GardenRequests = buildDirectRetailerCatalogRequests(parsed, {
+      hosts: [asarvoBatch85GardenHost],
+      maxAdapters: 1,
+      maxUrlsPerAdapter: 1,
+    });
+    const asarvoBatch85GardenHasExactCategoryRoute =
+      asarvoBatch85GardenRequests.some(({ urls }) =>
+        urls.some(
+          (url) => asarvoBatch75KnownNumericRetailerRoute(url) === "category"
+        )
+      );
+    const asarvoBatch85GardenPrefetch =
+      asarvoBatch85GardenHasExactCategoryRoute
+        ? searchDirectRetailerCatalogPages(
+            parsed,
+            undefined,
+            undefined,
+            {
+              hosts: [asarvoBatch85GardenHost],
+              maxAdapters: 1,
+              maxUrlsPerAdapter: 1,
+              adapterBudgetMs: 1_850,
+              disableReaderFallback: true,
+              disableDirectRetries: true,
+              directFetchTimeoutMs: 1_650,
+            }
+          ).catch((error) => {
+            console.log(
+              "[AIShopping] ASARVO_BATCH85 24garden prefetch failed:",
+              error instanceof Error ? error.message : String(error)
+            );
+            return [] as SearchResult[];
+          })
+        : null;
 
     console.log("================================================");
     console.log("[AIShopping] NEW SEARCH V34.CORE262");
@@ -48829,6 +66261,53 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
     }
 
+    // ASARVO_MVP_C3_EARLY_GENERIC_CORDLESS_CENEO_INDEX_JOIN
+    // Promise has run alongside ordinary discovery; join for at most 400ms.
+    // An index result is only a discovery candidate, never a verified offer.
+    if (asarvoMvpC3CordlessIndexPrefetch) {
+      const c3IndexCandidates = await withDeadline(
+        asarvoMvpC3CordlessIndexPrefetch,
+        400,
+        [] as SearchResult[],
+        "ASARVO MVP C3 bounded early product index join"
+      );
+      searchResults = dedupeSearchResultsByUrl([
+        ...searchResults,
+        ...c3IndexCandidates,
+      ]);
+      console.log("[AIShopping] ASARVO_MVP_C3_INDEX_PREFETCH_JOIN", {
+        candidates: c3IndexCandidates.length,
+        discoveredTotal: searchResults.length,
+      });
+    }
+
+    if (asarvoBatch85GardenPrefetch) {
+      const asarvoBatch85GardenPrefetched = await withDeadline(
+        asarvoBatch85GardenPrefetch,
+        450,
+        [] as SearchResult[],
+        "BATCH85 24garden request-start prefetch join"
+      );
+
+      if (asarvoBatch85GardenPrefetched.length > 0) {
+        searchResults = dedupeSearchResultsByUrl([
+          ...asarvoBatch85GardenPrefetched,
+          ...searchResults,
+        ]);
+        console.log(
+          "[AIShopping] ASARVO_BATCH85_24GARDEN_PREFETCH_MERGED",
+          {
+            prefetched: asarvoBatch85GardenPrefetched.length,
+            total: searchResults.length,
+          }
+        );
+      } else {
+        console.log(
+          "[AIShopping] ASARVO_BATCH85_24GARDEN_PREFETCH_EMPTY"
+        );
+      }
+    }
+
     const postDiscoverySiblingBridge =
       buildV34Core183DeterministicSiblingCatalogBridgeCandidates(searchResults, parsed);
     if (postDiscoverySiblingBridge.length > 0) {
@@ -48941,6 +66420,18 @@ export async function POST(request: Request): Promise<NextResponse> {
         "[AIShopping] V34.CORE120 discovery after rare-HARD gap:",
         searchResults.length
       );
+    }
+
+    // CORE31: on a sparse discovery, replay a few previously page-verified
+    // public URLs as UNTRUSTED pointers. All facts are freshly reverified.
+    const core31QueryKey = asarvoCore31Key(query, body?.country);
+    const core31ReplayedPointers = asarvoCore31ReadPointers(core31QueryKey, searchResults);
+    if (core31ReplayedPointers.length) {
+      searchResults = dedupeSearchResultsByUrl([...searchResults, ...core31ReplayedPointers]);
+      console.log("[AIShopping] ASARVO_CORE31_POINTER_REPLAY", {
+        count: core31ReplayedPointers.length,
+        urls: core31ReplayedPointers.map((item) => item.url),
+      });
     }
 
     // V32.12: broad discovery first, expensive verification only for the strongest
@@ -49095,6 +66586,78 @@ export async function POST(request: Request): Promise<NextResponse> {
       ),
       parsed,
       verificationLimit
+    );
+
+    // ASARVO_CORE30: refill vacant verifier slots only from candidates that
+    // pass the same eligibility gate and source-health cap as the first pass.
+    limitedResults = asarvoCore30BackfillVerifierSlots(
+      verificationSelectionPool,
+      parsed,
+      verificationLimit,
+      rareHardGapReserveUrls,
+      limitedResults,
+      remainingBeforeCandidateSelection
+    );
+
+    // ASARVO_BATCH85_24GARDEN_PRIMARY_PREFETCH_AND_VERIFY_RESERVE_V1
+    // Reserve at most ONE already-discovered 24garden product card for the
+    // unchanged production verifier. This cannot create evidence or an offer;
+    // it only prevents a valid specialist-store card from losing every verifier
+    // slot to sibling retailers after broad discovery.
+    const asarvoBatch85GardenVerificationReserve = verificationPool
+      .filter((result) => {
+        if (getResultHostname(result.url) !== asarvoBatch85GardenHost) return false;
+        if (result.source !== "RetailerRescue") return false;
+        if (result.retailerOwnedCardEvidence !== true) return false;
+        if (result.retailerCatalogCardAvailability === "unavailable") return false;
+        if (!result.retailerCatalogCardPrice?.price) return false;
+        if (isGenericAccessoryResult(result.name, result.url, parsed)) return false;
+        if (!isConcreteVerificationCandidate(result, parsed)) return false;
+        const classReason = evaluateUniversalProductClass(
+          result.name,
+          `${result.name} ${result.snippet}`,
+          result.url,
+          parsed,
+          result.source
+        );
+        if (classReason === "incompatible-product-class") return false;
+        return (
+          getTrustedPortfolioHardProofKeys(result, parsed).length >=
+          hardRequirementCount
+        );
+      })
+      .sort((a, b) =>
+        getTrustedPortfolioHardProofKeys(b, parsed).length -
+          getTrustedPortfolioHardProofKeys(a, parsed).length ||
+        Number(Boolean(b.retailerCatalogCardPrice?.price)) -
+          Number(Boolean(a.retailerCatalogCardPrice?.price)) ||
+        getSearchResultPriority(b, parsed) -
+          getSearchResultPriority(a, parsed) ||
+        a.searchRank - b.searchRank
+      )
+      .slice(0, 1);
+
+    if (asarvoBatch85GardenVerificationReserve.length > 0) {
+      limitedResults = dedupeSearchResultsByUrl([
+        ...asarvoBatch85GardenVerificationReserve,
+        ...limitedResults,
+      ]).slice(0, verificationLimit);
+    }
+
+    console.log(
+      "[AIShopping] ASARVO_BATCH85_24GARDEN_VERIFY_RESERVE",
+      {
+        eligible: asarvoBatch85GardenVerificationReserve.length,
+        finalSelected: limitedResults.filter(
+          (result) => getResultHostname(result.url) === asarvoBatch85GardenHost
+        ).length,
+        rows: asarvoBatch85GardenVerificationReserve.map((result) => ({
+          name: result.name,
+          url: result.url,
+          proofKeys: getTrustedPortfolioHardProofKeys(result, parsed),
+          cardPrice: result.retailerCatalogCardPrice?.price ?? null,
+        })),
+      }
     );
 
     // STORE-B26_FIX2: Morele first-party final verification reserve.
@@ -49352,6 +66915,49 @@ export async function POST(request: Request): Promise<NextResponse> {
             prefetchedExactModelStaticProofPromise
           );
           offers = [...offers, ...recoveredOffers];
+
+          // ASARVO_SEARCH_CORE_V17_FIX3_AST_RECOVERY_FAILOVER
+          const remainingForRecoveryFailover = Math.max(
+            0,
+            hardDeadlineAt - Date.now() - RESPONSE_SAFETY_MARGIN_MS
+          );
+
+          const failoverCandidates =
+            asarvoSearchCoreV17SelectRecoveryFailoverCandidates(
+              recoveredResults,
+              recoveryCandidates,
+              recoveredOffers.length,
+              remainingForRecoveryFailover,
+              parsed
+            );
+
+          if (failoverCandidates.length > 0) {
+            console.log(
+              "[AIShopping] SEARCH_V17 FIX3 recovery verification failover:",
+              {
+                acceptedFirstBatch: recoveredOffers.length,
+                remainingMs: remainingForRecoveryFailover,
+                candidates: failoverCandidates.map((result) => ({
+                  host: getResultHostname(result.url),
+                  url: result.url,
+                  name: result.name,
+                })),
+              }
+            );
+
+            const failoverOffers = await verifyOffers(
+              failoverCandidates,
+              parsed,
+              hardDeadlineAt,
+              staticReferenceCandidates,
+              prefetchedExactModelStaticProofPromise
+            );
+
+            offers = [
+              ...offers,
+              ...failoverOffers,
+            ];
+          }
         }
       }
     } else if (recoveryNeeded) {
@@ -49434,8 +67040,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
 
     // Nadajemy stabilne ID dopiero po końcowym rankingu V21.
-    offers = offers
-      .slice(0, MAX_FINAL_OFFERS)
+    offers =
+      asarvoIntentCoreV13SelectCoverageAwareFinalOffers(
+        offers,
+        MAX_FINAL_OFFERS
+      )
       .map((offer, index) => ({
         ...offer,
         id: index + 1,
@@ -49529,6 +67138,18 @@ export async function POST(request: Request): Promise<NextResponse> {
       offer.originalityConfidence === "medium"
     );
 
+    // CORE31: only fresh page-verified final offers can seed future URL
+    // discovery. This does NOT save offer facts for later verification.
+    asarvoCore31RememberPointers(asarvoCore31Key(query, body?.country), cleanOffers);
+    if (core31ReplayedPointers.length) {
+      const finalUrls = new Set(cleanOffers.map((item) => normalizeUrl(item.url)));
+      const reverified = core31ReplayedPointers.filter((item) => finalUrls.has(normalizeUrl(item.url)));
+      console.log("[AIShopping] ASARVO_CORE31_POINTER_REVERIFIED", {
+        count: reverified.length,
+        urls: reverified.map((item) => item.url),
+      });
+    }
+
     const resultStatus = cleanOffers.length > 0
       ? hasRecommendationQualityOffer
         ? "offers_found"
@@ -49596,3 +67217,1509 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 }
+
+// ASARVO_STABILITY_V1_SERVER_SNAPSHOT
+// Exact-query stability layer:
+// 1) concurrent identical requests share one in-flight execution,
+// 2) completed JSON response is replayed for 60 seconds,
+// 3) stale/error snapshots are not kept indefinitely.
+// This sits outside the search engine and does not change ranking/verifiers.
+type AsarvoStableResponseSnapshot = {
+  status: number;
+  body: unknown;
+  completedAt: number;
+};
+
+type AsarvoStableSearchEntry = {
+  expiresAt: number;
+  promise: Promise<AsarvoStableResponseSnapshot>;
+};
+
+const ASARVO_STABILITY_V1_TTL_MS = 60_000;
+const ASARVO_STABILITY_V1_MAX_ENTRIES = 64;
+const ASARVO_STABLE_SEARCH_CACHE = new Map<string, AsarvoStableSearchEntry>();
+
+function getAsarvoStableSearchKey(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+
+  const record = body as Record<string, unknown>;
+  if (record.__alternativeChild === true) return null;
+
+  const rawQuery =
+    typeof record.query === "string"
+      ? normalizeText(record.query).toLowerCase()
+      : "";
+
+  if (!rawQuery) return null;
+
+  const country =
+    typeof record.country === "string"
+      ? record.country.trim().toUpperCase()
+      : null;
+
+  return JSON.stringify({
+    query: rawQuery,
+    country,
+  });
+}
+
+function pruneAsarvoStableSearchCache(now = Date.now()): void {
+  for (const [key, entry] of ASARVO_STABLE_SEARCH_CACHE) {
+    if (entry.expiresAt <= now) {
+      ASARVO_STABLE_SEARCH_CACHE.delete(key);
+    }
+  }
+
+  while (ASARVO_STABLE_SEARCH_CACHE.size > ASARVO_STABILITY_V1_MAX_ENTRIES) {
+    const oldestKey = ASARVO_STABLE_SEARCH_CACHE.keys().next().value;
+    if (typeof oldestKey !== "string") break;
+    ASARVO_STABLE_SEARCH_CACHE.delete(oldestKey);
+  }
+}
+
+async function snapshotAsarvoSearchResponse(
+  request: Request
+): Promise<AsarvoStableResponseSnapshot> {
+  const response = await executeAsarvoSearchRequest(request);
+  const cloned = response.clone();
+
+  let body: unknown;
+  try {
+    body = await cloned.json();
+  } catch {
+    throw new Error("ASARVO STABILITY V1 expected JSON response");
+  }
+
+  return {
+    status: response.status,
+    body,
+    completedAt: Date.now(),
+  };
+}
+
+function responseFromAsarvoStableSnapshot(
+  snapshot: AsarvoStableResponseSnapshot,
+  cacheState: "MISS" | "HIT"
+): NextResponse {
+  return NextResponse.json(snapshot.body, {
+    status: snapshot.status,
+    headers: {
+      "x-asarvo-stability-v1": cacheState,
+    },
+  });
+}
+
+
+// ASARVO_STABILITY_V2_RECENT_VERIFIED_MERGE
+// Short-lived memory of recently verified offers for the exact same query.
+// V1 keeps one completed snapshot stable for 60 seconds.
+// V2 protects the next refresh from transient source loss by retaining
+// previously verified offers for five minutes.
+type AsarvoRecentVerifiedOfferPool = {
+  // Time of LAST actual verification, never time of stale replay.
+  updatedAt: number;
+  offers: Array<Record<string, unknown>>;
+  verifiedAtByUrl: Record<string, number>;
+};
+
+const ASARVO_STABILITY_V2_RETAIN_MS = 5 * 60_000;
+const ASARVO_STABILITY_V2_MAX_QUERIES = 64;
+const ASARVO_STABILITY_V2_MAX_OFFERS_PER_QUERY = 24;
+
+const ASARVO_RECENT_VERIFIED_OFFER_POOL =
+  new Map<string, AsarvoRecentVerifiedOfferPool>();
+
+function normalizeAsarvoStabilityOfferUrl(rawUrl: unknown): string | null {
+  if (typeof rawUrl !== "string" || !rawUrl.trim()) return null;
+
+  try {
+    const url = new URL(rawUrl.trim());
+    url.hash = "";
+
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (
+        /^utm_/i.test(key) ||
+        /^(?:gclid|fbclid|msclkid|ref|referrer)$/i.test(key)
+      ) {
+        url.searchParams.delete(key);
+      }
+    }
+
+    url.hostname = url.hostname.toLowerCase();
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+
+    return url.toString();
+  } catch {
+    return rawUrl.trim().replace(/#.*$/, "").replace(/\/+$/, "");
+  }
+}
+
+function isAsarvoStabilityOffer(
+  value: unknown
+): value is Record<string, unknown> {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.url === "string" && record.url.trim().length > 0;
+}
+
+function pruneAsarvoRecentVerifiedOfferPool(now = Date.now()): void {
+  for (const [key, pool] of ASARVO_RECENT_VERIFIED_OFFER_POOL) {
+    if (pool.updatedAt + ASARVO_STABILITY_V2_RETAIN_MS <= now) {
+      ASARVO_RECENT_VERIFIED_OFFER_POOL.delete(key);
+    }
+  }
+
+  while (
+    ASARVO_RECENT_VERIFIED_OFFER_POOL.size >
+    ASARVO_STABILITY_V2_MAX_QUERIES
+  ) {
+    const oldestKey =
+      ASARVO_RECENT_VERIFIED_OFFER_POOL.keys().next().value;
+
+    if (typeof oldestKey !== "string") break;
+    ASARVO_RECENT_VERIFIED_OFFER_POOL.delete(oldestKey);
+  }
+}
+
+function sanitizeAsarvoRetainedOffer(
+  offer: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    ...offer,
+    bestOffer: false,
+    cheapestOffer: false,
+    safestOffer: false,
+  };
+}
+
+
+// ASARVO_STABILITY_V3_DETERMINISTIC_MERGE
+// Deterministic ordering/badges are applied only when V2 actually retained
+// historical offers. A purely fresh snapshot keeps the engine's native order.
+function asarvoStabilityV3FiniteNumber(
+  value: unknown,
+  fallback: number
+): number {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : fallback;
+}
+
+function asarvoStabilityV3ComparablePrice(
+  offer: Record<string, unknown>
+): number {
+  const totalPrice = asarvoStabilityV3FiniteNumber(
+    offer.totalPrice,
+    Number.POSITIVE_INFINITY
+  );
+
+  if (Number.isFinite(totalPrice)) return totalPrice;
+
+  return asarvoStabilityV3FiniteNumber(
+    offer.price,
+    Number.POSITIVE_INFINITY
+  );
+}
+
+function asarvoStabilityV3OfferKey(
+  offer: Record<string, unknown>
+): string {
+  return (
+    normalizeAsarvoStabilityOfferUrl(offer.url) ??
+    [
+      typeof offer.store === "string" ? offer.store : "",
+      typeof offer.name === "string" ? offer.name : "",
+      String(asarvoStabilityV3ComparablePrice(offer)),
+    ].join("|")
+  );
+}
+
+function asarvoStabilityV3CompareOffers(
+  a: Record<string, unknown>,
+  b: Record<string, unknown>
+): number {
+  const dealDiff =
+    asarvoStabilityV3FiniteNumber(b.dealScore, 0) -
+    asarvoStabilityV3FiniteNumber(a.dealScore, 0);
+  if (dealDiff !== 0) return dealDiff;
+
+  const riskDiff =
+    asarvoStabilityV3FiniteNumber(a.riskScore, 100) -
+    asarvoStabilityV3FiniteNumber(b.riskScore, 100);
+  if (riskDiff !== 0) return riskDiff;
+
+  const priceDiff =
+    asarvoStabilityV3ComparablePrice(a) -
+    asarvoStabilityV3ComparablePrice(b);
+  if (priceDiff !== 0) return priceDiff;
+
+  const relevanceDiff =
+    asarvoStabilityV3FiniteNumber(b.relevance, 0) -
+    asarvoStabilityV3FiniteNumber(a.relevance, 0);
+  if (relevanceDiff !== 0) return relevanceDiff;
+
+  const sourceConfidenceDiff =
+    asarvoStabilityV3FiniteNumber(b.sourceConfidence, 0) -
+    asarvoStabilityV3FiniteNumber(a.sourceConfidence, 0);
+  if (sourceConfidenceDiff !== 0) return sourceConfidenceDiff;
+
+  return asarvoStabilityV3OfferKey(a).localeCompare(
+    asarvoStabilityV3OfferKey(b)
+  );
+}
+
+function asarvoStabilityV3DedupeAndRank(
+  offers: Array<Record<string, unknown>>
+): Array<Record<string, unknown>> {
+  const byKey = new Map<string, Record<string, unknown>>();
+
+  for (const offer of offers) {
+    const key = asarvoStabilityV3OfferKey(offer);
+    const current = byKey.get(key);
+
+    if (!current) {
+      byKey.set(key, { ...offer });
+      continue;
+    }
+
+    if (asarvoStabilityV3CompareOffers(offer, current) < 0) {
+      byKey.set(key, { ...current, ...offer });
+    } else {
+      byKey.set(key, { ...offer, ...current });
+    }
+  }
+
+  const ranked = Array.from(byKey.values()).sort(
+    asarvoStabilityV3CompareOffers
+  );
+
+  const cheapest = [...ranked]
+    .filter((offer) =>
+      Number.isFinite(asarvoStabilityV3ComparablePrice(offer))
+    )
+    .sort((a, b) => {
+      const priceDiff =
+        asarvoStabilityV3ComparablePrice(a) -
+        asarvoStabilityV3ComparablePrice(b);
+      if (priceDiff !== 0) return priceDiff;
+
+      return asarvoStabilityV3OfferKey(a).localeCompare(
+        asarvoStabilityV3OfferKey(b)
+      );
+    })[0];
+
+  const safest = [...ranked].sort((a, b) => {
+    const riskDiff =
+      asarvoStabilityV3FiniteNumber(a.riskScore, 100) -
+      asarvoStabilityV3FiniteNumber(b.riskScore, 100);
+    if (riskDiff !== 0) return riskDiff;
+
+    const confidenceDiff =
+      asarvoStabilityV3FiniteNumber(b.sourceConfidence, 0) -
+      asarvoStabilityV3FiniteNumber(a.sourceConfidence, 0);
+    if (confidenceDiff !== 0) return confidenceDiff;
+
+    return asarvoStabilityV3OfferKey(a).localeCompare(
+      asarvoStabilityV3OfferKey(b)
+    );
+  })[0];
+
+  const best = ranked[0];
+  const bestKey = best ? asarvoStabilityV3OfferKey(best) : null;
+  const cheapestKey = cheapest
+    ? asarvoStabilityV3OfferKey(cheapest)
+    : null;
+  const safestKey = safest
+    ? asarvoStabilityV3OfferKey(safest)
+    : null;
+
+  return ranked.map((offer) => {
+    const key = asarvoStabilityV3OfferKey(offer);
+
+    return {
+      ...offer,
+      bestOffer: bestKey !== null && key === bestKey,
+      cheapestOffer:
+        cheapestKey !== null && key === cheapestKey,
+      safestOffer: safestKey !== null && key === safestKey,
+    };
+  });
+}
+
+function applyAsarvoStabilityV2Merge(
+  stableKey: string,
+  snapshot: AsarvoStableResponseSnapshot
+): AsarvoStableResponseSnapshot {
+  if (
+    snapshot.status < 200 ||
+    snapshot.status >= 300 ||
+    !snapshot.body ||
+    typeof snapshot.body !== "object"
+  ) {
+    return snapshot;
+  }
+
+  const body = snapshot.body as Record<string, unknown>;
+  if (!Array.isArray(body.offers)) {
+    return snapshot;
+  }
+
+  const now = Date.now();
+  pruneAsarvoRecentVerifiedOfferPool(now);
+
+  const freshOffers = body.offers
+    .filter(isAsarvoStabilityOffer)
+    .map((offer) => ({ ...offer }));
+
+  const previous = ASARVO_RECENT_VERIFIED_OFFER_POOL.get(stableKey);
+  const previousIsFresh =
+    !!previous &&
+    previous.updatedAt + ASARVO_STABILITY_V2_RETAIN_MS > now;
+  // ASARVO_FIX29: a stale replay is NOT a fresh page verification. Keep
+  // separate per-URL ages so one newly verified offer never renews its older
+  // siblings. When the full source mesh temporarily returns zero, repeated
+  // refreshes cannot keep an obsolete OLX/store price alive forever.
+  const previousVerifiedTimes = previous?.verifiedAtByUrl ?? {};
+  const retainablePreviousOffers = previousIsFresh && previous
+    ? previous.offers.filter((offer) => {
+        const url = normalizeAsarvoStabilityOfferUrl(offer.url);
+        const verifiedAt = url ? previousVerifiedTimes[url] : undefined;
+        return typeof verifiedAt === "number" &&
+          Number.isFinite(verifiedAt) &&
+          verifiedAt <= now &&
+          now - verifiedAt < ASARVO_STABILITY_V2_RETAIN_MS;
+      })
+    : [];
+
+  let mergedOffers: Array<Record<string, unknown>> = freshOffers;
+  let retainedCount = 0;
+
+  if (previousIsFresh && previous) {
+    if (freshOffers.length === 0 && retainablePreviousOffers.length > 0) {
+      // Reuse only offers with an actual page proof younger than the TTL.
+      mergedOffers = retainablePreviousOffers.map((offer) => ({ ...offer }));
+      retainedCount = mergedOffers.length;
+    } else if (freshOffers.length > 0) {
+      const seen = new Set(
+        freshOffers
+          .map((offer) => normalizeAsarvoStabilityOfferUrl(offer.url))
+          .filter((url): url is string => !!url)
+      );
+
+      const retained = retainablePreviousOffers
+        .filter((offer) => {
+          const url = normalizeAsarvoStabilityOfferUrl(offer.url);
+          return !!url && !seen.has(url);
+        })
+        .map(sanitizeAsarvoRetainedOffer);
+
+      retainedCount = retained.length;
+      mergedOffers = [...freshOffers, ...retained];
+    }
+  }
+
+  if (retainedCount > 0) {
+    mergedOffers = asarvoStabilityV3DedupeAndRank(mergedOffers);
+
+    console.log("[AIShopping] STABILITY_V3_DETERMINISTIC_MERGE", {
+      offers: mergedOffers.length,
+      best:
+        mergedOffers.find((offer) => offer.bestOffer === true)?.url ?? null,
+      cheapest:
+        mergedOffers.find((offer) => offer.cheapestOffer === true)?.url ?? null,
+      safest:
+        mergedOffers.find((offer) => offer.safestOffer === true)?.url ?? null,
+      key: stableKey,
+    });
+  }
+
+  // ASARVO_FIX18_CONSOLE_OUTPUT_FILTER: applies also to previously retained
+  // stability offers. A page-verified price is not sold-object proof.
+  const fix18ParsedCategory = body.interpreted && typeof body.interpreted === 'object'
+    ? (body.interpreted as Record<string, unknown>).category : null;
+  if (fix18ParsedCategory === 'console' && typeof body.query === 'string') {
+    const fix18Context = {
+      category: 'console', queryText: body.query,
+      intent: { accessoryIntent: false },
+    };
+    const beforeFix18 = mergedOffers.length;
+    mergedOffers = mergedOffers.filter((offer) =>
+      !asarvoFix18ConsoleSoldObjectReject(String(offer.name ?? ''), fix18Context)
+    );
+    if (mergedOffers.length !== beforeFix18) {
+      console.log('[ASARVO_FIX18_CONSOLE_OUTPUT_REJECT]', JSON.stringify({
+        removed: beforeFix18 - mergedOffers.length, remaining: mergedOffers.length,
+      }));
+      if (mergedOffers.length > 0) mergedOffers = asarvoStabilityV3DedupeAndRank(mergedOffers);
+      retainedCount = Math.min(retainedCount, mergedOffers.length);
+    }
+  }
+
+  mergedOffers = mergedOffers.slice(
+    0,
+    ASARVO_STABILITY_V2_MAX_OFFERS_PER_QUERY
+  );
+
+  // Only a FRESH verified offer renews its own TTL. A historical offer
+  // retains its original proof time, even when ranked together with newer
+  // results or replayed after an empty source refresh.
+  if (mergedOffers.length > 0) {
+    const freshUrls = new Set(freshOffers
+      .map((offer) => normalizeAsarvoStabilityOfferUrl(offer.url))
+      .filter((url): url is string => !!url));
+    const verifiedAtByUrl: Record<string, number> = {};
+    for (const offer of mergedOffers) {
+      const url = normalizeAsarvoStabilityOfferUrl(offer.url);
+      if (!url) continue;
+      const observedAt = freshUrls.has(url) ? now : previousVerifiedTimes[url];
+      if (typeof observedAt === "number" && Number.isFinite(observedAt)) {
+        verifiedAtByUrl[url] = observedAt;
+      }
+    }
+    const lastActualVerification = Math.max(0, ...Object.values(verifiedAtByUrl));
+    if (lastActualVerification > 0) {
+      ASARVO_RECENT_VERIFIED_OFFER_POOL.set(stableKey, {
+        updatedAt: lastActualVerification,
+        offers: mergedOffers.map((offer) => ({ ...offer })),
+        verifiedAtByUrl,
+      });
+    }
+  }
+
+  // ASARVO_V33_FIX2_FIX8_STABILITY_CONTRACT: result metadata MUST describe the merged offers array.
+  const asarvoFix8Interpreted = body.interpreted && typeof body.interpreted === "object"
+    ? body.interpreted as Record<string, unknown> : {};
+  const asarvoFix8Recommendable = asarvoFix8Interpreted.original !== true ||
+    mergedOffers.some((offer) => offer.originalityConfidence === "high" || offer.originalityConfidence === "medium");
+  const asarvoFix8ResultStatus = mergedOffers.length > 0
+    ? asarvoFix8Recommendable ? "offers_found" : "offers_found_with_caution"
+    : body.resultStatus === 'offers_found' || body.resultStatus === 'offers_found_with_caution'
+      ? 'no_matching_verified_offer'
+      : body.resultStatus;
+  const asarvoFix8Coverage = body.coverage && typeof body.coverage === "object"
+    ? { ...(body.coverage as Record<string, unknown>),
+        verifiedPageOffers: mergedOffers.filter((offer) => offer.verificationTier === "page-verified").length,
+        strongIndexOffers: mergedOffers.filter((offer) => offer.verificationTier === "strong-index").length }
+    : body.coverage;
+  const mergedBody: Record<string, unknown> = {
+    ...body,
+    offers: mergedOffers,
+    found: mergedOffers.length,
+    resultStatus: asarvoFix8ResultStatus,
+    message: mergedOffers.length > 0
+      ? asarvoFix8Recommendable ? "Znaleziono pasujące oferty." : "Znaleziono możliwe oferty, ale oryginalność nie jest wystarczająco potwierdzona."
+      : body.message,
+    coverage: asarvoFix8Coverage,
+    stabilityV2: {
+      retainedOffers: retainedCount,
+      freshOffers: freshOffers.length,
+      mergedOffers: mergedOffers.length,
+      retainMs: ASARVO_STABILITY_V2_RETAIN_MS,
+    },
+  };
+
+  if (retainedCount > 0) {
+    console.log("[AIShopping] STABILITY_V2_RETAINED_VERIFIED_OFFERS", {
+      retainedCount,
+      freshOffers: freshOffers.length,
+      mergedOffers: mergedOffers.length,
+      key: stableKey,
+    });
+  } else {
+    console.log("[AIShopping] STABILITY_V2_FRESH_SNAPSHOT", {
+      freshOffers: freshOffers.length,
+      mergedOffers: mergedOffers.length,
+      key: stableKey,
+    });
+  }
+
+  return {
+    ...snapshot,
+    body: mergedBody,
+  };
+}
+
+ async function ASARVO_BATCH30_CORE_POST(request: Request): Promise<NextResponse> {
+  let body: unknown;
+
+  try {
+    body = await request.clone().json();
+  } catch {
+    return executeAsarvoSearchRequest(request);
+  }
+
+  const key = getAsarvoStableSearchKey(body);
+  if (!key) {
+    return executeAsarvoSearchRequest(request);
+  }
+
+  const now = Date.now();
+  pruneAsarvoStableSearchCache(now);
+
+  const cached = ASARVO_STABLE_SEARCH_CACHE.get(key);
+  if (cached && cached.expiresAt > now) {
+    console.log("[AIShopping] STABILITY_V1_CACHE_HIT", key);
+
+    try {
+      const snapshot = await cached.promise;
+      return responseFromAsarvoStableSnapshot(snapshot, "HIT");
+    } catch {
+      ASARVO_STABLE_SEARCH_CACHE.delete(key);
+    }
+  }
+
+  console.log("[AIShopping] STABILITY_V1_CACHE_MISS", key);
+
+  const promise = snapshotAsarvoSearchResponse(request).then((snapshot) =>
+    applyAsarvoStabilityV2Merge(key, snapshot)
+  );
+  ASARVO_STABLE_SEARCH_CACHE.set(key, {
+    expiresAt: now + ASARVO_STABILITY_V1_TTL_MS,
+    promise,
+  });
+
+  try {
+    const snapshot = await promise;
+
+    // ASARVO_FIX29: never pin a transient zero-result source outage for a
+    // whole minute. Good results keep the 60s stable snapshot, but empty
+    // results are retried after 5s. Start TTL at COMPLETION, not at request
+    // start (a real search often takes 15-40s). Preserve promise identity so
+    // an older overlapping request cannot overwrite a newer cache entry.
+    const live = ASARVO_STABLE_SEARCH_CACHE.get(key);
+    if (live?.promise === promise) {
+      if (snapshot.status >= 500) {
+        ASARVO_STABLE_SEARCH_CACHE.delete(key);
+      } else {
+        const rows = snapshot.body && typeof snapshot.body === "object"
+          ? (snapshot.body as Record<string, unknown>).offers
+          : undefined;
+        live.expiresAt = Date.now() +
+          (Array.isArray(rows) && rows.length > 0 ?
+            ASARVO_STABILITY_V1_TTL_MS : 5_000);
+      }
+    }
+
+    return responseFromAsarvoStableSnapshot(snapshot, "MISS");
+  } catch (error) {
+    ASARVO_STABLE_SEARCH_CACHE.delete(key);
+    throw error;
+  }
+}
+
+
+
+// ASARVO_BATCH32_BUILDER_ABORT_SPLIT_DIAGNOSTICS_V1_FIX1
+type AsarvoBatch32PostFetchState = {
+  preHealthObserved: boolean;
+  healthCommitted: boolean;
+  finalFetchStatus: number | null;
+  finalHtmlLength: number;
+  adapterSignalAborted: boolean;
+  externalSignalAborted: boolean;
+  adapterDeadlineAborted: boolean;
+};
+
+const ASARVO_BATCH32_POST_FETCH = new Map<string, Map<string, AsarvoBatch32PostFetchState>>();
+
+function asarvoBatch32DetailMap(parsed: ParsedQuery): Map<string, AsarvoBatch32PostFetchState> | null {
+  if (!asarvoBatch31DiagMap(parsed)) return null;
+  const key = asarvoBatch31DiagKey(parsed);
+  let map = ASARVO_BATCH32_POST_FETCH.get(key);
+  if (!map) {
+    map = new Map();
+    ASARVO_BATCH32_POST_FETCH.set(key, map);
+  }
+  return map;
+}
+
+function asarvoBatch32DetailEnsure(parsed: ParsedQuery, hostRaw: string): AsarvoBatch32PostFetchState | null {
+  const map = asarvoBatch32DetailMap(parsed);
+  if (!map) return null;
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  if (!host) return null;
+  const state = map.get(host) ?? {
+    preHealthObserved: false,
+    healthCommitted: false,
+    finalFetchStatus: null,
+    finalHtmlLength: 0,
+    adapterSignalAborted: false,
+    externalSignalAborted: false,
+    adapterDeadlineAborted: false,
+  };
+  map.set(host, state);
+  return state;
+}
+
+function asarvoBatch32DiagObservePreHealth(
+  parsed: ParsedQuery,
+  host: string,
+  fetched: { status?: number; html?: string } | null | undefined,
+  adapterSignalAborted: boolean,
+  externalSignalAborted: boolean,
+  adapterDeadlineAborted: boolean
+): void {
+  const state = asarvoBatch32DetailEnsure(parsed, host);
+  if (!state) return;
+  state.preHealthObserved = true;
+  state.finalFetchStatus = typeof fetched?.status === "number" ? fetched.status : null;
+  state.finalHtmlLength = typeof fetched?.html === "string" ? fetched.html.length : 0;
+  state.adapterSignalAborted = state.adapterSignalAborted || adapterSignalAborted;
+  state.externalSignalAborted = state.externalSignalAborted || externalSignalAborted;
+  state.adapterDeadlineAborted = state.adapterDeadlineAborted || adapterDeadlineAborted;
+  asarvoBatch37DiagObservePreHealth(parsed, host);
+}
+
+function asarvoBatch32DiagObserveHealthCommitted(parsed: ParsedQuery, host: string): void {
+  const state = asarvoBatch32DetailEnsure(parsed, host);
+  if (state) state.healthCommitted = true;
+}
+
+function asarvoBatch32DiagGetPostFetch(parsed: ParsedQuery, hostRaw: string): AsarvoBatch32PostFetchState | null {
+  const map = ASARVO_BATCH32_POST_FETCH.get(asarvoBatch31DiagKey(parsed));
+  if (!map) return null;
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  const exact = map.get(host);
+  if (exact) return exact;
+  for (const [candidate, state] of map) {
+    if (candidate === host || candidate.endsWith(`.${host}`) || host.endsWith(`.${candidate}`)) return state;
+  }
+  return null;
+}
+
+function asarvoBatch32SameRetailHost(leftRaw: string, rightRaw: string): boolean {
+  const left = asarvoBatch31NormalizeHost(leftRaw);
+  const right = asarvoBatch31NormalizeHost(rightRaw);
+  if (!left || !right) return false;
+  return left === right || left.endsWith(`.${right}`) || right.endsWith(`.${left}`);
+}
+
+function asarvoBatch32ExplainBuilder(parsed: ParsedQuery, hostRaw: string) {
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  const adapter = V28_DIRECT_RETAILER_CATALOG_ADAPTERS.find((item) => asarvoBatch32SameRetailHost(item.host, host));
+  if (!adapter) {
+    return { adapterFound: false, categorySpecific: false, verticalSpecific: false, directoryMatched: false, eligible: false, searchSlugLength: 0, soloUrlCount: 0 };
+  }
+  const matchedVerticals = new Set(getRetailVerticalMatches(parsed).map(({ profile }) => profile.id));
+  const acceleratorDomains = getIntentVerticalAcceleratorDomains(parsed);
+  const categorySpecific = adapter.categories.includes(parsed.category ?? "");
+  const verticalSpecific = adapter.verticals.some((vertical) => matchedVerticals.has(vertical));
+  const directoryMatched = acceleratorDomains.some((domain) => asarvoBatch32SameRetailHost(domain, adapter.host));
+  const eligible = categorySpecific || verticalSpecific || directoryMatched;
+  const searchSlugLength = buildDirectRetailerCatalogSearchSlug(parsed).length;
+  let soloUrlCount = 0;
+  if (eligible && searchSlugLength >= 3) {
+    const built = buildDirectRetailerCatalogRequests(parsed, { hosts: [adapter.host], maxAdapters: 1, maxUrlsPerAdapter: 8 });
+    const own = built.find((request) => asarvoBatch32SameRetailHost(request.adapter.host, adapter.host));
+    soloUrlCount = own?.urls.length ?? 0;
+  }
+  return { adapterFound: true, categorySpecific, verticalSpecific, directoryMatched, eligible, searchSlugLength, soloUrlCount };
+}
+
+function asarvoBatch32DiagEnd(parsed: ParsedQuery): void {
+  ASARVO_BATCH32_POST_FETCH.delete(asarvoBatch31DiagKey(parsed));
+}
+
+// ASARVO_BATCH38_DISCOVERY_SETTLE_GRACE900_V1_FIX1
+function asarvoBatch38RescueSignalWithDiscoveryGrace(
+  discoverySignal: AbortSignal | undefined,
+  phaseSignal: AbortSignal,
+  graceMs: number = 900
+): AbortSignal {
+  if (!discoverySignal) return phaseSignal;
+
+  const controller = new AbortController();
+  let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const abortNow = () => {
+    if (graceTimer) {
+      clearTimeout(graceTimer);
+      graceTimer = null;
+    }
+    if (!controller.signal.aborted) controller.abort();
+  };
+
+  const scheduleDiscoveryAbort = () => {
+    if (controller.signal.aborted || graceTimer) return;
+    graceTimer = setTimeout(() => {
+      graceTimer = null;
+      if (!controller.signal.aborted) controller.abort();
+    }, Math.max(0, graceMs));
+  };
+
+  if (phaseSignal.aborted) abortNow();
+  else phaseSignal.addEventListener("abort", abortNow, { once: true });
+
+  if (controller.signal.aborted) return controller.signal;
+
+  if (discoverySignal.aborted) scheduleDiscoveryAbort();
+  else discoverySignal.addEventListener("abort", scheduleDiscoveryAbort, { once: true });
+
+  return controller.signal;
+}
+
+// ASARVO_BATCH37_EXTERNAL_SIGNAL_SOURCE_DIAGNOSTICS_V1
+type AsarvoBatch37SignalState = {
+  cohort: string;
+  registeredAt: number;
+  discoveryPresent: boolean;
+  discoveryAbortedAtRegister: boolean;
+  phaseAbortedAtRegister: boolean;
+  discoveryAbortAt: number | null;
+  phaseAbortAt: number | null;
+  preHealthAt: number | null;
+};
+
+const ASARVO_BATCH37_SIGNAL_SOURCE = new Map<string, Map<string, AsarvoBatch37SignalState>>();
+
+function asarvoBatch37SignalMap(parsed: ParsedQuery): Map<string, AsarvoBatch37SignalState> | null {
+  if (!asarvoBatch31DiagMap(parsed)) return null;
+  const key = asarvoBatch31DiagKey(parsed);
+  let map = ASARVO_BATCH37_SIGNAL_SOURCE.get(key);
+  if (!map) {
+    map = new Map();
+    ASARVO_BATCH37_SIGNAL_SOURCE.set(key, map);
+  }
+  return map;
+}
+
+function asarvoBatch37DiagRegisterCohortSignals(
+  parsed: ParsedQuery,
+  cohort: string,
+  hosts: readonly string[],
+  discoverySignal: AbortSignal | undefined,
+  phaseSignal: AbortSignal
+): void {
+  const map = asarvoBatch37SignalMap(parsed);
+  if (!map) return;
+  const registeredAt = Date.now();
+  const states: AsarvoBatch37SignalState[] = [];
+  for (const hostRaw of hosts) {
+    const host = asarvoBatch31NormalizeHost(hostRaw);
+    if (!host) continue;
+    const state: AsarvoBatch37SignalState = {
+      cohort,
+      registeredAt,
+      discoveryPresent: Boolean(discoverySignal),
+      discoveryAbortedAtRegister: discoverySignal?.aborted === true,
+      phaseAbortedAtRegister: phaseSignal.aborted,
+      discoveryAbortAt: discoverySignal?.aborted === true ? registeredAt : null,
+      phaseAbortAt: phaseSignal.aborted ? registeredAt : null,
+      preHealthAt: null,
+    };
+    map.set(host, state);
+    states.push(state);
+  }
+  const markDiscovery = () => {
+    const now = Date.now();
+    for (const state of states) if (state.discoveryAbortAt === null) state.discoveryAbortAt = now;
+  };
+  const markPhase = () => {
+    const now = Date.now();
+    for (const state of states) if (state.phaseAbortAt === null) state.phaseAbortAt = now;
+  };
+  if (discoverySignal) {
+    if (discoverySignal.aborted) markDiscovery();
+    else {
+      discoverySignal.addEventListener("abort", markDiscovery, { once: true });
+      if (discoverySignal.aborted) markDiscovery();
+    }
+  }
+  if (phaseSignal.aborted) markPhase();
+  else {
+    phaseSignal.addEventListener("abort", markPhase, { once: true });
+    if (phaseSignal.aborted) markPhase();
+  }
+}
+
+function asarvoBatch37DiagObservePreHealth(parsed: ParsedQuery, hostRaw: string): void {
+  const map = ASARVO_BATCH37_SIGNAL_SOURCE.get(asarvoBatch31DiagKey(parsed));
+  if (!map) return;
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  let state = map.get(host);
+  if (!state) {
+    for (const [candidate, candidateState] of map) {
+      if (candidate === host || candidate.endsWith(`.${host}`) || host.endsWith(`.${candidate}`)) { state = candidateState; break; }
+    }
+  }
+  if (state && state.preHealthAt === null) state.preHealthAt = Date.now();
+}
+
+function asarvoBatch37DiagGetHost(parsed: ParsedQuery, hostRaw: string) {
+  const map = ASARVO_BATCH37_SIGNAL_SOURCE.get(asarvoBatch31DiagKey(parsed));
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  let state = map?.get(host) ?? null;
+  if (!state && map) {
+    for (const [candidate, candidateState] of map) {
+      if (candidate === host || candidate.endsWith(`.${host}`) || host.endsWith(`.${candidate}`)) { state = candidateState; break; }
+    }
+  }
+  if (!state) return null;
+  const pre = state.preHealthAt;
+  const discoveryBeforePreHealth = pre !== null && state.discoveryAbortAt !== null && state.discoveryAbortAt <= pre;
+  const phaseBeforePreHealth = pre !== null && state.phaseAbortAt !== null && state.phaseAbortAt <= pre;
+  const source = pre === null
+    ? "NO_PREHEALTH"
+    : discoveryBeforePreHealth && phaseBeforePreHealth
+      ? "BOTH"
+      : discoveryBeforePreHealth
+        ? "DISCOVERY"
+        : phaseBeforePreHealth
+          ? "COHORT_PHASE"
+          : "NONE_BEFORE_PREHEALTH";
+  return {
+    cohort: state.cohort,
+    discoveryPresent: state.discoveryPresent,
+    discoveryAbortedAtRegister: state.discoveryAbortedAtRegister,
+    phaseAbortedAtRegister: state.phaseAbortedAtRegister,
+    discoveryAbortDelayMs: state.discoveryAbortAt === null ? null : Math.max(0, state.discoveryAbortAt - state.registeredAt),
+    phaseAbortDelayMs: state.phaseAbortAt === null ? null : Math.max(0, state.phaseAbortAt - state.registeredAt),
+    preHealthDelayMs: pre === null ? null : Math.max(0, pre - state.registeredAt),
+    discoveryBeforePreHealth,
+    phaseBeforePreHealth,
+    source,
+  };
+}
+
+function asarvoBatch37DiagEnd(parsed: ParsedQuery): void {
+  ASARVO_BATCH37_SIGNAL_SOURCE.delete(asarvoBatch31DiagKey(parsed));
+}
+
+// ASARVO_BATCH31_NOT_ATTEMPTED_LIFECYCLE_DIAGNOSTICS_V1
+type AsarvoBatch31LifecycleState = {
+  searchCallObserved: boolean;
+  requestBuilt: boolean;
+  taskCreated: boolean;
+  fetchStarted: boolean;
+  fetchSettled: boolean;
+  signalAbortedAtCall: boolean;
+  callCount: number;
+};
+
+const ASARVO_BATCH31_LIFECYCLE = new Map<string, Map<string, AsarvoBatch31LifecycleState>>();
+
+function asarvoBatch31NormalizeHost(value: string): string {
+  return value.trim().toLowerCase().replace(/^www\./, "");
+}
+
+function asarvoBatch31DiagKey(parsed: ParsedQuery): string {
+  return getRetailerRequestHealthKey(parsed);
+}
+
+function asarvoBatch31DiagBegin(parsed: ParsedQuery): void {
+  ASARVO_BATCH31_LIFECYCLE.set(asarvoBatch31DiagKey(parsed), new Map());
+}
+
+function asarvoBatch31DiagMap(parsed: ParsedQuery): Map<string, AsarvoBatch31LifecycleState> | null {
+  return ASARVO_BATCH31_LIFECYCLE.get(asarvoBatch31DiagKey(parsed)) ?? null;
+}
+
+function asarvoBatch31DiagEnsure(parsed: ParsedQuery, hostRaw: string): AsarvoBatch31LifecycleState | null {
+  const map = asarvoBatch31DiagMap(parsed);
+  if (!map) return null;
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  if (!host) return null;
+  const current = map.get(host) ?? {
+    searchCallObserved: false,
+    requestBuilt: false,
+    taskCreated: false,
+    fetchStarted: false,
+    fetchSettled: false,
+    signalAbortedAtCall: false,
+    callCount: 0,
+  };
+  map.set(host, current);
+  return current;
+}
+
+function asarvoBatch31DiagObserveCall(
+  parsed: ParsedQuery,
+  options: DirectRetailerCatalogSearchOptions,
+  requests: ReturnType<typeof buildDirectRetailerCatalogRequests>,
+  signalAbortedAtCall: boolean
+): void {
+  const map = asarvoBatch31DiagMap(parsed);
+  if (!map) return;
+  const requestedHosts = (options.hosts ?? []).map(asarvoBatch31NormalizeHost).filter(Boolean);
+  for (const host of requestedHosts) {
+    const state = asarvoBatch31DiagEnsure(parsed, host);
+    if (!state) continue;
+    state.searchCallObserved = true;
+    state.signalAbortedAtCall = state.signalAbortedAtCall || signalAbortedAtCall;
+    state.callCount += 1;
+  }
+  for (const request of requests) {
+    const state = asarvoBatch31DiagEnsure(parsed, request.adapter.host);
+    if (!state) continue;
+    state.searchCallObserved = true;
+    state.requestBuilt = true;
+    state.signalAbortedAtCall = state.signalAbortedAtCall || signalAbortedAtCall;
+    if (requestedHosts.length === 0) state.callCount += 1;
+  }
+}
+
+function asarvoBatch31DiagObserveTask(parsed: ParsedQuery, host: string): void {
+  const state = asarvoBatch31DiagEnsure(parsed, host);
+  if (state) state.taskCreated = true;
+}
+
+function asarvoBatch31DiagObserveFetchStart(parsed: ParsedQuery, host: string): void {
+  const state = asarvoBatch31DiagEnsure(parsed, host);
+  if (state) state.fetchStarted = true;
+}
+
+function asarvoBatch31DiagObserveFetchSettled(parsed: ParsedQuery, host: string): void {
+  const state = asarvoBatch31DiagEnsure(parsed, host);
+  if (state) state.fetchSettled = true;
+}
+
+function asarvoBatch31DiagGet(parsed: ParsedQuery, hostRaw: string): AsarvoBatch31LifecycleState | null {
+  const map = asarvoBatch31DiagMap(parsed);
+  if (!map) return null;
+  const host = asarvoBatch31NormalizeHost(hostRaw);
+  const exact = map.get(host);
+  if (exact) return exact;
+  for (const [candidate, state] of map) {
+    if (candidate === host || candidate.endsWith(`.${host}`) || host.endsWith(`.${candidate}`)) return state;
+  }
+  return null;
+}
+
+function asarvoBatch31DiagEnd(parsed: ParsedQuery): void {
+  ASARVO_BATCH31_LIFECYCLE.delete(asarvoBatch31DiagKey(parsed));
+}
+
+// ASARVO_BATCH30_MEGA25_DIRECT_RESCUE_DIAGNOSTICS_V1
+// ASARVO_BATCH30_MEGA25_DIRECT_RESCUE_DIAGNOSTICS_V1_FIX5_HEALTH_WRAPPER
+// FIX5 deliberately avoids all internal result-array and final-return locators.
+// Existing POST becomes ASARVO_BATCH30_CORE_POST; normal requests delegate immediately.
+// Header-gated diagnostics use only the already-maintained retailer health bucket,
+// existing response payload and deterministic V6/V7/V8 host selection. No extra
+// fetch/search/verification request is performed.
+// ASARVO_SEARCH_CORE_V17_MEGA1M_RECOVERY_VERIFICATION_FAILOVER
+//
+// Recovery verification failover.
+//
+// V16 keeps a diverse strong recovery portfolio, but the ordinary recovery
+// verifier still attempts only one bounded batch (3/4/6 candidates depending
+// on remaining time). If that first batch returns zero or only one accepted
+// offer while strong unattempted recovery candidates remain, they can die
+// untried even though the route still has useful verification time.
+//
+// V17 permits one tiny failover batch under strict safety rules:
+// - never retry an already-attempted URL;
+// - prefer hosts not present in the first recovery batch;
+// - only use candidates already returned by V16 recovery (therefore still
+//   inside V16's strong top-30 bound);
+// - run only with >= MIN_USEFUL_VERIFICATION_WINDOW_MS remaining;
+// - stop once recovery already produced >=2 accepted offers;
+// - acceptedCount=0 => max 2, or max 3 when >=5.5 s remain;
+// - acceptedCount=1 => max 1 top-up candidate;
+// - normal verifier acceptance remains untouched.
+
+// ASARVO_SEARCH_CORE_V29_MEGA100M_QUARANTINE_AWARE_V17_FAILOVER
+function asarvoSearchCoreV17SelectRecoveryFailoverCandidates(
+  recoveredResults: SearchResult[],
+  attemptedCandidates: SearchResult[],
+  acceptedCount: number,
+  remainingMs: number,
+  parsed: ParsedQuery
+): SearchResult[] {
+  if (
+    acceptedCount >= 2 ||
+    remainingMs < MIN_USEFUL_VERIFICATION_WINDOW_MS ||
+    recoveredResults.length === 0
+  ) {
+    return [];
+  }
+
+  const attemptedUrls =
+    new Set(
+      attemptedCandidates
+        .map((result) =>
+          normalizeUrl(
+            result.url
+          )
+        )
+        .filter(Boolean)
+    );
+
+  const attemptedHosts =
+    new Set(
+      attemptedCandidates
+        .map((result) =>
+          getResultHostname(
+            result.url
+          )
+        )
+        .filter(Boolean)
+    );
+
+  const leftover =
+    pruneKnownOverBudgetBeforeVerification(
+      asarvoSearchCoreV27FilterKnownQuarantinedCandidates(
+        recoveredResults,
+        parsed
+      ),
+      parsed
+    )
+      .filter((result) => {
+        const url =
+          normalizeUrl(
+            result.url
+          );
+
+        return (
+          Boolean(url) &&
+          !attemptedUrls.has(url)
+        );
+      });
+
+  if (
+    leftover.length === 0
+  ) {
+    return [];
+  }
+
+  const novelHostCandidates =
+    leftover.filter((result) => {
+      const host =
+        getResultHostname(
+          result.url
+        );
+
+      return (
+        Boolean(host) &&
+        !attemptedHosts.has(host)
+      );
+    });
+
+  const sameHostCandidates =
+    leftover.filter(
+      (result) =>
+        !novelHostCandidates.includes(
+          result
+        )
+    );
+
+  const ordered =
+    [
+      ...novelHostCandidates,
+      ...sameHostCandidates,
+    ];
+
+  const limit =
+    acceptedCount === 0
+      ? (
+          remainingMs >= 5_500
+            ? 3
+            : 2
+        )
+      : 1;
+
+  return selectDiverseSearchResults(
+    ordered,
+    limit,
+    parsed
+  );
+}
+
+export async function POST(request: Request): Promise<NextResponse> {
+  const asarvoDiagEnabled = request.headers.get("x-asarvo-diag") === "mega25-direct-v1";
+  if (!asarvoDiagEnabled) {
+    return ASARVO_BATCH30_CORE_POST(request);
+  }
+
+  const asarvoDiagRequest = request.clone();
+  let asarvoDiagBody: any = null;
+  try {
+    // ASARVO_BATCH52_GLOBAL_TARGET48_EXACT_GATE_AUDIT_V1_FIX9
+    // ASARVO_BATCH52_FIX12_HARNESS_BEGIN
+    // ASARVO_BATCH52_GLOBAL_TARGET48_EXACT_GATE_AUDIT_V1_FIX12
+    // Diagnostic-only parser harness bound specifically to the exported Next.js POST.
+    if (new URL(request.url).searchParams.get("__asarvo_b52_fix12") === "1") {
+      let asarvoBatch52Fix9Payload: any = null;
+      try {
+        asarvoBatch52Fix9Payload = await request.clone().json();
+      } catch {}
+
+      const asarvoBatch52Fix9Query =
+        typeof asarvoBatch52Fix9Payload?.query === "string"
+          ? normalizeText(asarvoBatch52Fix9Payload.query)
+          : "";
+      const asarvoBatch52Fix9RawTarget = asarvoBatch52Fix9Payload?.__asarvoB52ParseTarget;
+      const asarvoBatch52Fix9Target =
+        asarvoBatch52Fix9RawTarget && typeof asarvoBatch52Fix9RawTarget === "object"
+          ? (asarvoBatch52Fix9RawTarget as { host?: unknown; url?: unknown; markdown?: unknown })
+          : null;
+      const asarvoBatch52Fix9Host =
+        typeof asarvoBatch52Fix9Target?.host === "string"
+          ? asarvoBatch52Fix9Target.host.trim().toLowerCase().replace(/^www\./, "")
+          : "";
+      const asarvoBatch52Fix9UrlRaw =
+        typeof asarvoBatch52Fix9Target?.url === "string"
+          ? asarvoBatch52Fix9Target.url.trim()
+          : "";
+      const asarvoBatch52Fix9Markdown =
+        typeof asarvoBatch52Fix9Target?.markdown === "string"
+          ? asarvoBatch52Fix9Target.markdown.slice(0, 500_000)
+          : "";
+      const asarvoBatch52Fix9ProbeNonce =
+        typeof asarvoBatch52Fix9Payload?.__asarvoB52ProbeNonce === "string"
+          ? asarvoBatch52Fix9Payload.__asarvoB52ProbeNonce.slice(0, 120)
+          : "";
+      const asarvoBatch52Fix9Url = normalizeUrl(asarvoBatch52Fix9UrlRaw);
+      const asarvoBatch52Fix9UrlHost = asarvoBatch52Fix9Url
+        ? getResultHostname(asarvoBatch52Fix9Url)
+        : "";
+
+      if (
+        !asarvoBatch52Fix9Query ||
+        !asarvoBatch52Fix9Host ||
+        !ASARVO_BATCH51_GLOBAL_READER_RECOVERY_HOSTS.has(asarvoBatch52Fix9Host) ||
+        !asarvoBatch52Fix9Url ||
+        !asarvoBatch52Fix9UrlHost ||
+        !retailerHostMatchesDomain(asarvoBatch52Fix9UrlHost, asarvoBatch52Fix9Host) ||
+        asarvoBatch52Fix9Markdown.length < 80
+      ) {
+        return NextResponse.json(
+          {
+            success: false,
+            asarvoBatch52ParseOnlyHarness: "FIX12",
+            probeNonce: asarvoBatch52Fix9ProbeNonce,
+            error: "Invalid Batch52 FIX9 parse-only target.",
+          },
+          { status: 400 }
+        );
+      }
+
+      const asarvoBatch52Fix9Parsed = parseQuery(
+        asarvoBatch52Fix9Query,
+        asarvoBatch52Fix9Payload?.country
+      );
+      const asarvoBatch52Fix9Adapter = V28_DIRECT_RETAILER_CATALOG_ADAPTERS.find(
+        (adapter) => adapter.host.replace(/^www\./, "").toLowerCase() === asarvoBatch52Fix9Host
+      );
+      const asarvoBatch52Fix9AllowDeferred = Boolean(
+        (asarvoBatch52Fix9Adapter as { allowDeferredModelIdentityBridge?: boolean } | undefined)
+          ?.allowDeferredModelIdentityBridge
+      );
+
+      (asarvoBatch52Fix9Parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts = [];
+      const asarvoBatch52Fix9Funnel = asarvoBatch46AnalyzeReaderMarkdownFunnel(
+        asarvoBatch52Fix9Markdown,
+        asarvoBatch52Fix9Url,
+        asarvoBatch52Fix9Parsed,
+        asarvoBatch52Fix9Host
+      );
+
+      (asarvoBatch52Fix9Parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts = [
+        asarvoBatch52Fix9Host,
+      ];
+      asarvoBatch52Fix4ResetCandidateGateRejectReasons(
+        asarvoBatch52Fix9Parsed,
+        [asarvoBatch52Fix9Host]
+      );
+      asarvoBatch55ResetR11Samples(asarvoBatch52Fix9Parsed, [asarvoBatch52Fix9Host]);
+      asarvoBatch58ResetR12Samples(asarvoBatch52Fix9Parsed, [asarvoBatch52Fix9Host]);
+      asarvoBatch64ResetR12BridgeHits(asarvoBatch52Fix9Parsed, [asarvoBatch52Fix9Host]);
+      const asarvoBatch52Fix9Products = parseRescuedRetailerLandingMarkdown(
+        asarvoBatch52Fix9Markdown,
+        asarvoBatch52Fix9Url,
+        asarvoBatch52Fix9Parsed,
+        asarvoBatch52Fix9Host,
+        asarvoBatch52Fix9AllowDeferred
+      );
+      const asarvoBatch52Fix9GateReasons = asarvoBatch52Fix4GetCandidateGateRejectReasons(
+        asarvoBatch52Fix9Parsed,
+        asarvoBatch52Fix9Host
+      );
+
+      return NextResponse.json({
+        success: true,
+        asarvoBatch52ParseOnlyHarness: "FIX12",
+        probeNonce: asarvoBatch52Fix9ProbeNonce,
+        asarvoBatch52ParseOnly: {
+          host: asarvoBatch52Fix9Host,
+          url: asarvoBatch52Fix9Url,
+          query: asarvoBatch52Fix9Parsed.query,
+          readerTextLength: asarvoBatch52Fix9Markdown.length,
+          links: asarvoBatch52Fix9Funnel.links,
+          sameHostLinks: asarvoBatch52Fix9Funnel.sameHost,
+          concreteAnchors: asarvoBatch52Fix9Funnel.concrete,
+          clusters: asarvoBatch52Fix9Funnel.clusters,
+          namedClusters: asarvoBatch52Fix9Funnel.named,
+          sidecarGateRejects: asarvoBatch52Fix9Funnel.gateRejects,
+          sidecarGateAccepts: asarvoBatch52Fix9Funnel.gateAccepts,
+          markdownProducts: asarvoBatch52Fix9Products.length,
+          candidateGateRejectReasons: asarvoBatch52Fix9GateReasons,
+          r11RejectSamples: asarvoBatch55GetR11Samples(asarvoBatch52Fix9Parsed, asarvoBatch52Fix9Host),
+          r12RejectSamples: asarvoBatch58GetR12Samples(asarvoBatch52Fix9Parsed, asarvoBatch52Fix9Host),
+          r12BridgeHits: asarvoBatch64GetR12BridgeHits(asarvoBatch52Fix9Parsed, asarvoBatch52Fix9Host),
+          productSamples: asarvoBatch52Fix9Products.slice(0, 3).map((product) => ({
+            name: product.name,
+            url: product.url,
+          })),
+        },
+      });
+    }
+    // ASARVO_BATCH52_FIX12_HARNESS_END
+
+    // ASARVO_BATCH52_GLOBAL_TARGET48_EXACT_GATE_AUDIT_V1_FIX8
+
+    asarvoDiagBody = await asarvoDiagRequest.json();
+  } catch {
+    asarvoDiagBody = null;
+  }
+
+  const asarvoDiagPreQuery = typeof asarvoDiagBody?.query === "string"
+    ? normalizeText(asarvoDiagBody.query)
+    : "";
+  const asarvoDiagPreParsed = asarvoDiagPreQuery
+    ? parseQuery(asarvoDiagPreQuery, asarvoDiagBody?.country)
+    : null;
+  if (asarvoDiagPreParsed) asarvoBatch31DiagBegin(asarvoDiagPreParsed);
+
+  const asarvoBaseResponse = await ASARVO_BATCH30_CORE_POST(request);
+  const asarvoPayload = await asarvoBaseResponse.clone().json().catch(() => null);
+
+  const asarvoQuery = asarvoDiagPreQuery;
+
+  if (!asarvoQuery || !asarvoPayload || typeof asarvoPayload !== "object") {
+    return asarvoBaseResponse;
+  }
+
+  const parsed = asarvoDiagPreParsed ?? parseQuery(asarvoQuery, asarvoDiagBody?.country);
+    // ASARVO_BATCH52_GLOBAL_TARGET48_EXACT_GATE_AUDIT_V1_FIX4: diagnostic-only exact host override. Normal requests have no header and are unchanged.
+    const asarvoBatch52Fix4ForcedHostsRaw = request.headers.get("x-asarvo-b52-force-hosts") ?? "";
+    const asarvoBatch52Fix4ForcedHosts = Array.from(new Set(
+      asarvoBatch52Fix4ForcedHostsRaw.split(",")
+        .map((value) => value.trim().toLowerCase().replace(/^www\./, ""))
+        .filter((value) => value && ASARVO_BATCH51_GLOBAL_READER_RECOVERY_HOSTS.has(value))
+    )).slice(0, 4);
+    if (asarvoBatch52Fix4ForcedHosts.length > 0) {
+      (parsed as AsarvoBatch52Fix4ParsedDiagnostic).__asarvoBatch52Fix4ForcedHosts = asarvoBatch52Fix4ForcedHosts;
+      asarvoBatch52Fix4ResetCandidateGateRejectReasons(parsed, asarvoBatch52Fix4ForcedHosts);
+    }
+
+  const primaryHosts = new Set(buildDirectRetailerCatalogRequests(parsed).map(({ adapter }) => adapter.host));
+  const rankedRescueHosts = getMega25RequestableDirectRescueRetailerDomains(parsed, 28);
+
+  const v6 = rankedRescueHosts.filter((candidateHost) => !primaryHosts.has(candidateHost)).slice(0, 1);
+  const v6Set = new Set(v6);
+  const v7 = rankedRescueHosts
+    .filter((candidateHost) => !primaryHosts.has(candidateHost))
+    .filter((candidateHost) => !v6Set.has(candidateHost))
+    .slice(0, 1);
+  const usedV6V7 = new Set([...v6, ...v7]);
+  const v8 = rankedRescueHosts
+    .filter((candidateHost) => !primaryHosts.has(candidateHost))
+    .filter((candidateHost) => !usedV6V7.has(candidateHost))
+    .slice(0, 1);
+
+  const cohortByHost = new Map<string, "V6" | "V7" | "V8">();
+  for (const candidateHost of v6) cohortByHost.set(candidateHost, "V6");
+  for (const candidateHost of v7) cohortByHost.set(candidateHost, "V7");
+  for (const candidateHost of v8) cohortByHost.set(candidateHost, "V8");
+
+  const selectedHosts = [...v6, ...v7, ...v8];
+  const healthHosts = getRetailerRequestHealthBucket(parsed, false)?.hosts;
+  const offers = Array.isArray((asarvoPayload as any).offers) ? (asarvoPayload as any).offers : [];
+  const coverage = (asarvoPayload as any).coverage ?? null;
+
+  const normalizeHost = (value: string) => value.replace(/^www\./i, "").toLowerCase();
+  const sameRetailHost = (left: string, right: string) => {
+    const a = normalizeHost(left); const b = normalizeHost(right);
+    return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`);
+  };
+  const hostFromUrl = (value: unknown) => {
+    try { return normalizeHost(new URL(String(value ?? "")).hostname); }
+    catch { return ""; }
+  };
+  const finalOffersForHost = (candidateHost: string) => offers.filter((offer: any) => {
+    const offerHost = hostFromUrl(offer?.url);
+    return !!offerHost && sameRetailHost(offerHost, candidateHost);
+  }).length;
+  const findHealth = (candidateHost: string) => {
+    const exact = healthHosts?.get(candidateHost);
+    if (exact || !healthHosts) return exact;
+    for (const [healthHost, state] of healthHosts.entries()) {
+      if (sameRetailHost(healthHost, candidateHost)) return state;
+    }
+    return undefined;
+  };
+
+  const describeHost = (candidateHost: string) => {
+    const state = findHealth(candidateHost);
+    const lifecycle = asarvoBatch31DiagGet(parsed, candidateHost);
+    const adapterRegistered = V28_DIRECT_RETAILER_CATALOG_ADAPTERS.some((adapter) => sameRetailHost(adapter.host, candidateHost));
+    const builderDetail = asarvoBatch32ExplainBuilder(parsed, candidateHost);
+    const postFetchDetail = asarvoBatch32DiagGetPostFetch(parsed, candidateHost);
+    const signalSourceDetail = asarvoBatch37DiagGetHost(parsed, candidateHost);
+    const finalOffers = finalOffersForHost(candidateHost);
+    let reason = "NO_PRODUCTS";
+
+    if (finalOffers > 0) reason = "FINAL_OFFER";
+    else if (state?.adapterTimedOut) reason = "ADAPTER_TIMEOUT";
+    else if ((state?.directBlockFailures ?? 0) > 0) reason = `DIRECT_BLOCK_${state?.lastDirectStatus ?? "UNKNOWN"}`;
+    else if ((state?.directSuccesses ?? 0) > 0 && (state?.products ?? 0) === 0) {
+      reason = (state?.readerSuccesses ?? 0) > 0 ? "HTML_READER_PARSE_ZERO" : "HTML_OK_PARSE_ZERO";
+    } else if ((state?.readerSuccesses ?? 0) > 0 && (state?.products ?? 0) === 0) reason = "READER_PARSE_ZERO";
+    else if ((state?.products ?? 0) > 0) reason = "PARSED_NOT_FINAL";
+    else if ((state?.directAttempts ?? 0) > 0 && (state?.directSuccesses ?? 0) === 0) reason = "DIRECT_TRANSPORT_FAIL";
+    else if ((state?.directAttempts ?? 0) === 0 && (state?.readerSuccesses ?? 0) === 0 && (state?.readerFailures ?? 0) === 0) {
+      if (!adapterRegistered) reason = "NO_REGISTERED_ADAPTER";
+      else if (!lifecycle?.searchCallObserved) reason = "COHORT_CALL_NOT_OBSERVED";
+      else if (!lifecycle?.requestBuilt) {
+        if (!builderDetail.adapterFound) reason = "NO_REGISTERED_ADAPTER";
+        else if (!builderDetail.eligible) reason = "BUILDER_CATEGORY_VERTICAL_MISMATCH";
+        else if (builderDetail.searchSlugLength < 3) reason = "BUILDER_SHORT_SEARCH_SLUG";
+        else if (builderDetail.soloUrlCount === 0) reason = "BUILDER_URLS_EMPTY";
+        else reason = "BUILDER_MULTIHOST_SELECTION_MISS";
+      }
+      else if (!lifecycle?.taskCreated) reason = "REQUEST_TASK_NOT_CREATED";
+      else if (lifecycle?.signalAbortedAtCall) reason = "CALL_SIGNAL_ALREADY_ABORTED";
+      else if (!lifecycle?.fetchStarted) reason = "ABORTED_BEFORE_FETCH";
+      else if (!lifecycle?.fetchSettled) reason = "FETCH_ABORTED_OR_UNSETTLED";
+      else if (postFetchDetail?.preHealthObserved && postFetchDetail.adapterSignalAborted) {
+        if (postFetchDetail.externalSignalAborted) reason = "POST_FETCH_ABORT_EXTERNAL_SIGNAL";
+        else if (postFetchDetail.adapterDeadlineAborted) reason = "POST_FETCH_ABORT_ADAPTER_DEADLINE";
+        else reason = "POST_FETCH_ABORT_COMBINED_SIGNAL_UNKNOWN";
+      }
+      else if (postFetchDetail?.preHealthObserved && !postFetchDetail.healthCommitted) reason = "PRE_HEALTH_NO_COMMIT_UNKNOWN";
+      else reason = "POST_FETCH_ABORT_BEFORE_HEALTH";
+    }
+
+    return {
+      host: candidateHost,
+      cohort: cohortByHost.get(candidateHost) ?? "UNKNOWN",
+      directAttempts: state?.directAttempts ?? 0,
+      directSuccesses: state?.directSuccesses ?? 0,
+      directHardFailures: state?.directHardFailures ?? 0,
+      directBlockFailures: state?.directBlockFailures ?? 0,
+      lastDirectStatus: state?.lastDirectStatus ?? null,
+      readerSuccesses: state?.readerSuccesses ?? 0,
+      readerFailures: state?.readerFailures ?? 0,
+      readerChallenges: state?.readerChallenges ?? 0,
+      readerEligible: state?.readerEligible ?? 0,
+      readerAttempts: state?.readerAttempts ?? 0,
+      readerEmptyResults: state?.readerEmptyResults ?? 0,
+      readerNonEmptyResults: state?.readerNonEmptyResults ?? 0,
+      readerSkippedAborted: state?.readerSkippedAborted ?? 0,
+      readerAbortedAfterAttempt: state?.readerAbortedAfterAttempt ?? 0,
+      readerMaxTextLength: state?.readerMaxTextLength ?? 0,
+      readerQueueEntries: state?.readerQueueEntries ?? 0,
+      readerSlotGrants: state?.readerSlotGrants ?? 0,
+      readerHttpStarts: state?.readerHttpStarts ?? 0,
+      readerHttpResponses: state?.readerHttpResponses ?? 0,
+      readerAbortBeforeHttpStart: state?.readerAbortBeforeHttpStart ?? 0,
+      readerAbortAfterHttpStart: state?.readerAbortAfterHttpStart ?? 0,
+      readerInternalErrors: state?.readerInternalErrors ?? 0,
+      readerQueueWaitMaxMs: state?.readerQueueWaitMaxMs ?? 0,
+      readerHttpWaitMaxMs: state?.readerHttpWaitMaxMs ?? 0,
+      readerLastHttpStatus: state?.readerLastHttpStatus ?? null,
+    readerAbortAdapterOnly: state?.readerAbortAdapterOnly ?? 0,
+      readerAbortOuterOnly: state?.readerAbortOuterOnly ?? 0,
+      readerAbortAdapterAndOuter: state?.readerAbortAdapterAndOuter ?? 0,
+      readerAbortSignalUnknown: state?.readerAbortSignalUnknown ?? 0,
+      readerLocalTimeouts: state?.readerLocalTimeouts ?? 0,
+      readerMarkdownParseCalls: state?.readerMarkdownParseCalls ?? 0,
+      readerMarkdownLinks: state?.readerMarkdownLinks ?? 0,
+      readerMarkdownSameHostLinks: state?.readerMarkdownSameHostLinks ?? 0,
+      readerMarkdownConcreteAnchors: state?.readerMarkdownConcreteAnchors ?? 0,
+      readerMarkdownClusters: state?.readerMarkdownClusters ?? 0,
+      readerMarkdownNamedClusters: state?.readerMarkdownNamedClusters ?? 0,
+      readerMarkdownPriceCards: state?.readerMarkdownPriceCards ?? 0,
+      readerMarkdownGateRejects: state?.readerMarkdownGateRejects ?? 0,
+      readerMarkdownGateAccepts: state?.readerMarkdownGateAccepts ?? 0,
+      readerMarkdownProducts: state?.readerMarkdownProducts ?? 0,
+      readerOriginalDiscoverySeenAtAbort: state?.readerOriginalDiscoverySeenAtAbort ?? 0,
+      readerOriginalPhaseSeenAtAbort: state?.readerOriginalPhaseSeenAtAbort ?? 0,
+      readerOriginalBothSeenAtAbort: state?.readerOriginalBothSeenAtAbort ?? 0,
+      products: state?.products ?? 0,
+      adapterTimedOut: state?.adapterTimedOut ?? false,
+      finalOffers,
+      adapterRegistered,
+      lifecycleSearchCallObserved: lifecycle?.searchCallObserved ?? false,
+      lifecycleRequestBuilt: lifecycle?.requestBuilt ?? false,
+      lifecycleTaskCreated: lifecycle?.taskCreated ?? false,
+      lifecycleFetchStarted: lifecycle?.fetchStarted ?? false,
+      lifecycleFetchSettled: lifecycle?.fetchSettled ?? false,
+      lifecycleSignalAbortedAtCall: lifecycle?.signalAbortedAtCall ?? false,
+      lifecycleCallCount: lifecycle?.callCount ?? 0,
+      builderCategorySpecific: builderDetail.categorySpecific,
+      builderVerticalSpecific: builderDetail.verticalSpecific,
+      builderDirectoryMatched: builderDetail.directoryMatched,
+      builderEligible: builderDetail.eligible,
+      builderSearchSlugLength: builderDetail.searchSlugLength,
+      builderSoloUrlCount: builderDetail.soloUrlCount,
+      postFetchPreHealthObserved: postFetchDetail?.preHealthObserved ?? false,
+      postFetchHealthCommitted: postFetchDetail?.healthCommitted ?? false,
+      postFetchStatus: postFetchDetail?.finalFetchStatus ?? null,
+      postFetchHtmlLength: postFetchDetail?.finalHtmlLength ?? 0,
+      postFetchAdapterSignalAborted: postFetchDetail?.adapterSignalAborted ?? false,
+      postFetchExternalSignalAborted: postFetchDetail?.externalSignalAborted ?? false,
+      postFetchAdapterDeadlineAborted: postFetchDetail?.adapterDeadlineAborted ?? false,
+      cohortSignalSource: signalSourceDetail?.source ?? "UNOBSERVED",
+      cohortDiscoveryPresent: signalSourceDetail?.discoveryPresent ?? false,
+      cohortDiscoveryAbortedAtRegister: signalSourceDetail?.discoveryAbortedAtRegister ?? false,
+      cohortPhaseAbortedAtRegister: signalSourceDetail?.phaseAbortedAtRegister ?? false,
+      cohortDiscoveryAbortDelayMs: signalSourceDetail?.discoveryAbortDelayMs ?? null,
+      cohortPhaseAbortDelayMs: signalSourceDetail?.phaseAbortDelayMs ?? null,
+      cohortPreHealthDelayMs: signalSourceDetail?.preHealthDelayMs ?? null,
+      cohortDiscoveryBeforePreHealth: signalSourceDetail?.discoveryBeforePreHealth ?? false,
+      cohortPhaseBeforePreHealth: signalSourceDetail?.phaseBeforePreHealth ?? false,
+      reason,
+    
+      candidateGateRejectReasons: asarvoBatch52Fix4GetCandidateGateRejectReasons(parsed, candidateHost),
+};
+  };
+
+  const asarvoMega25Diag = {
+    mode: "HEALTH_BUCKET_FINAL_PLUS_EXTERNAL_SIGNAL_SOURCE_SPLIT",
+    lifecycleAttribution: true,
+    builderAbortSplitAttribution: true,
+    externalSignalSourceAttribution: true,
+    noInternalArrayDependency: true,
+    categoryMatches: getMega25CategoryMatches(parsed).map(({ profile }) => profile.id),
+    primaryDirectHostCount: primaryHosts.size,
+    rankedRescueHostCount: rankedRescueHosts.length,
+    globalCoverage: {
+      discoveredCandidates: typeof coverage?.discoveredCandidates === "number" ? coverage.discoveredCandidates : null,
+      verificationCandidates: typeof coverage?.verificationCandidates === "number" ? coverage.verificationCandidates : null,
+      finalOffers: offers.length,
+    },
+    cohorts: { v6, v7, v8 },
+    hosts: selectedHosts.map(describeHost),
+  };
+
+  asarvoBatch37DiagEnd(parsed);
+  asarvoBatch32DiagEnd(parsed);
+  asarvoBatch31DiagEnd(parsed);
+
+  return NextResponse.json(
+    { ...(asarvoPayload as Record<string, unknown>), asarvoMega25Diag },
+    { status: asarvoBaseResponse.status }
+  );
+}
+
+
+// ASARVO_BATCH34_BOUNDED_REQUESTABLE_RESCUE_WAVE6_V1
+// Permanent orchestration guard: Batch33 requestable-only backfill is preserved,
+// but rescue fanout is bounded to two hosts per V6/V7/V8 cohort (six total).
+// This keeps zero-URL slots eliminated without recreating the 12-host socket burst
+// that Batch33 diagnostics showed was dominated by external aborts/timeouts.
+
+
+// ASARVO_BATCH35_REQUESTABLE_MICRO_WAVE3_V1
+// Permanent orchestration guard: Batch33 requestable-only backfill is preserved,
+// but rescue fanout is bounded to one host per V6/V7/V8 cohort (three total).
+// This keeps zero-URL slots eliminated without recreating the 12-host socket burst
+// that Batch33 diagnostics showed was dominated by external aborts/timeouts.
+
+
+// ASARVO_BATCH36_RESCUE_DEADLINE_HEADROOM_V1
+// Rescue-only deadline headroom: requestable 1+1+1 fanout stays unchanged.
+// Existing V6/V7/V8 requests get bounded additional settle time without
+// changing URL shapes, source selection, verifier gates, price logic, or global cancellation.
+// cohortDeadlineMs=5250 adapterBudgetMs=4650 directFetchTimeoutMs=2850
