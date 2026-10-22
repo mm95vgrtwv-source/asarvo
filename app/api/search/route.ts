@@ -1,6 +1,23 @@
 import { NextResponse } from "next/server";
 
 /**
+ * V34.CORE200 — COLLOQUIAL GRINDER-DISC IDENTITY NORMALIZATION
+ * - Maps Polish "tarcza do diaxa" to the retailer vocabulary for angle-grinder discs.
+ * - Keeps diameter verification strict and listing-bound.
+ * - Rejects explicit brake-disc / circular-saw classes.
+ *
+ * V34.CORE199 — DESCRIPTION-SPEC MEASUREMENT DISCOVERY PRIORITY
+ * - Ensures equivalent-unit + specification queries enter the limited primary search budget.
+ * - Adds the same focused lane to zero-result recovery.
+ *
+ * V34.CORE198 — DESCRIPTION-SPEC MEASUREMENT RECOVERY
+ * - Single circular-product measurements such as "tarcza 25 cm" are interpreted as diameter, not generic length.
+ * - Diameter verification is listing-bound and may be proven from the concrete title, product description or specification using equivalent units (25 cm == 250 mm).
+ * - Discovery gains a bounded equivalent-unit spelling so retailer indexes using millimetres can still surface candidates even when the shopper typed centimetres.
+ * - Generic length, dimensions, identity, price, availability and every existing fail-closed gate remain unchanged.
+ */
+
+/**
  * V34.CORE196 — MODEL-LED TIRE GRAMMAR HARDENING
  * - V34.CORE196: canonical tire-size notation plus either load/speed index or tire season classifies a model-led query as `tire` even when the noun "opona"/"tire" is omitted.
  * - V34.CORE196: this category decision happens before the generic voltage pass, so a compact speed index such as `91V` becomes `tire_load_speed` instead of electrical `voltage`.
@@ -3685,6 +3702,17 @@ function detectCategory(query: string): string | null {
     /\bbosch\s+(?:gsr|gsb|gws|gbh|gks|gst|gdx|gdr|gop|gsa)\b/i.test(text);
   if (hasBoschProfessionalToolFamily) return "power_tool";
 
+  // V34.CORE200: Polish shoppers commonly say "diax/diaxa" for an angle
+  // grinder. When the sold object is explicitly a disc, route the query to a
+  // disc category instead of treating "diaxa" as an identity term that seller
+  // titles are required to repeat.
+  if (
+    /\btarcz\w*\b/iu.test(text) &&
+    /\b(?:diax\w*|szlifierk\w*\s+k[aą]tow\w*|angle\s+grinder)\b/iu.test(text)
+  ) {
+    return "grinder_disc";
+  }
+
   const hasToolFirstBrand =
     /\b(?:makita|dewalt|milwaukee|einhell|metabo|festool|ryobi|hikoki)\b/i.test(text);
   const hasToolLikeModelCode =
@@ -5803,7 +5831,11 @@ function extractUniversalRequirements(
     }
   }
 
-  for (const match of text.matchAll(openWorldMeasurementRegex("mm|cm|m", "giu"))) {
+  const singleLengthMeasurements = Array.from(
+    text.matchAll(openWorldMeasurementRegex("mm|cm|m", "giu"))
+  );
+
+  for (const match of singleLengthMeasurements) {
     if (
       typeof match.index === "number" &&
       (
@@ -5829,21 +5861,49 @@ function extractUniversalRequirements(
         "spec"
       );
     } else {
-      add(
-        "length",
-        "długość/wymiar",
-        `${canonicalNumber(numeric)}${unit}`,
-        uniqueNormalized([
-          `${canonicalNumber(numeric)} ${unit}`,
+      const measurementStart = typeof match.index === "number" ? match.index : -1;
+      const measurementEnd = measurementStart >= 0 ? measurementStart + match[0].length : -1;
+      const measurementAround = measurementStart >= 0 ? text.slice(Math.max(0, measurementStart - 72), Math.min(text.length, measurementEnd + 72)) : text;
+      const circularProductContext = /\b(?:tarcza\w*|disc|disk|cutting\s+disc|grinding\s+disc|cutting\s+wheel|grinding\s+wheel|krazek\w*|krążek\w*|kolo\s+tnace|koło\s+tnące)\b/iu.test(text);
+      const explicitDiameterContext = /(?:\b(?:srednic\w*|średnic\w*|diameter|fi)\b|[ø⌀])/iu.test(measurementAround);
+      const explicitOtherDimensionContext = /\b(?:grubosc\w*|grubość\w*|thickness|otwor\w*|otwór\w*|bore|dlugosc\w*|długość\w*|length|szerokosc\w*|szerokość\w*|width|wysokosc\w*|wysokość\w*|height)\b/iu.test(measurementAround);
+      const inferCircularDiameter = circularProductContext && singleLengthMeasurements.length === 1 && !explicitOtherDimensionContext;
+      const isDiameterMeasurement = explicitDiameterContext || inferCircularDiameter;
+
+      if (isDiameterMeasurement) {
+        const normalizedValue = canonicalNumber(numeric);
+        add(
+          "diameter",
+          "średnica",
+          `${normalizedValue}${unit}`,
+          uniqueNormalized([
+            `${normalizedValue} ${unit}`,
+            `${normalizedValue}${unit}`,
+            ...openWorldEquivalentNumberAliases(millimeters, "mm"),
+            `średnica ${normalizedValue} ${unit}`,
+            `srednica ${normalizedValue} ${unit}`,
+            `fi ${normalizedValue} ${unit}`,
+            `ø${normalizedValue}${unit}`,
+          ]),
+          "size",
+          true,
+          measurementStart >= 0 ? detectUniversalNumericComparison(text, measurementStart, measurementEnd) : "eq"
+        );
+      } else {
+        add(
+          "length",
+          "długość/wymiar",
           `${canonicalNumber(numeric)}${unit}`,
-          ...openWorldEquivalentNumberAliases(millimeters, "mm"),
-        ]),
-        "size",
-        true,
-        typeof match.index === "number"
-          ? detectUniversalNumericComparison(text, match.index, match.index + match[0].length)
-          : "eq"
-      );
+          uniqueNormalized([
+            `${canonicalNumber(numeric)} ${unit}`,
+            `${canonicalNumber(numeric)}${unit}`,
+            ...openWorldEquivalentNumberAliases(millimeters, "mm"),
+          ]),
+          "size",
+          true,
+          measurementStart >= 0 ? detectUniversalNumericComparison(text, measurementStart, measurementEnd) : "eq"
+        );
+      }
     }
   }
 
@@ -7051,6 +7111,25 @@ function requirementAlternativeSearchTerm(
   const primaryRaw = normalizeText(requirementPrimarySearchTerm(requirement));
   const primary = normalizeMatchText(primaryRaw);
 
+  // V34.CORE198: retailer indexes frequently publish circular dimensions in
+  // millimetres even when a shopper types centimetres ("25 cm" vs "250 mm").
+  // Keep verification numeric/listing-bound, but allow one equivalent-unit
+  // spelling to participate in the existing bounded alternative discovery lane.
+  if (requirement.key === "diameter" || requirement.key === "length") {
+    const requestedMm = parseOpenWorldMeasurementToBase(requirement.value, "length");
+    if (requestedMm !== null) {
+      const convertedAlias = requirement.aliases
+        .map((alias) => normalizeText(alias))
+        .find((alias) => {
+          if (!alias || normalizeMatchText(alias) === primary) return false;
+          const aliasMm = parseOpenWorldMeasurementToBase(alias, "length");
+          return aliasMm !== null && universalNumbersNearlyEqual(aliasMm, requestedMm) &&
+            normalizeMatchText(alias).replace(/\s+/g, "") !== primary.replace(/\s+/g, "");
+        });
+      if (convertedAlias) return convertedAlias;
+    }
+  }
+
   // Numeric shopping specs are indexed with different decimal/unit surfaces:
   // 6,2 l / 6.2 l / 6.2l, 1,5 TB / 1.5TB, etc. Prefer an equivalent dotted
   // form as the secondary discovery spelling while verification stays numeric.
@@ -7453,6 +7532,10 @@ function buildUniversalProductIntent(
 
   if (category === "vacuum" && required.some((item) => item.key === "mapping")) {
     productPhrase = "robot sprzątający";
+  }
+
+  if (category === "grinder_disc") {
+    productPhrase = "tarcza do szlifierki kątowej";
   }
 
   if (!productPhrase || productPhrase.length < 2) {
@@ -9184,6 +9267,13 @@ function requirementHasExactNumericEvidence(
     return offered.some((value) => universalNumericComparisonSatisfied(value, requested, universalRequirementComparison(requirement)));
   }
 
+  if (requirement.key === "diameter") {
+    const requested = parseOpenWorldMeasurementToBase(requirement.value, "length");
+    if (requested === null) return null;
+    const offered = extractUniversalDiameterValuesMm(evidence);
+    return offered.some((value) => universalNumericComparisonSatisfied(value, requested, universalRequirementComparison(requirement)));
+  }
+
   if (requirement.key === "dimensions") {
     const requested = normalizeMatchText(requirement.value).match(
       /(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)/i
@@ -9280,6 +9370,30 @@ function hasStructuredAncEncContradiction(evidenceRaw: string): boolean {
     if (/(?:^|[^a-z0-9])enc(?=$|[^a-z0-9])/iu.test(value)) encField = true;
   }
   return encField && !ancField;
+}
+
+function extractUniversalDiameterValuesMm(valueRaw: string): number[] {
+  const text = normalizeMatchText(valueRaw);
+  if (!text) return [];
+  const values = new Set<number>();
+  const addValue = (valueRaw: string, unitRaw: string) => {
+    const value = Number(valueRaw.replace(",", "."));
+    if (!Number.isFinite(value) || value <= 0) return;
+    const unit = unitRaw.toLowerCase();
+    const mm = unit === "m" ? value * 1000 : unit === "cm" ? value * 10 : value;
+    if (Number.isFinite(mm) && mm > 0) values.add(Number(mm.toFixed(4)));
+  };
+  const labelledPatterns = [
+    /(?:\b(?:srednic\w*|średnic\w*|diameter|fi)\b|[ø⌀])\s*(?:[:=\-]?\s*)?(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b/giu,
+    /\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b[^.!?;\n]{0,28}\b(?:srednic\w*|średnic\w*|diameter)\b/giu,
+  ];
+  for (const pattern of labelledPatterns) for (const match of text.matchAll(pattern)) addValue(match[1], match[2]);
+  const circularPatterns = [
+    /\b(?:tarcza\w*|disc|disk|cutting\s+disc|grinding\s+disc|cutting\s+wheel|grinding\s+wheel|krazek\w*|krążek\w*|kolo\s+tnace|koło\s+tnące)\b[^.!?;\n]{0,90}\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b/giu,
+    /\b(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b[^.!?;\n]{0,55}\b(?:tarcza\w*|disc|disk|cutting\s+disc|grinding\s+disc|cutting\s+wheel|grinding\s+wheel|krazek\w*|krążek\w*|kolo\s+tnace|koło\s+tnące)\b/giu,
+  ];
+  for (const pattern of circularPatterns) for (const match of text.matchAll(pattern)) addValue(match[1], match[2]);
+  return Array.from(values);
 }
 
 function requirementHasEvidence(
@@ -10263,6 +10377,36 @@ const UNIVERSAL_CATEGORY_PROFILES: Record<string, UniversalCategoryProfile> = {
     // These are category-level synonyms only; brand/model/spec requirements
     // are added dynamically from the user's query.
     discoveryAliases: ["air fryer", "frytkownica beztłuszczowa"],
+  },
+  grinder_disc: {
+    positiveAliases: [
+      "tarcza",
+      "tarcza do szlifierki",
+      "tarcza do szlifierki kątowej",
+      "tarcza tnąca",
+      "tarcza szlifierska",
+      "tarcza diamentowa",
+      "disc",
+      "cutting disc",
+      "grinding disc",
+      "abrasive disc",
+      "diamond disc",
+      "cutting wheel",
+      "grinding wheel",
+    ],
+    discoveryAliases: [
+      "tarcza do szlifierki kątowej",
+      "tarcza tnąca",
+      "tarcza szlifierska",
+      "tarcza diamentowa",
+      "cutting disc",
+      "grinding disc",
+    ],
+    incompatibleTitlePatterns: [
+      /\b(?:tarcza|disc)\s+hamulcow\w*/iu,
+      /\bhamulcow\w*\s+(?:tarcza|disc)/iu,
+      /\b(?:piła|pila)\s+tarczow\w*/iu,
+    ],
   },
   power_tool: {
     positiveAliases: ["wiertarka", "wkretarka", "wkrętarka", "wiertarko-wkrętarka", "wkrętarko-wiertarka", "mlotowiertarka", "młotowiertarka", "drill", "drill driver"],
@@ -12562,6 +12706,51 @@ function buildUniversalAlternativePreciseDiscoveryCore(
 
   if (!changed) return "";
   return normalizeText(`${buildProductSearchBase(parsed)} ${terms.join(" ")}`);
+}
+
+function buildDescriptionSpecMeasurementDiscoveryQueries(
+  parsed: ParsedQuery
+): string[] {
+  const base = normalizeText(buildProductSearchBase(parsed));
+  if (!base) return [];
+
+  const measurementRequirements = parsed.intent.required
+    .filter((requirement) =>
+      requirement.hard &&
+      ["diameter", "length", "dimensions"].includes(requirement.key)
+    )
+    .slice(0, 2);
+
+  if (measurementRequirements.length === 0) return [];
+
+  const queries: string[] = [];
+  for (const requirement of measurementRequirements) {
+    const primary = normalizeText(requirementPrimarySearchTerm(requirement));
+    const alternative = normalizeText(
+      requirementAlternativeSearchTerm(requirement) ?? ""
+    );
+
+    const terms = Array.from(new Set([alternative, primary].filter(Boolean)))
+      .slice(0, 2);
+
+    for (const term of terms) {
+      const label =
+        requirement.key === "diameter"
+          ? "średnica"
+          : requirement.key === "dimensions"
+            ? "wymiary"
+            : "wymiar";
+
+      // This lane deliberately searches for specification/description wording.
+      // Verification remains listing-bound and still requires the concrete
+      // product page to prove the exact numeric requirement.
+      queries.push(
+        normalizeText(`${quoteSearchTerm(base)} ${quoteSearchTerm(term)} ${label} specyfikacja sklep`)
+      );
+    }
+  }
+
+  return Array.from(new Set(queries.filter(Boolean))).slice(0, 2);
 }
 
 function getMatchingCategoryDiscoveryAlias(
@@ -31470,6 +31659,10 @@ async function runSearch(
       `${quoteSearchTerm(core)} ${semanticHardRequirementTerms} cena sklep kup`
     )
   );
+  const descriptionSpecMeasurementQueries =
+    buildDescriptionSpecMeasurementDiscoveryQueries(parsed);
+  const categorySynonymQueries =
+    buildCategorySynonymDiscoveryQueries(parsed);
   const semanticIdentityTargetedQueries = semanticIdentityDiscoveryAlternates
     .slice(0, 1)
     .flatMap((core) =>
@@ -31491,12 +31684,14 @@ async function runSearch(
     ? Array.from(new Set([
         exactModelGenericQuery,
         exactModelFootprintQuery,
+        ...categorySynonymQueries,
+        ...descriptionSpecMeasurementQueries,
+        alternativePreciseShoppingQuery || preciseShoppingQuery,
         ...phrasePreservingGenericQueries,
         rangeRelaxedBudgetQuery
           ? `${quoteSearchTerm(rangeRelaxedBudgetQuery)} cena sklep kup`
           : "",
         exactAttributeQuery,
-        alternativePreciseShoppingQuery || preciseShoppingQuery,
         ...semanticIdentityGenericQueries,
         primaryHardLexicalAlternateQuery,
         relaxedRetailDiscoveryQuery,
@@ -34245,6 +34440,7 @@ function canUseExternalProofForRequirement(requirement: UniversalRequirement): b
       "gpu_model",
       "capacity",
       "volume",
+      "diameter",
       "package_weight",
       "serving_weight",
       "material",
@@ -48217,6 +48413,10 @@ async function runZeroResultRecoverySearch(
     alreadySeenResults,
     3
   );
+  const descriptionSpecMeasurementRecoveryQueries =
+    buildDescriptionSpecMeasurementDiscoveryQueries(parsed);
+  const categorySynonymRecoveryQueries =
+    buildCategorySynonymDiscoveryQueries(parsed);
   const rangeRelaxedBudgetRecoveryQuery =
     buildRangeRelaxedBudgetSearchQuery(parsed);
   const recoveryQueries = Array.from(new Set([
@@ -48225,6 +48425,8 @@ async function runZeroResultRecoverySearch(
       : "",
     automotive[0] ?? "",
     exactFeatureRecoveryQuery ?? "",
+    ...categorySynonymRecoveryQueries,
+    ...descriptionSpecMeasurementRecoveryQueries,
     ...hardLexicalRecoveryQueries,
     normalizeText(`${quoteSearchTerm(base)} ${stateHint} ${originalityHint} cena kup`),
     normalizeText(`${parsed.intent.productPhrase || base} ${stateHint} ${originalityHint} sklep`),
