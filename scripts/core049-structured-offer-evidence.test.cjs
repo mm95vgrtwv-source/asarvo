@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');const Module=require('node:module');
+const file='lib/asarvo/structured-offer-evidence.ts';const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const m=new Module(file,module);m.filename=file;m.paths=module.paths;m._compile(js,file);const check=m.exports.checkOfferLocalSpecEvidence;
+let n=0;const test=(name,args,reason)=>{const x=check({extractPairs:()=>[{label:'Pojemność',value:'2TB',evidence:'pojemność 2TB'}],...args});assert.equal(x.reason,reason);console.log('PASS',name);n++};
+test('same capacity',{requestedTitle:'Samsung 990 PRO 2TB',offerTitle:'Samsung 990 PRO 2 TB',html:'<tr><td>Pojemność</td><td>2TB</td></tr>'},'ok');
+test('variant conflict',{requestedTitle:'Samsung 990 PRO 2TB',offerTitle:'Samsung 990 PRO 1TB',html:'<tr></tr>'},'variant_conflict');
+test('identity missing',{requestedTitle:'',offerTitle:'Samsung 2TB',html:'<tr></tr>'},'missing_identity');
+test('blocked',{requestedTitle:'2TB',offerTitle:'2TB',html:'challenge',blockedPage:()=>true},'blocked_page');
+test('empty specs',{requestedTitle:'2TB',offerTitle:'2TB',html:'abc',extractPairs:()=>[]},'empty_specs');
+test('zero HTML',{requestedTitle:'2TB',offerTitle:'2TB',html:''},'blocked_page');
+console.log('ASARVO_CORE049_LANE1_TESTS='+n);
