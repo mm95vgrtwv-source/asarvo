@@ -1,0 +1,7 @@
+const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');const Module=require('node:module');
+const file='lib/asarvo/offer-quality.ts';const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+const m=new Module(file,module);m.filename=file;m.paths=module.paths;m._compile(js,file);const {assessOfferQuality:a,qualityCounts:c}=m.exports;
+let n=0;const t=(name,item,reason)=>{assert.equal(a(item).reason,reason);console.log('PASS',name);n++};
+t('priced',{url:'https://example.com/p',price:100},'ok');t('missing price',{url:'https://example.com/p'},'missing_price');t('zero',{url:'https://example.com/p',price:0},'invalid_price');t('negative',{url:'https://example.com/p',price:-12},'invalid_price');t('http',{url:'http://example.com/p',price:20},'unsafe_url');t('javascript',{url:'javascript:alert(1)',price:20},'unsafe_url');t('credentials',{url:'https://a:b@example.com/',price:20},'unsafe_url');t('total preferred',{url:'https://example.com/',price:100,totalPrice:120},'ok');
+const counts=c([{url:'https://example.com/a',price:20},{url:'https://example.com/b',price:null},{url:'https://another.com/',price:40}]);assert.equal(counts.priced,2);assert.equal(counts.uniqueHttpsHosts,2);n++;console.log('PASS host counting');
+console.log('ASARVO_CORE050_LANE2_TESTS='+n);
