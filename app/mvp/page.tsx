@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import styles from "./mvp.module.css";
 import { asarvoStabilityV3DedupeAndRank } from "@/lib/asarvo/legacy-stability";
+import { asarvoIntentCoreV12NormalizeAdversarialQuerySurface } from "@/lib/asarvo/legacy-text-utils";
 
 type Offer = { id?: number | string; name?: string; store?: string; price?: number; totalPrice?: number; currency?: string; url?: string; condition?: string | null; delivery?: string | null; rating?: number | null; verification?: string; priceVerified?: boolean; availability?: string; description?: string };
 type SearchData = { success?: boolean; offers?: Offer[]; found?: number; resultStatus?: string; message?: string; error?: string; coverage?: { discoveredCandidates?: number; verificationCandidates?: number } };
@@ -16,13 +17,14 @@ function readStored<T>(key: string, fallback: T): T { try { const value = localS
 export default function MvpPage() {
   const [input,setInput]=useState(""); const [query,setQuery]=useState(""); const [data,setData]=useState<SearchData|null>(null);
   const [busy,setBusy]=useState(false); const [error,setError]=useState(""); const [sort,setSort]=useState("recommended"); const [store,setStore]=useState("all");
+  const [legacyQueryMode,setLegacyQueryMode]=useState(false);
   const [maxPrice,setMaxPrice]=useState(""); const [favorites,setFavorites]=useState<SavedOffer[]>([]); const [history,setHistory]=useState<string[]>([]);
   const [compare,setCompare]=useState<string[]>([]); const [tab,setTab]=useState<"results"|"favorites">("results"); const [ready,setReady]=useState(false);
   useEffect(()=> { setFavorites(readStored<SavedOffer[]>(FAVORITES_KEY,[])); setHistory(readStored<string[]>(HISTORY_KEY,[])); setReady(true); },[]);
   useEffect(()=> {if(ready) localStorage.setItem(FAVORITES_KEY,JSON.stringify(favorites));},[favorites,ready]);
   useEffect(()=> {if(ready) localStorage.setItem(HISTORY_KEY,JSON.stringify(history));},[history,ready]);
   async function search(text?: string) {
-    const q=(text ?? input).trim();if(!q || busy) return; setInput(q);setQuery(q);setTab("results");setBusy(true);setData(null);setError("");setStore("all");setMaxPrice("");setCompare([]);
+    const raw=(text ?? input).trim(); const q=legacyQueryMode ? asarvoIntentCoreV12NormalizeAdversarialQuerySurface(raw, (value)=>value.normalize("NFC").replace(/\s+/gu," ").trim()) : raw; if(!q || busy) return; setInput(q);setQuery(q);setTab("results");setBusy(true);setData(null);setError("");setStore("all");setMaxPrice("");setCompare([]);
     setHistory(prev=>[q,...prev.filter(v=>v.toLowerCase()!==q.toLowerCase())].slice(0,8));
     const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),65000);
     try {const r=await fetch("/api/search",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q,country:"PL"}),signal:controller.signal,cache:"no-store"});
@@ -58,6 +60,7 @@ export default function MvpPage() {
   return <main className={styles.page}>
     <div className={styles.container}>
       <header className={styles.header}><div><div className={styles.eyebrow}>ASARVO • WERSJA MVP 1.0</div><h1>Znajdź produkt. Porównaj oferty.</h1><p className={styles.muted}>Jedno wyszukiwanie, wiele sklepów. Pokazujemy tylko oferty zwrócone przez silnik — bez wymyślonych cen.</p></div><a className={styles.homeLink} href="/">Obecna strona ↗</a></header>
+      <label style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}><input type="checkbox" checked={legacyQueryMode} onChange={e=>setLegacyQueryMode(e.target.checked)}/> Odzyskana normalizacja zapytaĹ„ (test 2.0)</label>
       <form className={styles.search} onSubmit={e=>{e.preventDefault();void search();}}><label htmlFor="q" className={styles.srOnly}>Szukany produkt</label><input id="q" value={input} onChange={e=>setInput(e.target.value)} placeholder="Np. iPhone 15 128 GB, dysk SSD Samsung..." maxLength={180} /><button type="submit" disabled={busy || !input.trim()}>{busy?"Szukam...":"Szukaj"}</button></form>
       {history.length>0 && <div className={styles.history}><span>Ostatnie:</span>{history.slice(0,4).map(x=><button key={x} onClick={()=>void search(x)} disabled={busy}>{x}</button>)}</div>}
       <div className={styles.tabs}><button aria-pressed={tab==="results"} className={tab==="results"?styles.active:""} onClick={()=>setTab("results")}>Wyniki {data ? `(${guardedOffers.length})`:""}</button><button aria-pressed={tab==="favorites"} className={tab==="favorites"?styles.active:""} onClick={()=>{setTab("favorites");setStore("all");setCompare([]);}}>Ulubione ({favorites.length})</button></div>
