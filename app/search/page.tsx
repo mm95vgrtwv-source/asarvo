@@ -4122,11 +4122,10 @@ function SearchPageContent() {
                         {riskLabel(bestProduct.riskLevel)}
                       </span>
 
-                      {bestProduct.priceVerified && (
-                        <span className="rounded-full border border-blue-500/15 bg-blue-500/[0.06] px-3 py-1.5 text-blue-300">
-                          ✓ Cena zweryfikowana
-                        </span>
-                      )}
+                      {/* RC162: priceVerified is an engine assertion, not independent merchant proof. */}
+                      <span className="rounded-full border border-blue-500/15 bg-blue-500/[0.06] px-3 py-1.5 text-blue-300">
+                        Cena z wyszukiwarki — sprawdź w sklepie
+                      </span>
 
                       {priceAttractivenessLabel(
                         bestProduct.priceAttractiveness
