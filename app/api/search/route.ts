@@ -1,3 +1,12 @@
+import { core070ReserveVerifiedQueue } from "../../../lib/asarvo/core070-host-reserve";
+import { classifyAdapterRecovery } from "../../../lib/asarvo/core064-adapter-recovery";
+import { filterCore065PromotionMisprices } from "../../../lib/asarvo/core065-promo-price";
+import { diversifyVerifiedOffers } from "../../../lib/asarvo/core062-diversity";
+import { summarizeHostQuality } from "../../../lib/asarvo/core059-host-quality";
+import { checkExplicitCapacityConflict } from "../../../lib/asarvo/core059-variant";
+import { qualityCounts } from "../../../lib/asarvo/offer-quality";
+import { checkOfferLocalSpecEvidence } from "../../../lib/asarvo/structured-offer-evidence";
+import { createCore036StructuredSpecs } from "../../../lib/asarvo/legacy-structured-runtime";
 import { NextResponse } from "next/server";
 
 /**
@@ -19428,6 +19437,19 @@ async function searchDirectRetailerCatalogPages(
               }
 
               if (!usableHtml && parsedCatalogProducts.length === 0) {
+                // CORE066_ADAPTER_CLASSIFY: shadow-only; no automatic retry or acceptance change.
+                if (process.env.ASARVO_CORE066_ADAPTER_DIAG === "1") {
+                  const core066Decision = classifyAdapterRecovery({
+                    status: typeof fetched?.status === "number" ? fetched.status : null,
+                    validProductCount: 0,
+                    retryOrdinal: 0
+                  });
+                  console.info("[CORE066_ADAPTER_CLASSIFY]", {
+                    host: adapter.host, status: fetched?.status ?? "network",
+                    kind: core066Decision.kind, allowRetryAdvice: core066Decision.allowRetry,
+                    reason: core066Decision.reason
+                  });
+                }
                 console.log(
                   "[AIShopping] V34.CORE120 direct retailer catalog unavailable:",
                   adapter.host,
@@ -20228,11 +20250,55 @@ function acquireOutboundFetchSlot(
   });
 }
 
+// CORE129: coalesce only identical concurrent GET requests in the SAME cancellation scope.
+// Never cache responses, never share across distinct scopes/users, never bypass verification.
+// Distinct timeouts stay independent; each shared request uses the same AbortSignal.
+type Core129FetchResult = { status: number; html: string; finalUrl: string } | null;
+const core129InFlight = new WeakMap<AbortSignal, Map<string, Promise<Core129FetchResult>>>();
 async function fetchHtml(
   url: string,
   timeoutMs = FETCH_TIMEOUT_MS,
   externalSignal?: AbortSignal
+): Promise<Core129FetchResult> {
+  if (!externalSignal || externalSignal.aborted) {
+    return fetchHtmlUncoalesced(url, timeoutMs, externalSignal);
+  }
+  let scope = core129InFlight.get(externalSignal);
+  if (!scope) {
+    scope = new Map<string, Promise<Core129FetchResult>>();
+    core129InFlight.set(externalSignal, scope);
+  }
+  const key = JSON.stringify([url, timeoutMs]);
+  const existing = scope.get(key);
+  if (existing) {
+    if (process.env.ASARVO_CORE129_DEDUPE_DIAG === "1") {
+      let host = "invalid-host";
+      try { host = new URL(url).hostname.toLowerCase(); } catch {}
+      console.info("ASARVO_CORE129_COALESCED " + JSON.stringify({ host }));
+    }
+    return existing;
+  }
+  const pending = fetchHtmlUncoalesced(url, timeoutMs, externalSignal);
+  scope.set(key, pending);
+  try {
+    return await pending;
+  } finally {
+    if (scope.get(key) === pending) scope.delete(key);
+    if (scope.size === 0) core129InFlight.delete(externalSignal);
+  }
+}
+
+async function fetchHtmlUncoalesced(
+  url: string,
+  timeoutMs = FETCH_TIMEOUT_MS,
+  externalSignal?: AbortSignal
 ): Promise<{ status: number; html: string; finalUrl: string } | null> {
+  // CORE128: opt-in, domain-only fetch diagnostics; never logs full URLs or search terms.
+  const core128Enabled = process.env.ASARVO_CORE128_FETCH_DIAG === "1";
+  const core128Started = core128Enabled ? Date.now() : 0;
+  let core128Status = 0;
+  let core128Failure = false;
+  let core128WaitMs = 0;
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const fetchSignal = externalSignal
     ? AbortSignal.any([timeoutSignal, externalSignal])
@@ -20244,6 +20310,7 @@ async function fetchHtml(
     if (fetchSignal.aborted) return null;
 
     releaseSlot = await acquireOutboundFetchSlot(fetchSignal);
+    if (core128Enabled) core128WaitMs = Date.now() - core128Started;
 
     if (fetchSignal.aborted) return null;
 
@@ -20261,6 +20328,7 @@ async function fetchHtml(
       },
     });
 
+    core128Status = response.status;
     const html = await response.text();
 
     return {
@@ -20269,9 +20337,22 @@ async function fetchHtml(
       finalUrl: response.url || url,
     };
   } catch {
+    core128Failure = true;
     return null;
   } finally {
     releaseSlot?.();
+    if (core128Enabled) {
+      const elapsedMs = Date.now() - core128Started;
+      // Verbose logging is disabled by default and has no effect on offer acceptance.
+      if (elapsedMs >= 750 || core128Failure || core128Status >= 400) {
+        let host = "invalid-host";
+        try { host = new URL(url).hostname.toLowerCase(); } catch {}
+        console.info("ASARVO_CORE128_FETCH " + JSON.stringify({
+          host, status: core128Status, elapsedMs, queueWaitMs: core128WaitMs,
+          failed: core128Failure, timedOut: fetchSignal.aborted,
+        }));
+      }
+    }
   }
 }
 
@@ -20794,10 +20875,18 @@ function extractPriceNearProductName(
       index,
       Math.min(text.length, index + productName.length + 1_100)
     );
+    // CORE155: stop the local price window at a clearly labelled cross-sell
+    // section. Those prices belong to other SKUs, even when the page title
+    // matched correctly. Applies to all retailers / categories; no SKU list.
+    const core155CrossSellBoundary = /(?:^|\n|\r|\s{2,}|\|\s*)(?:dobierz\s+(?:akcesoria|dodatki)|polecane\s+(?:akcesoria|produkty)|produkty\s+(?:polecane|podobne)|kup\s+razem|inni\s+(?:kupili|oglądali)|akcesoria\s+do\s+(?:tego\s+)?produktu|wybierz\s+akcesoria|sprawdź\s+również|zobacz\s+(?:także|również))\b/iu;
+    const core155BoundaryMatch = core155CrossSellBoundary.exec(rawWindow);
+    const core155BoundedWindow = core155BoundaryMatch && core155BoundaryMatch.index > productName.length
+      ? rawWindow.slice(0, core155BoundaryMatch.index)
+      : rawWindow;
 
     // Some Polish shops render grosze as a separate typographic block:
     // "319 99 zł" or "1 299 99 zł". Normalize only that exact shape.
-    const window = rawWindow.replace(
+    const window = core155BoundedWindow.replace(
       /(\d{1,3}(?:[ .]\d{3})*)\s+(\d{2})\s*(zł|PLN)/giu,
       (_match, whole, cents, currency) => `${whole},${cents} ${currency}`
     );
@@ -21056,7 +21145,18 @@ function extractRetailerCheckoutBoundEvidenceFromJina(
     );
     if (!reference) continue;
 
-    const cluster = normalizeText(lines.slice(index, index + 70).join(" ")).slice(0, 6_500);
+    // CORE156: a buy-box is bounded by the next merchandising section or
+    // product link; an add-on price + its own cart CTA is NOT this product.
+    const scopedLines: string[] = [];
+    for (let offset = index; offset < Math.min(lines.length, index + 70); offset += 1) {
+      const line = lines[offset] ?? "";
+      if (offset > index && /(?:polecane\s+(?:produkty|akcesoria)|produkty\s+podobne|akcesoria\s+do|dobierz\s+(?:akcesoria|dodatki)|kup\s+razem|inni\s+(?:kupili|ogl[aą]dali)|zobacz\s+(?:także|rownież|również)|wybierz\s+akcesoria|recommended\s+products|related\s+products|you\s+may\s+also\s+like)/iu.test(line)) break;
+      // A second distinct concrete product card begins here.
+      if (offset > index && /\]\(https?:\/\/[^)]+\/(?:product|produkt|p)\/[^)]+\)/iu.test(line) &&
+          !universalProofMatchesProductIdentity(reference, cleanJinaMarkdownLine(line))) break;
+      scopedLines.push(line);
+    }
+    const cluster = normalizeText(scopedLines.join(" ")).slice(0, 3_000);
     if (!cluster) continue;
 
     let match: RegExpExecArray | null;
@@ -21201,6 +21301,21 @@ function extractRetailerProductPriceFromJina(
     return { price: null, currency: null };
   }
 
+  // CORE149B_CHECKOUT_FIRST: prefer same-product checkout-bound price.
+  // Do not trust prices from neighboring add-on and recommendation cards.
+  const core149bCheckoutBound = extractRetailerCheckoutBoundEvidenceFromJina(
+    textRaw,
+    productNamesRaw,
+    parsed,
+    urlRaw
+  );
+  if (core149bCheckoutBound.price !== null && core149bCheckoutBound.currency) {
+    return {
+      price: core149bCheckoutBound.price,
+      currency: core149bCheckoutBound.currency,
+    };
+  }
+
   const referenceName = productNamesRaw.find((value) => normalizeText(value)) ?? "";
   const anchors: string[] = productNamesRaw
     .map((value) => cleanTitle(normalizeText(value)))
@@ -21242,11 +21357,10 @@ function extractRetailerProductPriceFromJina(
   }
 
   for (const anchor of Array.from(new Set(anchors))) {
-    const price = extractPriceNearProductName(
-      textRaw,
-      anchor,
-      parsed.condition
-    );
+    // CORE156: a mere nearby amount on a long retailer reader page is not
+    // proof of the main product buy box. The checkout binder above is the
+    // only accepted generic reader price proof for this function.
+    const price: PriceInfo = { price: null, currency: null };
 
     if (price.price !== null && price.currency) {
       console.log(
@@ -24267,32 +24381,10 @@ function extractCurrencyPriceFromHtml(
     if (bound.price !== null && bound.currency) return bound;
   }
 
-  // 4) Itemprop is weaker than a matched Product node/meta tag, but remains a
-  // structured page-level signal. Use it only after product-bound text failed.
-  const itemProp = extractItemPropPrice(html);
-  if (itemProp.price !== null && itemProp.currency) return itemProp;
-
-  // 5) Last resort: inspect only a focused identity scope, never the first
-  // arbitrary 80k characters of the page. If there is no product identity
-  // anchor, do not guess a price.
-  for (const productName of productNames) {
-    const focused = getUniversalEvidenceScope(
-      productName,
-      visible,
-      expectedUrlRaw
-    ).slice(0, 24_000);
-
-    if (!focused) continue;
-
-    const textPrice = extractPriceFromText(
-      focused,
-      requestedCondition
-    );
-    if (textPrice.price !== null && textPrice.currency) {
-      return textPrice;
-    }
-  }
-
+  // CORE156: fail closed if there is no identity-bound product price or
+  // page-level meta offer price. Unscoped itemprop and a broad focused text
+  // scan can borrow an accessory/recommendation price from this HTML page.
+  // Never turn those weak page-wide amounts into priceVerified=true.
   return { price: null, currency: null };
 }
 
@@ -40576,6 +40668,36 @@ async function verifySearchResult(
             finalUrl,
             parsed
           );
+        // ASARVO_CORE054_LANE1: shadow telemetry only; never modifies proof or offer acceptance.
+        if (process.env.ASARVO_CORE054_LANE1 === "1") {
+          try {
+            const core054Parser = createCore036StructuredSpecs({
+              normalizeText, normalizeMatchText, extractTagText,
+              universalRequirementComparison: (r) => universalRequirementComparison(r as UniversalRequirement),
+              buildCanonicalRequirementProofToken: (r) => buildCanonicalRequirementProofToken(r as UniversalRequirement),
+              requirementHasEvidenceInContext: (r, e, all) => requirementHasEvidenceInContext(r as UniversalRequirement, e, all as UniversalRequirement[]),
+              hasConflictingHardRequirementInTitle: (r, e, all) => hasConflictingHardRequirementInTitle(r as UniversalRequirement, e, all as UniversalRequirement[]),
+            });
+            const core054Result = checkOfferLocalSpecEvidence({
+              requestedTitle: parsed.intent.productPhrase || parsed.queryText,
+              offerTitle: finalName || result.name,
+              html: page.html,
+              extractPairs: core054Parser.extractPairs,
+              blockedPage: isBlockedOrChallengePage,
+            });
+            const core059CapacityShadow = checkExplicitCapacityConflict(
+          parsed.queryText || "", finalName || result.name || ""
+        );
+        console.info("[CORE059_VARIANT_SHADOW]", {
+          conflict: core059CapacityShadow.conflict, reason: core059CapacityShadow.reason
+        });
+        console.info("[ASARVO_CORE054_LANE1]", {
+              eligible: core054Result.eligible, reason: core054Result.reason, pairs: core054Result.pairs.length,
+              // This is a diagnostic, not proof that product identity was established.
+            });
+          } catch (error) { console.warn("[ASARVO_CORE054_LANE1_ERROR]", String(error)); }
+        }
+
 
         universalFeatureEvidence = normalizeText(
           `${universalFeatureEvidence} ${boundPageDescription ?? ""} ${htmlRequirementEvidence} ${trustedCanonicalConcreteRequirementEvidence}`
@@ -41522,6 +41644,16 @@ async function verifySearchResult(
                 converted,
                 "PLN"
               );
+            } else if (
+              priceVerified && pricePln !== null &&
+              Math.abs(converted - pricePln) > 0.01 &&
+              !requestedPackageVariantResolved &&
+              !requestedPerfumeVolumeVariantResolved
+            ) {
+              // CORE156: two conflicting verification lanes may be looking at
+              // different cards. Keep the first concrete product-page price;
+              // never let a weaker reader value silently overwrite it.
+              console.log("[CORE156_PRICE_CONFLICT_KEEP_PAGE]", finalUrl, pricePln, converted);
             } else {
               pricePln = converted;
               tirePriceIsPerPiece = false;
@@ -43404,10 +43536,17 @@ async function verifyOffers(
     return a.searchRank - b.searchRank;
   });
 
-  const verificationQueue = capSlowMarketplaceReaderCandidates(
+  let verificationQueue = capSlowMarketplaceReaderCandidates(
     verificationQueueUnbounded,
     parsed
   );
+
+  // CORE070_HOST_RESERVE: optional schedule-only host reservation; strict verification unchanged.
+  if (process.env.ASARVO_CORE070_HOST_RESERVE === "1") {
+    const originalFirstHosts = verificationQueue.slice(0, 5).map((r) => getResultHostname(r.url));
+    verificationQueue = core070ReserveVerifiedQueue(verificationQueue, 3);
+    console.info("[CORE070_HOST_RESERVE]", { count: verificationQueue.length, originalFirstHosts, firstHosts: verificationQueue.slice(0, 5).map((r) => getResultHostname(r.url)) });
+  }
 
   console.log(
     "[AIShopping] V34.CORE581_QUEUE_JSON " +
@@ -44132,9 +44271,14 @@ function choosePreferredDuplicateOffer(existing: Offer, candidate: Offer): Offer
     return candidate.priceVerified ? candidate : existing;
   }
 
-  return (candidate.relevance ?? 0) > (existing.relevance ?? 0)
-    ? candidate
-    : existing;
+  if ((candidate.relevance ?? 0) !== (existing.relevance ?? 0)) {
+    return (candidate.relevance ?? 0) > (existing.relevance ?? 0) ? candidate : existing;
+  }
+
+  // CORE123: order-independent resolution ONLY when existing price, verification
+  // and relevance checks tie. Never merge distinct marketplace listings here.
+  // The URL is already normalized by deduplicateOffers at the point of selection.
+  return candidate.url < existing.url ? candidate : existing;
 }
 
 function getRetailerExactModelDedupeKey(
@@ -44942,7 +45086,8 @@ function scoreAndRankOffers(
     .sort(
       (a, b) =>
         (getOfferComparablePrice(a) ?? Number.POSITIVE_INFINITY) -
-        (getOfferComparablePrice(b) ?? Number.POSITIVE_INFINITY)
+        (getOfferComparablePrice(b) ?? Number.POSITIVE_INFINITY) ||
+        a.url.localeCompare(b.url)
     )[0];
 
   const safest = [...rankingPool].sort((a, b) => {
@@ -44970,7 +45115,8 @@ function scoreAndRankOffers(
       }
     }
 
-    return 0;
+    // CORE124: a safe deterministic winner for truly equal safety metrics.
+    return a.url.localeCompare(b.url);
   })[0];
 
   const ranked = [...rankingPool].sort((a, b) => {
@@ -44988,7 +45134,7 @@ function scoreAndRankOffers(
       return aComparablePrice - bComparablePrice;
     }
 
-    return (b.relevance ?? 0) - (a.relevance ?? 0);
+    return (b.relevance ?? 0) - (a.relevance ?? 0) || a.url.localeCompare(b.url);
   });
 
   // A verified offer that is BOTH the cheapest and the safest Pareto-dominates
@@ -45014,7 +45160,7 @@ function scoreAndRankOffers(
       if ((a.riskScore ?? 100) !== (b.riskScore ?? 100)) {
         return (a.riskScore ?? 100) - (b.riskScore ?? 100);
       }
-      return (b.dealScore ?? 0) - (a.dealScore ?? 0);
+      return (b.dealScore ?? 0) - (a.dealScore ?? 0) || a.url.localeCompare(b.url);
     });
 
   const ordered = best
@@ -48969,12 +49115,25 @@ export async function POST(request: Request): Promise<NextResponse> {
     const hardRequirementCount = parsed.intent.required.filter(
       (requirement) => requirement.hard
     ).length;
+    // CORE126: preserve the existing conservative cap for expensive HARD intents.
+    // Only unconstrained or one-HARD queries with substantial deadline headroom
+    // may verify up to two more real, ranked candidates. The same final verifier
+    // and global deadline remain authoritative; no unverified offer is accepted.
+    const core126CandidateHostCount = new Set(
+      searchResults.map((result) => getResultHostname(result.url)).filter(Boolean)
+    ).size;
+    const core126ExpandVerification =
+      remainingBeforeCandidateSelection >= 9_500 &&
+      hardRequirementCount <= 1 &&
+      core126CandidateHostCount >= 3 &&
+      searchResults.length >= 12 &&
+      baseVerificationLimit === VERIFICATION_CANDIDATE_LIMIT;
     const verificationLimit =
       parsed.brand && hardRequirementCount >= 3
         ? Math.min(6, baseVerificationLimit)
         : parsed.brand && hardRequirementCount >= 2
           ? Math.min(8, baseVerificationLimit)
-          : baseVerificationLimit;
+          : baseVerificationLimit + (core126ExpandVerification ? 2 : 0);
 
     console.log("[AIShopping] V34.CORE120 verification budget before selection:", {
       remainingMs: remainingBeforeCandidateSelection,
@@ -49096,6 +49255,47 @@ export async function POST(request: Request): Promise<NextResponse> {
       parsed,
       verificationLimit
     );
+
+    // CORE127: backfill empty verifier slots after the source-health cap.
+    // The first selection and all reserved candidates stay in their original
+    // order. Backfill candidates come only from the already discovered,
+    // pruned pool, pass the SAME diversity selector and source-health cap,
+    // and are verified by the unchanged final verifier. No network discovery
+    // requests, larger verifier budget, or deadline extension are introduced.
+    const core127SelectedBeforeRefill = limitedResults.length;
+    let core127RefilledCandidates = 0;
+    if (
+      limitedResults.length < verificationLimit &&
+      remainingBeforeCandidateSelection >= 5_500 &&
+      verificationSelectionPool.length > verificationLimit
+    ) {
+      const expanded = selectDiverseSearchResults(
+        verificationSelectionPool,
+        Math.min(verificationSelectionPool.length, verificationLimit + 8),
+        parsed,
+        rareHardGapReserveUrls
+      );
+      const candidateSet = new Set(limitedResults.map((result) => normalizeUrl(result.url)));
+      const remainingCandidates = expanded.filter((result) => {
+        const key = normalizeUrl(result.url);
+        return Boolean(key) && !candidateSet.has(key);
+      });
+      // Apply the original health policy to the combined portfolio, so a
+      // previously unhealthy/blocked host can never bypass its host cap.
+      const refilled = capV34Core164VerificationCandidatesBySourceHealth(
+        [...limitedResults, ...remainingCandidates],
+        parsed,
+        verificationLimit
+      );
+      core127RefilledCandidates = Math.max(0, refilled.length - limitedResults.length);
+      limitedResults = refilled;
+    }
+    console.log("[AIShopping] CORE127 verification backfill:", {
+      selectedBefore: core127SelectedBeforeRefill,
+      added: core127RefilledCandidates,
+      selectedAfter: limitedResults.length,
+      limit: verificationLimit,
+    });
 
     // STORE-B26_FIX2: Morele first-party final verification reserve.
     // Scheduling only. B25 proved Morele discovery can return many concrete
@@ -49413,11 +49613,56 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
     }
 
+    // CORE121: opt-in final-stage diagnostics. Never changes, stores or fabricates offers.
+    const core121BeforeFinal = offers.length;
+    const core121FinalStageStarted = Date.now();
     offers = deduplicateOffers(offers, parsed);
+    const core121AfterDedupe = offers.length;
     offers = scoreAndRankOffers(offers, parsed);
+    if (process.env.ASARVO_CORE121_FINAL_TRACE === "1") {
+      console.info("[CORE121_FINAL_TRACE]", JSON.stringify({
+        beforeFinal: core121BeforeFinal,
+        afterDedupe: core121AfterDedupe,
+        afterRank: offers.length,
+        elapsedMs: Date.now() - core121FinalStageStarted,
+        topStoreSequence: offers.slice(0, 30).map(offer => normalizeOfferStoreKey(offer)),
+      }));
+    }
     // CORE181: canonicalize only the merchant display after verification and
     // ranking. This merges cosmetic aliases without creating/trusting offers.
     offers = offers.map(canonicalizeOfferStoreDisplayV34Core181);
+    // CORE144: always enforce the existing evidence-bound future-shopping promo-price guard.
+    // The original CORE065 helper is unchanged; no price is inferred or substituted.
+    const core144PromoGuard = filterCore065PromotionMisprices(offers);
+    offers = core144PromoGuard.offers;
+    if (core144PromoGuard.rejected > 0) {
+      console.info("[CORE144_PROMO_PRICE_GUARD]", { rejected: core144PromoGuard.rejected, retained: offers.length });
+    }
+    // CORE144: a query explicitly requesting mountain/MTB bikes must not return
+    // explicitly trekking/touring-only bicycles. Do not reject generic bikes or
+    // bikes explicitly also identified as MTB; do not change other categories.
+    if (parsed.category === "bike" && /\b(?:g[oĂł]rsk\w*|mtb|mountain\s+bike)\b/iu.test(parsed.queryText || "")) {
+      offers = offers.filter((offer) => {
+        const title = String(offer.name || "").toLocaleLowerCase("pl-PL");
+        const isTrekking = /\b(?:e[-\s]?trekking\w*|trekking\w*|touring\w*|turystyczn\w*)\b/iu.test(title);
+        const isMountain = /\b(?:g[oĂł]rsk\w*|mtb|mountain\s+bike|hardtail|full\s*suspension)\b/iu.test(title);
+        return !isTrekking || isMountain;
+      });
+    }
+    // CORE062_HOST_DIVERSITY: deterministic reorder of verified offers, keep first three.
+    if (process.env.ASARVO_CORE062_HOST_DIVERSITY === "1") {
+      offers = diversifyVerifiedOffers(offers);
+      console.info("[CORE062_HOST_DIVERSITY]", {count: offers.length});
+    }
+    // CORE062_VARIANT_GUARD: strictly optional fail-closed SSD capacity rejection AFTER verification.
+    // Existing verifier and default behaviour are unchanged until explicit opt-in.
+    if (process.env.ASARVO_CORE062_VARIANT_GUARD === "1" && /\b(?:ssd|dysk)\b/i.test(parsed.queryText || "")) {
+      const beforeCount = offers.length;
+      offers = offers.filter((offer) =>
+        !checkExplicitCapacityConflict(parsed.queryText || "", offer.name || "").conflict
+      );
+      console.info("[CORE062_VARIANT_GUARD]", {before: beforeCount, after: offers.length});
+    }
 
     console.log("[AIShopping] V34.CORE120 coverage final:", {
       verifiedOffers: offers.length,
@@ -49441,6 +49686,14 @@ export async function POST(request: Request): Promise<NextResponse> {
         id: index + 1,
       }));
 
+    // ASARVO_CORE054_LANE2: after verification, diagnostics ONLY; no offer mutation.
+    if (process.env.ASARVO_CORE054_LANE2 === "1") {
+      try {
+        const quality = qualityCounts(offers);
+        console.info("[ASARVO_CORE054_LANE2]", quality);
+          console.info("[CORE059_HOST_QUALITY]", summarizeHostQuality(offers));
+      } catch (error) { console.warn("[ASARVO_CORE054_LANE2_ERROR]", String(error)); }
+    }
     const cleanOffers = offers.map((offer) => {
       const { relevance, ...cleanOffer } = offer;
       return cleanOffer;
@@ -49570,6 +49823,19 @@ export async function POST(request: Request): Promise<NextResponse> {
         configuredCommerceDomains: getConfiguredCommerceDomains().length,
         discoveredCandidates: searchResults.length,
         verificationCandidates: limitedResults.length,
+        // CORE125: selection funnel. No new candidates and no relaxed verification.
+        selectionPoolCandidates: verificationPool.length,
+        selectionConsideredCandidates: verificationSelectionPool.length,
+        verificationLimitConfigured: verificationLimit,
+        core126ExtraCandidateSlots: core126ExpandVerification ? 2 : 0,
+        core127SelectedBeforeRefill,
+        core127RefilledCandidates,
+        core126CandidateHostsAtSelection: core126CandidateHostCount,
+        core126RemainingBeforeSelectionMs: remainingBeforeCandidateSelection,
+        selectedVerificationHosts: new Set(limitedResults.map((result) => getResultHostname(result.url)).filter(Boolean)).size,
+        finalOfferHosts: new Set(cleanOffers.map((offer) => getResultHostname(offer.url)).filter(Boolean)).size,
+        selectionCompacted: verificationSelectionPool.length < verificationPool.length,
+        requestElapsedMs: Date.now() - requestStartedAt,
         verifiedPageOffers: cleanOffers.filter((offer) => offer.verificationTier === "page-verified").length,
         strongIndexOffers: cleanOffers.filter((offer) => offer.verificationTier === "strong-index").length,
       },
