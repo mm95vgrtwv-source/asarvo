@@ -613,7 +613,18 @@ function sameProductIdentity(a: Product, b: Product): boolean {
     tokensB.includes(token)
   ).length;
 
-  return similarity >= 0.5 && overlapCount >= 2;
+  // RC163: explicit iPhone family grouping, subject to existing storage,
+  // variant, model-number, brand and category safety checks.
+  const sameExplicitIPhoneModel =
+    tokensA.includes("iphone") &&
+    tokensB.includes("iphone") &&
+    numbersA.length === 1 &&
+    numbersB.length === 1 &&
+    numbersA[0] === numbersB[0] &&
+    storageA.length === 1 &&
+    storageB.length === 1;
+
+  return (similarity >= 0.5 && overlapCount >= 2) || sameExplicitIPhoneModel;
 }
 
 function sourceKindLabel(store: string): "Marketplace" | "Sklep" | "Źródło" {
@@ -1109,7 +1120,7 @@ function variantSummary(group: ProductGroup | null): string | null {
     return `Dostępny w ${group.colors.length} kolorach: ${group.colors.join(" · ")}`;
   }
 
-  return `${group.offers.length} zweryfikowane oferty tego samego wariantu`;
+  return `${group.offers.length} oferty tego samego wariantu — sprawdź ceny w sklepach`;
 }
 
 function readNumber(
@@ -4361,7 +4372,7 @@ function SearchPageContent() {
 
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-blue-400">
-                      ASARVO — wynik zweryfikowany
+                      ASARVO — brak potwierdzonych dopasowań
                     </div>
 
                     <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl">
